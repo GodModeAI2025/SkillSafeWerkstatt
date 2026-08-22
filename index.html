@@ -153,16 +153,6 @@
     }
     .brand-mark::before { width: 9px; height: 9px; top: 7px; left: 7px; }
     .brand-mark::after { width: 7px; height: 7px; right: 7px; bottom: 7px; background: var(--aqua); }
-    .brand-mark span {
-      position: absolute;
-      width: 15px;
-      height: 2px;
-      top: 16px;
-      left: 10px;
-      rotate: 38deg;
-      background: #fff;
-      transform-origin: center;
-    }
     .nav-links { display: flex; align-items: center; gap: 4px; }
     .nav-links a {
       padding: 10px 12px;
@@ -197,7 +187,6 @@
     .eyebrow {
       display: inline-flex;
       align-items: center;
-      gap: 10px;
       margin: 0 0 22px;
       color: var(--blue);
       font-size: .8rem;
@@ -207,7 +196,6 @@
     }
     :root[data-theme="dark"] .eyebrow { color: var(--aqua); }
     @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .eyebrow { color: var(--aqua); } }
-    .eyebrow::before { content: ""; width: 28px; height: 4px; border-radius: 99px; background: var(--orange); }
     h1, h2, h3 { margin-top: 0; line-height: 1.08; letter-spacing: -.04em; }
     h1 { max-width: 760px; margin-bottom: 24px; font-size: clamp(3.4rem, 7vw, 6.3rem); }
     h1 span { color: var(--blue); }
@@ -236,73 +224,20 @@
     .button.orange { border-color: var(--orange); background: var(--orange); color: #000044; box-shadow: 0 12px 32px rgba(254, 143, 17, .18); }
 
     .hero-visual {
-      position: relative;
-      min-height: 510px;
+      margin: 0;
+      aspect-ratio: 1730 / 909;
+      overflow: hidden;
       border: 1px solid var(--line);
       border-radius: 38px;
-      background: color-mix(in srgb, var(--surface) 88%, transparent);
+      background: #06062b;
       box-shadow: var(--shadow);
-      isolation: isolate;
     }
-    .hero-visual::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      border-radius: inherit;
-      opacity: .65;
-      background-image: radial-gradient(var(--line-strong) 1px, transparent 1px);
-      background-size: 24px 24px;
-      mask-image: linear-gradient(to bottom, #000, transparent 95%);
+    .graph-preview {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
-    .visual-label {
-      position: absolute;
-      top: 24px;
-      left: 26px;
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      color: var(--muted);
-      font-size: .78rem;
-      font-weight: 800;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-    }
-    .visual-label::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px color-mix(in srgb, var(--green) 20%, transparent); }
-    .network { position: absolute; inset: 82px 28px 32px; }
-    .network-line {
-      position: absolute;
-      height: 2px;
-      border-radius: 99px;
-      background: var(--line-strong);
-      transform-origin: left center;
-    }
-    .line-a { width: 44%; top: 25%; left: 20%; rotate: 18deg; }
-    .line-b { width: 39%; top: 58%; left: 22%; rotate: -24deg; }
-    .line-c { width: 37%; top: 43%; left: 52%; rotate: 51deg; }
-    .line-d { width: 36%; top: 61%; left: 46%; rotate: 7deg; }
-    .line-e { width: 31%; top: 31%; left: 51%; rotate: -29deg; }
-    .node {
-      position: absolute;
-      width: 76px;
-      aspect-ratio: 1;
-      display: grid;
-      place-items: center;
-      border: 7px solid var(--surface);
-      border-radius: 50%;
-      color: #000044;
-      box-shadow: 0 14px 30px rgba(0, 0, 102, .2);
-      font-size: .72rem;
-      font-weight: 900;
-      letter-spacing: .04em;
-      text-transform: uppercase;
-    }
-    .node.source { top: 8%; left: 8%; background: var(--green); }
-    .node.claim { top: 31%; left: 40%; width: 102px; background: var(--orange); }
-    .node.wiki { top: 5%; right: 5%; background: var(--sky); color: #000044; }
-    .node.graph { right: 2%; bottom: 8%; background: var(--aqua); }
-    .node.release { bottom: 2%; left: 11%; background: var(--yellow); }
-    .node.soul { top: 56%; left: 34%; width: 66px; background: var(--sand); }
 
     .trust-strip {
       display: grid;
@@ -450,7 +385,6 @@
       .nav-links { display: none; }
       .hero { min-height: auto; grid-template-columns: 1fr; padding-top: 72px; }
       .hero-copy { max-width: 760px; }
-      .hero-visual { min-height: 470px; }
       .trust-strip { grid-template-columns: repeat(2, 1fr); }
       .trust-item:nth-child(2) { border-right: 0; }
       .trust-item:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
@@ -470,10 +404,7 @@
       h1 { font-size: clamp(3rem, 15vw, 4.5rem); }
       .actions { display: grid; }
       .button { width: 100%; }
-      .hero-visual { min-height: 390px; border-radius: 26px; }
-      .network { inset: 76px 16px 18px; transform: scale(.86); }
-      .node { width: 66px; border-width: 5px; }
-      .node.claim { width: 88px; }
+      .hero-visual { border-radius: 26px; }
       .trust-strip, .split-grid, .process, .feature-grid { grid-template-columns: 1fr; }
       .trust-item { border-right: 0; border-bottom: 1px solid var(--line); }
       .trust-item:last-child { border-bottom: 0; }
@@ -496,7 +427,7 @@
   <header class="site-header">
     <nav class="nav" aria-label="Hauptnavigation">
       <a class="brand" href="#top" aria-label="SkillSafeWerkstatt Startseite">
-        <span class="brand-mark" aria-hidden="true"><span></span></span>
+        <span class="brand-mark" aria-hidden="true"></span>
         <span class="brand-name">SkillSafeWerkstatt</span>
       </a>
       <div class="nav-links">
@@ -522,22 +453,9 @@
           </div>
         </div>
 
-        <div class="hero-visual" role="img" aria-label="Schematischer Wissensgraph von Quelle über Claim und Wiki bis zum Release">
-          <span class="visual-label">Evidence graph · verified</span>
-          <div class="network" aria-hidden="true">
-            <span class="network-line line-a"></span>
-            <span class="network-line line-b"></span>
-            <span class="network-line line-c"></span>
-            <span class="network-line line-d"></span>
-            <span class="network-line line-e"></span>
-            <span class="node source">Quelle</span>
-            <span class="node claim">Claim</span>
-            <span class="node wiki">Wiki</span>
-            <span class="node graph">Graph</span>
-            <span class="node release">Release</span>
-            <span class="node soul">Soul</span>
-          </div>
-        </div>
+        <figure class="hero-visual">
+          <img class="graph-preview" src="og.png" width="1730" height="909" alt="Mehrere farbige Quellenknoten fließen über belegte Aussagen in einen verifizierten Wissensstand." fetchpriority="high" decoding="async">
+        </figure>
       </section>
 
       <div class="trust-strip" aria-label="Grundprinzipien">
@@ -643,7 +561,7 @@
   <footer>
     <div class="footer-inner">
       <a class="brand" href="#top">
-        <span class="brand-mark" aria-hidden="true"><span></span></span>
+        <span class="brand-mark" aria-hidden="true"></span>
         <span class="brand-name">SkillSafeWerkstatt</span>
       </a>
       <span>Portables, belegbares Wissen aus Markdown.</span>
