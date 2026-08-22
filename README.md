@@ -1,5 +1,7 @@
 # SkillSafeWerkstatt: Pflege- und Lese-Skills
 
+Die statische [Landingpage](index.html) ist für eine spätere Veröffentlichung über GitHub Pages vorbereitet und enthält direkte Downloads der beiden Skill-Pakete sowie den rechtlichen Impressumslink.
+
 Diese Distribution enthält zwei zusammengehörige Agent Skills für einen portablen, quellennahen Wissensraum aus Markdown-Dateien:
 
 - [maintain-llm-wiki](maintain-llm-wiki/SKILL.md) erstellt, pflegt, prüft, veröffentlicht und exportiert ein Wiki.

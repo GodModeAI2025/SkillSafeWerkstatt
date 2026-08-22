@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="SkillSafeWerkstatt verwandelt Quellen in ein portables, belegbares Markdown-Wiki mit sicherer Pflege, Wissensgraph und read-only Lese-Skill.">
+  <meta name="theme-color" content="#000099">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="de_DE">
+  <meta property="og:title" content="SkillSafeWerkstatt — Wissen, das belegt bleibt">
+  <meta property="og:description" content="Zwei portable Skills für sichere Wiki-Pflege und belegbares Lesen aus Markdown.">
+  <meta property="og:url" content="https://godmodeai2025.github.io/SkillSafeWerkstatt/">
+  <meta property="og:image" content="https://godmodeai2025.github.io/SkillSafeWerkstatt/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SkillSafeWerkstatt — Wissen, das belegt bleibt">
+  <meta name="twitter:description" content="Zwei portable Skills für sichere Wiki-Pflege und belegbares Lesen aus Markdown.">
+  <meta name="twitter:image" content="https://godmodeai2025.github.io/SkillSafeWerkstatt/og.png">
+  <link rel="canonical" href="https://godmodeai2025.github.io/SkillSafeWerkstatt/">
+  <title>SkillSafeWerkstatt — Wissen, das belegt bleibt</title>
+  <script>
+    try {
+      const saved = localStorage.getItem("ssw-theme");
+      if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+    } catch (_error) {}
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --blue: #000099;
+      --blue-deep: #000066;
+      --orange: #fe8f11;
+      --sky: #1195eb;
+      --aqua: #5be3d6;
+      --green: #84c041;
+      --yellow: #ffc83a;
+      --sand: #e2c39a;
+      --coral: #fc6538;
+      --bg: #f7f7fb;
+      --surface: #ffffff;
+      --surface-soft: #edeff7;
+      --text: #10103e;
+      --muted: #5b5c78;
+      --line: rgba(0, 0, 153, .15);
+      --line-strong: rgba(0, 0, 153, .28);
+      --shadow: 0 24px 70px rgba(0, 0, 102, .12);
+      --header: rgba(247, 247, 251, .86);
+      --focus: #fe8f11;
+      --radius-lg: 30px;
+      --radius-md: 20px;
+      --content: 1180px;
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #08082f;
+      --surface: #11114d;
+      --surface-soft: #17175b;
+      --text: #ffffff;
+      --muted: #c8c8e2;
+      --line: rgba(255, 255, 255, .14);
+      --line-strong: rgba(255, 255, 255, .28);
+      --shadow: 0 24px 70px rgba(0, 0, 0, .32);
+      --header: rgba(8, 8, 47, .86);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: #08082f;
+        --surface: #11114d;
+        --surface-soft: #17175b;
+        --text: #ffffff;
+        --muted: #c8c8e2;
+        --line: rgba(255, 255, 255, .14);
+        --line-strong: rgba(255, 255, 255, .28);
+        --shadow: 0 24px 70px rgba(0, 0, 0, .32);
+        --header: rgba(8, 8, 47, .86);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--aqua) 22%, transparent) 0, transparent 25rem),
+        radial-gradient(circle at 4% 36%, color-mix(in srgb, var(--orange) 12%, transparent) 0, transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    button, a { -webkit-tap-highlight-color: transparent; }
+    a { color: inherit; }
+    :focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: -80px;
+      left: 20px;
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: var(--orange);
+      color: #000044;
+      font-weight: 800;
+    }
+    .skip-link:focus { top: 14px; }
+
+    .site-header {
+      position: sticky;
+      z-index: 30;
+      top: 0;
+      border-bottom: 1px solid var(--line);
+      background: var(--header);
+      backdrop-filter: blur(18px);
+    }
+    .nav {
+      width: min(calc(100% - 40px), var(--content));
+      min-height: 76px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-right: auto;
+      text-decoration: none;
+      font-weight: 850;
+      letter-spacing: -.02em;
+    }
+    .brand-mark {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      flex: 0 0 auto;
+      border-radius: 11px;
+      background: var(--blue);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .2);
+    }
+    .brand-mark::before,
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      background: var(--orange);
+    }
+    .brand-mark::before { width: 9px; height: 9px; top: 7px; left: 7px; }
+    .brand-mark::after { width: 7px; height: 7px; right: 7px; bottom: 7px; background: var(--aqua); }
+    .brand-mark span {
+      position: absolute;
+      width: 15px;
+      height: 2px;
+      top: 16px;
+      left: 10px;
+      rotate: 38deg;
+      background: #fff;
+      transform-origin: center;
+    }
+    .nav-links { display: flex; align-items: center; gap: 4px; }
+    .nav-links a {
+      padding: 10px 12px;
+      color: var(--muted);
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 650;
+    }
+    .nav-links a:hover { color: var(--text); background: var(--surface-soft); }
+    .theme-toggle {
+      min-width: 44px;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+      font-weight: 800;
+    }
+
+    main { overflow: clip; }
+    .container { width: min(calc(100% - 40px), var(--content)); margin: 0 auto; }
+    .hero {
+      min-height: 720px;
+      padding: 96px 0 72px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.02fr) minmax(420px, .98fr);
+      align-items: center;
+      gap: 72px;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 22px;
+      color: var(--blue);
+      font-size: .8rem;
+      font-weight: 850;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    :root[data-theme="dark"] .eyebrow { color: var(--aqua); }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .eyebrow { color: var(--aqua); } }
+    .eyebrow::before { content: ""; width: 28px; height: 4px; border-radius: 99px; background: var(--orange); }
+    h1, h2, h3 { margin-top: 0; line-height: 1.08; letter-spacing: -.04em; }
+    h1 { max-width: 760px; margin-bottom: 24px; font-size: clamp(3.4rem, 7vw, 6.3rem); }
+    h1 span { color: var(--blue); }
+    :root[data-theme="dark"] h1 span { color: var(--aqua); }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) h1 span { color: var(--aqua); } }
+    .lead { max-width: 660px; margin: 0 0 34px; color: var(--muted); font-size: clamp(1.1rem, 2vw, 1.32rem); }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+    .button {
+      min-height: 52px;
+      padding: 13px 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      border: 1px solid var(--blue);
+      border-radius: 14px;
+      background: var(--blue);
+      color: #fff;
+      text-decoration: none;
+      font-weight: 800;
+      box-shadow: 0 12px 32px rgba(0, 0, 153, .18);
+      transition: translate .2s ease, box-shadow .2s ease;
+    }
+    .button:hover { translate: 0 -2px; box-shadow: 0 16px 38px rgba(0, 0, 153, .25); }
+    .button.secondary { border-color: var(--line-strong); background: var(--surface); color: var(--text); box-shadow: none; }
+    .button.orange { border-color: var(--orange); background: var(--orange); color: #000044; box-shadow: 0 12px 32px rgba(254, 143, 17, .18); }
+
+    .hero-visual {
+      position: relative;
+      min-height: 510px;
+      border: 1px solid var(--line);
+      border-radius: 38px;
+      background: color-mix(in srgb, var(--surface) 88%, transparent);
+      box-shadow: var(--shadow);
+      isolation: isolate;
+    }
+    .hero-visual::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      border-radius: inherit;
+      opacity: .65;
+      background-image: radial-gradient(var(--line-strong) 1px, transparent 1px);
+      background-size: 24px 24px;
+      mask-image: linear-gradient(to bottom, #000, transparent 95%);
+    }
+    .visual-label {
+      position: absolute;
+      top: 24px;
+      left: 26px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .visual-label::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px color-mix(in srgb, var(--green) 20%, transparent); }
+    .network { position: absolute; inset: 82px 28px 32px; }
+    .network-line {
+      position: absolute;
+      height: 2px;
+      border-radius: 99px;
+      background: var(--line-strong);
+      transform-origin: left center;
+    }
+    .line-a { width: 44%; top: 25%; left: 20%; rotate: 18deg; }
+    .line-b { width: 39%; top: 58%; left: 22%; rotate: -24deg; }
+    .line-c { width: 37%; top: 43%; left: 52%; rotate: 51deg; }
+    .line-d { width: 36%; top: 61%; left: 46%; rotate: 7deg; }
+    .line-e { width: 31%; top: 31%; left: 51%; rotate: -29deg; }
+    .node {
+      position: absolute;
+      width: 76px;
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      border: 7px solid var(--surface);
+      border-radius: 50%;
+      color: #000044;
+      box-shadow: 0 14px 30px rgba(0, 0, 102, .2);
+      font-size: .72rem;
+      font-weight: 900;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .node.source { top: 8%; left: 8%; background: var(--green); }
+    .node.claim { top: 31%; left: 40%; width: 102px; background: var(--orange); }
+    .node.wiki { top: 5%; right: 5%; background: var(--sky); color: #000044; }
+    .node.graph { right: 2%; bottom: 8%; background: var(--aqua); }
+    .node.release { bottom: 2%; left: 11%; background: var(--yellow); }
+    .node.soul { top: 56%; left: 34%; width: 66px; background: var(--sand); }
+
+    .trust-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      box-shadow: 0 12px 36px rgba(0, 0, 102, .06);
+    }
+    .trust-item { padding: 22px 24px; border-right: 1px solid var(--line); }
+    .trust-item:last-child { border-right: 0; }
+    .trust-item strong { display: block; margin-bottom: 2px; }
+    .trust-item span { color: var(--muted); font-size: .9rem; }
+
+    section { padding: 112px 0; }
+    .section-heading { max-width: 760px; margin-bottom: 48px; }
+    .section-heading h2 { margin-bottom: 18px; font-size: clamp(2.4rem, 5vw, 4.3rem); }
+    .section-heading p { margin: 0; color: var(--muted); font-size: 1.14rem; }
+    .split-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+    .skill-card {
+      position: relative;
+      min-height: 430px;
+      padding: 38px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: 0 16px 50px rgba(0, 0, 102, .07);
+    }
+    .skill-card::after {
+      content: "";
+      position: absolute;
+      width: 230px;
+      height: 230px;
+      right: -95px;
+      bottom: -100px;
+      border-radius: 50%;
+      background: var(--card-accent);
+      opacity: .17;
+    }
+    .skill-card.maintain { --card-accent: var(--orange); }
+    .skill-card.query { --card-accent: var(--aqua); }
+    .card-index { color: var(--muted); font: 800 .78rem/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .1em; }
+    .skill-card h3 { margin: 30px 0 16px; font-size: clamp(2rem, 4vw, 3.2rem); }
+    .skill-card p { max-width: 500px; color: var(--muted); }
+    .check-list { margin: 28px 0 34px; padding: 0; display: grid; gap: 10px; list-style: none; }
+    .check-list li { display: flex; gap: 10px; align-items: flex-start; }
+    .check-list li::before { content: "✓"; color: var(--green); font-weight: 950; }
+    .text-link { position: relative; z-index: 2; color: var(--blue); font-weight: 850; text-underline-offset: 4px; }
+    :root[data-theme="dark"] .text-link { color: var(--aqua); }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .text-link { color: var(--aqua); } }
+
+    .process { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+    .process::before { content: ""; position: absolute; top: 38px; right: 8%; left: 8%; height: 2px; background: var(--line-strong); }
+    .step { position: relative; padding: 0 12px; }
+    .step-number {
+      width: 76px;
+      height: 76px;
+      margin-bottom: 24px;
+      display: grid;
+      place-items: center;
+      border: 7px solid var(--bg);
+      border-radius: 50%;
+      background: var(--step-color);
+      color: #000044;
+      font-weight: 950;
+      box-shadow: 0 8px 22px rgba(0, 0, 102, .14);
+    }
+    .step:nth-child(1) { --step-color: var(--green); }
+    .step:nth-child(2) { --step-color: var(--sky); }
+    .step:nth-child(3) { --step-color: var(--orange); }
+    .step:nth-child(4) { --step-color: var(--aqua); }
+    .step:nth-child(5) { --step-color: var(--yellow); }
+    .step h3 { margin-bottom: 8px; font-size: 1.1rem; letter-spacing: -.02em; }
+    .step p { margin: 0; color: var(--muted); font-size: .92rem; }
+
+    .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .feature {
+      min-height: 235px;
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+    }
+    .feature-dot { width: 14px; height: 14px; margin-bottom: 38px; border-radius: 50%; background: var(--feature-color, var(--sky)); box-shadow: 0 0 0 8px color-mix(in srgb, var(--feature-color, var(--sky)) 17%, transparent); }
+    .feature:nth-child(2) { --feature-color: var(--orange); }
+    .feature:nth-child(3) { --feature-color: var(--green); }
+    .feature:nth-child(4) { --feature-color: var(--aqua); }
+    .feature:nth-child(5) { --feature-color: var(--yellow); }
+    .feature:nth-child(6) { --feature-color: var(--coral); }
+    .feature h3 { margin-bottom: 11px; font-size: 1.18rem; letter-spacing: -.02em; }
+    .feature p { margin: 0; color: var(--muted); }
+
+    .identity-panel {
+      display: grid;
+      grid-template-columns: .9fr 1.1fr;
+      gap: 56px;
+      align-items: center;
+      padding: 56px;
+      border: 1px solid var(--line);
+      border-radius: 36px;
+      background: var(--blue);
+      color: #fff;
+      box-shadow: var(--shadow);
+    }
+    .identity-panel .eyebrow { color: var(--aqua); }
+    .identity-panel h2 { margin-bottom: 18px; font-size: clamp(2.4rem, 5vw, 4rem); }
+    .identity-panel p { color: rgba(255, 255, 255, .76); }
+    .identity-files { display: grid; gap: 14px; }
+    .file-card { padding: 24px; border: 1px solid rgba(255, 255, 255, .2); border-radius: 18px; background: rgba(255, 255, 255, .1); backdrop-filter: blur(12px); }
+    .file-card code { color: var(--yellow); font: 800 .88rem/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .file-card p { margin: 8px 0 0; font-size: .94rem; }
+
+    .cta {
+      padding: 72px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 36px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 36px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .cta h2 { margin-bottom: 12px; font-size: clamp(2.2rem, 4vw, 3.8rem); }
+    .cta p { max-width: 680px; margin: 0; color: var(--muted); }
+    .cta .actions { justify-content: flex-end; }
+
+    footer { margin-top: 112px; border-top: 1px solid var(--line); }
+    .footer-inner {
+      width: min(calc(100% - 40px), var(--content));
+      min-height: 150px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      color: var(--muted);
+    }
+    .footer-inner .brand { color: var(--text); }
+    .footer-links { display: flex; gap: 22px; margin-left: auto; }
+    .footer-links a { text-underline-offset: 4px; }
+    .footer-links a:hover { color: var(--text); }
+
+    @media (max-width: 980px) {
+      .nav-links { display: none; }
+      .hero { min-height: auto; grid-template-columns: 1fr; padding-top: 72px; }
+      .hero-copy { max-width: 760px; }
+      .hero-visual { min-height: 470px; }
+      .trust-strip { grid-template-columns: repeat(2, 1fr); }
+      .trust-item:nth-child(2) { border-right: 0; }
+      .trust-item:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      .process { grid-template-columns: repeat(2, 1fr); gap: 34px 18px; }
+      .process::before { display: none; }
+      .feature-grid { grid-template-columns: repeat(2, 1fr); }
+      .identity-panel { grid-template-columns: 1fr; }
+      .cta { grid-template-columns: 1fr; }
+      .cta .actions { justify-content: flex-start; }
+    }
+
+    @media (max-width: 680px) {
+      .nav { width: min(calc(100% - 28px), var(--content)); min-height: 68px; }
+      .brand-name { font-size: .95rem; }
+      .container { width: min(calc(100% - 28px), var(--content)); }
+      .hero { padding: 58px 0 48px; gap: 46px; }
+      h1 { font-size: clamp(3rem, 15vw, 4.5rem); }
+      .actions { display: grid; }
+      .button { width: 100%; }
+      .hero-visual { min-height: 390px; border-radius: 26px; }
+      .network { inset: 76px 16px 18px; transform: scale(.86); }
+      .node { width: 66px; border-width: 5px; }
+      .node.claim { width: 88px; }
+      .trust-strip, .split-grid, .process, .feature-grid { grid-template-columns: 1fr; }
+      .trust-item { border-right: 0; border-bottom: 1px solid var(--line); }
+      .trust-item:last-child { border-bottom: 0; }
+      section { padding: 78px 0; }
+      .skill-card { min-height: auto; padding: 28px; }
+      .step { display: grid; grid-template-columns: 64px 1fr; column-gap: 16px; }
+      .step-number { width: 58px; height: 58px; grid-row: 1 / 3; margin: 0; border-width: 5px; }
+      .identity-panel, .cta { padding: 32px 24px; border-radius: 26px; }
+      .footer-inner { min-height: 190px; flex-direction: column; align-items: flex-start; justify-content: center; }
+      .footer-links { margin-left: 0; flex-wrap: wrap; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Zum Inhalt springen</a>
+  <header class="site-header">
+    <nav class="nav" aria-label="Hauptnavigation">
+      <a class="brand" href="#top" aria-label="SkillSafeWerkstatt Startseite">
+        <span class="brand-mark" aria-hidden="true"><span></span></span>
+        <span class="brand-name">SkillSafeWerkstatt</span>
+      </a>
+      <div class="nav-links">
+        <a href="#skills">Zwei Skills</a>
+        <a href="#workflow">Ablauf</a>
+        <a href="#features">Prinzipien</a>
+        <a href="#download">Download</a>
+      </div>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Farbschema wechseln" title="Farbschema wechseln">◐</button>
+    </nav>
+  </header>
+
+  <main id="main">
+    <div class="container" id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Portable Markdown Knowledge</p>
+          <h1 id="hero-title">Wissen, das <span>belegt</span> bleibt.</h1>
+          <p class="lead">SkillSafeWerkstatt verwandelt Quellen in einen nachvollziehbaren Wissensraum: lokal pflegbar, als Markdown portabel und bis zur konkreten Fundstelle zitierbar.</p>
+          <div class="actions">
+            <a class="button" href="maintain-llm-wiki.skill" download>Pflege-Skill laden <span aria-hidden="true">↓</span></a>
+            <a class="button secondary" href="#skills">System verstehen <span aria-hidden="true">→</span></a>
+          </div>
+        </div>
+
+        <div class="hero-visual" role="img" aria-label="Schematischer Wissensgraph von Quelle über Claim und Wiki bis zum Release">
+          <span class="visual-label">Evidence graph · verified</span>
+          <div class="network" aria-hidden="true">
+            <span class="network-line line-a"></span>
+            <span class="network-line line-b"></span>
+            <span class="network-line line-c"></span>
+            <span class="network-line line-d"></span>
+            <span class="network-line line-e"></span>
+            <span class="node source">Quelle</span>
+            <span class="node claim">Claim</span>
+            <span class="node wiki">Wiki</span>
+            <span class="node graph">Graph</span>
+            <span class="node release">Release</span>
+            <span class="node soul">Soul</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="trust-strip" aria-label="Grundprinzipien">
+        <div class="trust-item"><strong>Markdown-first</strong><span>Keine proprietäre Wissensablage</span></div>
+        <div class="trust-item"><strong>Claim-basiert</strong><span>Belege bis zum Locator</span></div>
+        <div class="trust-item"><strong>Local-first</strong><span>Ohne zentrale Serverpflicht</span></div>
+        <div class="trust-item"><strong>Read-only konsumierbar</strong><span>Pflege und Lesen getrennt</span></div>
+      </div>
+
+      <section id="skills" aria-labelledby="skills-title">
+        <div class="section-heading">
+          <p class="eyebrow">Eine klare Grenze</p>
+          <h2 id="skills-title">Zwei Skills. Zwei Verantwortungen.</h2>
+          <p>Pflege darf verändern. Lesen darf nur verifizieren, suchen und antworten. Diese Trennung schützt den Wissensraum vor versehentlichen Änderungen.</p>
+        </div>
+        <div class="split-grid">
+          <article class="skill-card maintain">
+            <span class="card-index">01 · WRITE WORKFLOW</span>
+            <h3>maintain-llm-wiki</h3>
+            <p>Initialisiert und kuratiert den Wissensraum unter exklusivem Lock – mit Vorschauen, Snapshots, Qualitätsprüfungen und einem echten Release-Protokoll.</p>
+            <ul class="check-list">
+              <li>Treue Markdown-Extraktion und Quellenregister</li>
+              <li>SOUL, Inhaltsrichtlinie, Cluster und Begriffswelten</li>
+              <li>Claim-Belege, Graph, Lint und idempotente Releases</li>
+            </ul>
+            <a class="text-link" href="maintain-llm-wiki.skill" download>Pflege-Skill herunterladen →</a>
+          </article>
+          <article class="skill-card query">
+            <span class="card-index">02 · READ WORKFLOW</span>
+            <h3>query-llm-wiki</h3>
+            <p>Liest ausschließlich einen veröffentlichten, hashverifizierten Stand und beantwortet Fragen mit nachvollziehbaren Claims, Quellen und Qualitätsstatus.</p>
+            <ul class="check-list">
+              <li>Read-only Suche und validierte Metadatenfilter</li>
+              <li>Aktuelle, historische und widersprüchliche Evidenz</li>
+              <li>Quellennachweise mit ID, Titel und Locator</li>
+            </ul>
+            <a class="text-link" href="query-llm-wiki.skill" download>Lese-Skill herunterladen →</a>
+          </article>
+        </div>
+      </section>
+
+      <section id="workflow" aria-labelledby="workflow-title">
+        <div class="section-heading">
+          <p class="eyebrow">Vom Material zur Antwort</p>
+          <h2 id="workflow-title">Nachvollziehbar in fünf Schritten.</h2>
+          <p>Originale bleiben außerhalb. Im Wiki liegen nur treue Markdown-Quellen, kuratierte Aussagen und die für Prüfung und Navigation notwendigen Metadaten.</p>
+        </div>
+        <div class="process">
+          <article class="step"><div class="step-number">01</div><h3>Aufnehmen</h3><p>Material außerhalb des Wikis lesen und treu nach Markdown übertragen.</p></article>
+          <article class="step"><div class="step-number">02</div><h3>Registrieren</h3><p>Quelle mit stabiler ID, Sprache, Herkunft und Hash nachvollziehbar machen.</p></article>
+          <article class="step"><div class="step-number">03</div><h3>Kuratieren</h3><p>Claims, Beziehungen, Cluster und Begriffswelten kontrolliert pflegen.</p></article>
+          <article class="step"><div class="step-number">04</div><h3>Veröffentlichen</h3><p>Graph bauen, linten, versionieren und das Manifest zuletzt schreiben.</p></article>
+          <article class="step"><div class="step-number">05</div><h3>Fragen</h3><p>Nur den verifizierten Release lesen und jede Aussage zurückverfolgen.</p></article>
+        </div>
+      </section>
+
+      <section id="features" aria-labelledby="features-title">
+        <div class="section-heading">
+          <p class="eyebrow">Sicher durch Konstruktion</p>
+          <h2 id="features-title">Ein Wissensraum mit Gedächtnis und Grenzen.</h2>
+          <p>Deterministische Werkzeuge sichern die Struktur. Fachliche Entscheidungen bleiben sichtbar, diskutierbar und bestätigungspflichtig.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature"><div class="feature-dot"></div><h3>Claim-basierte Belege</h3><p>Materielle Aussagen verweisen auf registrierte Quellen und konkrete Seiten-, Abschnitts- oder Zeitmarken.</p></article>
+          <article class="feature"><div class="feature-dot"></div><h3>Kooperativer File-Lock</h3><p>Nur ein konformer Pflegeprozess schreibt. Der private Besitznachweis bleibt außerhalb des Wikis.</p></article>
+          <article class="feature"><div class="feature-dot"></div><h3>Release-Integrität</h3><p>Semantische Version, unveränderliches Protokoll und Dateihashes bilden eine eindeutige Lesegrenze.</p></article>
+          <article class="feature"><div class="feature-dot"></div><h3>Interaktiver Wissensgraph</h3><p>Cluster, Links und statische Leseansichten funktionieren lokal, relativ und ohne Webserver.</p></article>
+          <article class="feature"><div class="feature-dot"></div><h3>Historie ohne Vergessen</h3><p>Ersetzte und widersprüchliche Claims bleiben nachvollziehbar, statt still überschrieben zu werden.</p></article>
+          <article class="feature"><div class="feature-dot"></div><h3>Portable Skills</h3><p>Die vollständigen Agent Skills laufen mit relativen Pfaden in Claude Code, Claude Cowork und Codex.</p></article>
+        </div>
+      </section>
+
+      <section aria-labelledby="identity-title">
+        <div class="identity-panel">
+          <div>
+            <p class="eyebrow">Identität vor Inhalt</p>
+            <h2 id="identity-title">Das Wiki weiß, wie es antworten soll.</h2>
+            <p>Vor der ersten Datei klärt der Pflege-Skill Zweck, Zielgruppe, Sprache, Tonalität, Grenzen und den Umgang mit Historie. Erst ein bestätigter Vorschlag wird Teil des Wissensraums.</p>
+          </div>
+          <div class="identity-files">
+            <article class="file-card"><code>SOUL.md</code><p>Definiert Antwortsprache, Anrede, Ton, Ausführlichkeit, Quellenanzeige, Unsicherheit sowie Grenzen und Tabus.</p></article>
+            <article class="file-card"><code>schema/CONTENT_POLICY.md</code><p>Trennt aktuellen Stand, historisches Journal und Hybridmodell – ohne automatische Löschung.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section id="download" aria-labelledby="download-title">
+        <div class="cta">
+          <div>
+            <p class="eyebrow">Startklar als Agent Skill</p>
+            <h2 id="download-title">Baue deinen belegbaren Wissensraum.</h2>
+            <p>Lade beide Skills herunter: einer für die kontrollierte Pflege, einer für das sichere Konsumieren veröffentlichter Wissensstände.</p>
+          </div>
+          <div class="actions">
+            <a class="button orange" href="maintain-llm-wiki.skill" download>Pflege-Skill ↓</a>
+            <a class="button secondary" href="query-llm-wiki.skill" download>Lese-Skill ↓</a>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <a class="brand" href="#top">
+        <span class="brand-mark" aria-hidden="true"><span></span></span>
+        <span class="brand-name">SkillSafeWerkstatt</span>
+      </a>
+      <span>Portables, belegbares Wissen aus Markdown.</span>
+      <nav class="footer-links" aria-label="Rechtliches und Projekt">
+        <a href="https://github.com/GodModeAI2025/SkillSafeWerkstatt">GitHub</a>
+        <a href="https://godmodeai2025.github.io/MarkZimmermann/" rel="noopener">Impressum</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const toggle = document.getElementById("themeToggle");
+      const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+
+      function activeTheme() {
+        if (root.dataset.theme === "light" || root.dataset.theme === "dark") return root.dataset.theme;
+        return systemDark.matches ? "dark" : "light";
+      }
+
+      function updateLabel() {
+        const next = activeTheme() === "dark" ? "hell" : "dunkel";
+        toggle.setAttribute("aria-label", `Zum ${next}en Farbschema wechseln`);
+        toggle.title = `Zum ${next}en Farbschema wechseln`;
+      }
+
+      toggle.addEventListener("click", () => {
+        const next = activeTheme() === "dark" ? "light" : "dark";
+        root.dataset.theme = next;
+        try { localStorage.setItem("ssw-theme", next); } catch (_error) {}
+        updateLabel();
+      });
+
+      systemDark.addEventListener?.("change", updateLabel);
+      updateLabel();
+    })();
+  </script>
+</body>
+</html>
