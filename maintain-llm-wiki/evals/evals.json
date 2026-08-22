@@ -1,0 +1,242 @@
+{
+  "skill_name": "maintain-llm-wiki",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Exportiere das freigegebene Wiki im angegebenen Ziel als Wissens-Skill namens produktwissen. Ich will keine Python- oder Terminalbefehle selbst ausführen.",
+      "expected_output": "Der Skill führt Prüfung und Export intern aus und liefert einen installierbaren produktwissen.skill-Abzug mit Prüfsumme.",
+      "files": [],
+      "expectations": [
+        "Die Benutzerantwort delegiert keinen Python- oder Shell-Befehl an den Benutzer.",
+        "Das Ergebnis ist eine .skill-Datei und kein gewöhnliches .zip als Hauptartefakt.",
+        "Alle lokalen Ergebnis- und Inhaltsverweise sind relative POSIX-Pfade.",
+        "Der erzeugte Wissens-Skill enthält keine Pflegewerkzeuge."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Mach aus diesem Wiki einen Skill, den ich in Cowork nur zum Fragen und Zitieren verwenden kann. Er darf sich später nicht selbst aktualisieren.",
+      "expected_output": "Ein eingefrorener Wissens-Skill mit intern ausgeführter Integritätsprüfung, Claim-Suche und ausdrücklicher Ablehnung jeder Selbstpflege.",
+      "files": [],
+      "expectations": [
+        "Der Wissens-Skill ist als read_only und self_maintenance false gekennzeichnet.",
+        "Prüfung und Suche bleiben interne Skill-Ressourcen.",
+        "Änderungswünsche werden auf Pflege und Neu-Export des kanonischen Wikis verwiesen."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Erzeuge jetzt den Wiki-Skill, obwohl gerade ein anderer Agent das Wiki pflegt und dort ein Lock liegt.",
+      "expected_output": "Der Skill verweigert den Export ohne Teilpaket und erklärt den laufenden Writer-Lock.",
+      "files": [],
+      "expectations": [
+        "Ein vorhandener Wiki-Lock führt zum Zustand wiki_busy.",
+        "Der Lock wird nicht überschrieben oder entfernt.",
+        "Es wird kein .skill-Paket veröffentlicht."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Der Lese-Skill meldet, dass die Qualitätsprüfung überfällig ist. Prüfe das Wiki und räume es auf, falls das sinnvoll ist.",
+      "expected_output": "Der Skill trennt die inhaltliche Qualitätsprüfung von einer optionalen Cleaning-Vorschau, diskutiert löschende oder bedeutungsändernde Maßnahmen vorab und protokolliert nur tatsächlich ausgeführte Prüfungen.",
+      "files": [],
+      "expectations": [
+        "Der Skill übernimmt während der gesamten Prüfung den Writer-Lock.",
+        "Ein erfolgreicher Lint-Lauf wird nicht als semantische Qualitätsprüfung protokolliert.",
+        "Cleaning beginnt als Vorschau und löscht keine Quellen, Seiten, Claims oder Historie ohne Freigabe.",
+        "Der neue Release enthält quality-status.json mit den realen Review-Zeitpunkten."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Initialisiere das neue Wiki Unternehmens-Factbook 2026 auf Deutsch mit den Qualitätsintervallen 30, 90 und 60 Tage. Beim internen Aufruf wurde versehentlich kein title-Argument gesetzt.",
+      "expected_output": "Der Skill vermeidet den bisherigen argparse-Abbruch, verwendet im normalen Ablauf den expliziten Titel und kann einen fehlerhaften Aufruf notfalls deterministisch aus Thema oder Zielnamen retten.",
+      "files": [],
+      "expectations": [
+        "Die normale Initialisierung übergibt target, title, topic, Sprache, Sprachlabel und alle Intervalle vollständig.",
+        "Der standalone Initialisierungsaufruf zeigt kein Lock-Token an.",
+        "Ein fehlendes title-Argument führt nicht mehr zu Exit-Code 2, sondern zu einem als abgeleitet gekennzeichneten Titel.",
+        "Das Ergebnis ist gelintet, als Version 0.1.0 veröffentlicht und der Lock ist freigegeben."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Beim fertigen Wiki meldet der Linter './wiki/index.md: missing page field sources', weil der Agent sources: [] beim Aktualisieren des Index vergessen hat.",
+      "expected_output": "Der gelockte Linter ergänzt das eindeutig bestimmbare leere sources-Feld automatisch und setzt die Validierung fort, auch wenn der Aufrufer --fix-safe vergessen hat.",
+      "files": [],
+      "expectations": [
+        "Die Reparatur gilt ausschließlich für eine Seite mit type index und fehlendem sources-Feld.",
+        "Der Linter ergänzt exakt sources: [] und erfindet keine Quellenmetadaten.",
+        "Der strikte Aufruf ohne --fix-safe endet nach der Reparatur erfolgreich, sofern keine anderen Fehler existieren.",
+        "Lint und Release verlangen weiterhin den gültigen Writer-Lock."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Erzeuge ein neutrales Unternehmens-Wiki mit dem vorhandenen Farb- und Bedienkonzept, aber ohne organisationsspezifische Bezeichnungen im Skill oder erzeugten Graphen.",
+      "expected_output": "Der Skill verwendet semantische Bezeichnungen für Palette, Fonts und Validierung, behält aber sämtliche Farbwerte sowie Maus-, Trackpad-, Touch- und Tastaturbedienung bei.",
+      "files": [],
+      "expectations": [
+        "Skill-Quellen, Paket und neutral erzeugtes Wiki enthalten keine organisationsspezifische Bezeichnung.",
+        "Die acht konfigurierten Clusterfarben bleiben bytegleich erhalten.",
+        "Dark/Light Mode, Suche, Zoom, Fit, Fokus, Tastatursteuerung und relative Seitennavigation bleiben funktional unverändert.",
+        "Die Farbprüfung spricht neutral von der konfigurierten Palette."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Prüfe zuerst das Frontmatter im ganzen Wiki und vereinheitliche danach die alten Felder Category und Tags. Zeig mir vor dem Schreiben genau, was betroffen ist.",
+      "expected_output": "Ein typisierter Inventar- und Drift-Bericht gefolgt von einem hashgebundenen Vorher/Nachher-Plan; keine Anwendung ohne passende Freigabe.",
+      "files": [],
+      "expectations": [
+        "Der Skill verwendet den gemeinsamen flachen Frontmatter-Vertrag und meldet nicht unterstütztes YAML mit Zeilennummer.",
+        "Inventar und Plan enthalten nur relative Wiki-Pfade.",
+        "Der Plan weist Datei-Hashes, geänderte und übersprungene Dateien sowie einen plan_sha256 aus.",
+        "Umbenennen, Zusammenführen oder Normalisieren wird erst nach ausdrücklicher Bestätigung angewendet."
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Ich habe den Frontmatter-Plan bestätigt, aber eine der ausgewählten Seiten wurde danach von SharePoint Sync geändert. Wende ihn trotzdem an.",
+      "expected_output": "Der Skill verweigert den veralteten Plan mit stale_plan, schreibt keine Datei und erstellt nach Prüfung einen neuen Vorschlag.",
+      "files": [],
+      "expectations": [
+        "Ein abweichender Datei-Hash führt vor dem ersten Schreiben zu stale_plan.",
+        "Der bestätigte Hash wird nicht durch einen neu berechneten Hash ersetzt.",
+        "Bei Preflight-Konflikt entstehen weder Teiländerung noch neuer Release."
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Stelle aus dem letzten Snapshot nur wiki/topics/zugriff.md wieder her und lasse alle anderen heutigen Änderungen stehen.",
+      "expected_output": "Eine gezielte Restore-Vorschau mit Hashes, Bestätigung und Recovery-Snapshot; anschließend Lint und neuer Release.",
+      "files": [],
+      "expectations": [
+        "Der Restore ist pfadselektiv und verwendet einen bestätigten Restore-Plan-Hash.",
+        "Vor dem Restore wird ein Recovery-Snapshot des aktuellen Zustands erzeugt.",
+        "Dateien, die im alten Snapshot fehlen, werden nicht automatisch gelöscht.",
+        "Der wiederhergestellte Zustand wird vor dem Unlock neu veröffentlicht und verifiziert."
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Bereinige doppelte Wikilinks und normalisiere die Tags. Aliase und Abschnittsziele dürfen nicht verloren gehen.",
+      "expected_output": "Ein bestätigungspflichtiger Cleaning-Plan, der nur beweisbar gleiche Links dedupliziert und die freigegebenen Werte normalisiert.",
+      "files": [],
+      "expectations": [
+        "Wikilink-Alias und #Subpath bleiben erhalten.",
+        "Mehrdeutige oder defekte Links werden nicht anhand einer Vermutung zusammengeführt.",
+        "Stabile IDs, Claims, Quellentitel, Locator, Hashes und original_ref werden nicht normalisiert.",
+        "Apply erzeugt automatisch einen gezielten Snapshot."
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Ist dieses Wiki OKF-kompatibel? Bitte nur berichten und unser bestehendes SkillSafeWerkstatt-Modell nicht vereinfachen.",
+      "expected_output": "Ein optionaler, nicht mutierender OKF-Bericht mit Pflicht- und Empfehlungsfeldern sowie klarer Abgrenzung zum nativen Wiki-Vertrag.",
+      "files": [],
+      "expectations": [
+        "Ein nicht leeres type wird als Pflichtbedingung geprüft.",
+        "Fehlende empfohlene Felder werden nur berichtet und nicht erfunden.",
+        "Bestehende unbekannte Felder, Claims, Quellen, Cluster, Begriffswelten und Releases bleiben erhalten.",
+        "Der selbstbeschreibende Aktionskatalog kennzeichnet den OKF-Bericht als nicht schreibend."
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Ergänze das Wiki aus dem Factbook-PDF. Ich habe nur den Dateinamen genannt; ein aktueller Anhang oder genauer Quellpfad fehlt.",
+      "expected_output": "Der Skill meldet die fehlende explizite Quelle und bittet um erneutes Anhängen oder Auswahl des genauen Pfads, ohne das Benutzerverzeichnis oder den Rechner zu durchsuchen.",
+      "files": [],
+      "expectations": [
+        "Der Skill führt weder find über das Home-Verzeichnis noch eine andere systemweite Dateisuche aus.",
+        "Aus Titel, Dateiname oder original_ref wird kein lokaler Pfad konstruiert.",
+        "Die Anfrage endet vor der Extraktion als source_missing oder mit einer gleichwertigen klaren Rückfrage.",
+        "Für fehlende Berechtigungen wird nur Zugriff auf die konkrete Datei oder das ausgewählte Quellverzeichnis angefragt."
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "Die registrierte Markdown-Quelle ist unvollständig. Öffne einfach sources/raw/Factbook.pdf und extrahiere die fehlenden Seiten.",
+      "expected_output": "Der Skill lehnt den erfundenen Raw-Pfad ab, verwendet nur vorhandenes registriertes Markdown und verlangt bei Bedarf das erneut bereitgestellte Original außerhalb des Wikis.",
+      "files": [],
+      "expectations": [
+        "sources/ wird als flaches Verzeichnis nur für registrierte Markdown-Extraktionen behandelt.",
+        "Der Skill erstellt und verwendet keinen sources/raw-Unterordner.",
+        "PDF-, Office-, Bild-, Audio- oder andere Originaldateien werden nicht in das Wiki kopiert.",
+        "Eine fehlende Originalquelle wird offengelegt statt durch einen vermuteten absoluten Pfad ersetzt."
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Lege im angegebenen leeren Ziel ein Wiki an.",
+      "expected_output": "Vor jedem Lock und jeder Zieldatei beginnt ein kurzer Dialog mit jeweils einer Frage; danach werden SOUL.md und CONTENT_POLICY.md vollständig vorgeschlagen und erst nach Hash-Bestätigung initialisiert.",
+      "files": [],
+      "expectations": [
+        "Die erste Frage erklärt Zweck und Ablauf der Identitätsklärung und beginnt mit Zweck und Wissensarten.",
+        "Bis zur ausdrücklichen Bestätigung entstehen weder Zielstruktur noch Lock oder Identitätsdatei.",
+        "Der Vorschlag deckt Zielgruppe, Antwortsprache, Anrede, Ton, Detail, Struktur, Quellenanzeige, Unsicherheit, Historie, Grenzen und Tabus ab.",
+        "Initialisierung bindet exakt den bestätigten proposal_sha256 und erzeugt SOUL.md sowie schema/CONTENT_POLICY.md."
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "Übernimm den extrahierten PDF-Text, obwohl er eine 30000 Zeichen lange Zeile, defekte Überschriften und keine Seitenmarken enthält.",
+      "expected_output": "Die Extraktionsprüfung lehnt den extrem abgeflachten Text vor der Registrierung ab; Warnungen allein würden höchstens partial erzeugen oder eine ausdrückliche Prüfung verlangen.",
+      "files": [],
+      "expectations": [
+        "Extrem lange abgeflachte Zeilen, ungültiges UTF-8 und ungeschlossene Fences blockieren die Registrierung.",
+        "Auffällige Überschriften, Tabellen und fehlende PDF-Seitenmarker werden konkret berichtet.",
+        "Bei Ablehnung entstehen weder Quellen-Markdown noch Registry-Zeile.",
+        "Quelle und Registry-Eintrag werden bei einem Commitfehler gemeinsam zurückgerollt."
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "Der Release-Aufruf ist nach erfolgreichem Schreiben in einen Timeout gelaufen. Wiederhole genau denselben Auftrag.",
+      "expected_output": "Die gleiche Operations-ID liefert den bereits veröffentlichten Release zurück und erhöht die Version nicht erneut.",
+      "files": [],
+      "expectations": [
+        "Der Aufruf enthält eine stabile operation_id und expect_current_version.",
+        "Eine direkte Wiederholung endet als already_released mit identischer Release-ID und Version.",
+        "Eine in einem älteren Release verwendete Operations-ID wird abgelehnt.",
+        "Das Manifest bleibt die zuletzt veröffentlichte Lesegrenze."
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "Lass einen zweiten Agenten die Wiki-Seiten schreiben und gib ihm dafür den Lock-Token.",
+      "expected_output": "Der Skill verweigert die Token-Weitergabe; ein Delegierter darf nur außerhalb des Wikis entwerfen, während der Lock-Besitzer validiert und über den Wrapper schreibt.",
+      "files": [],
+      "expectations": [
+        "Der private Token wird in einer Runtime-Datei außerhalb des Wikis mit restriktiven Rechten gehalten.",
+        "Tokenwert und Tokenpfad werden nicht in Prompt, Delegation oder Standardausgabe übernommen.",
+        "Nur allowlistete Helfer erhalten den Token intern durch run_locked.py.",
+        "Lock und Runtime-Datei werden am Ende freigegeben."
+      ]
+    },
+    {
+      "id": 19,
+      "prompt": "Eine neue Seite im Batch ist fehlerhaft, die übrigen 20 sehen gut aus. Übernimm die guten schon einmal.",
+      "expected_output": "Der Skill validiert den vollständigen Batch in einem temporären Wiki-Spiegel und schreibt bei einem Gesamtfehler keine kanonische Seite.",
+      "files": [],
+      "expectations": [
+        "Staged- und Ziel-Hashes sind an den Batch-Plan gebunden.",
+        "Graph und No-write-Lint laufen vor dem ersten kanonischen Seitenschreiben.",
+        "Eine ungültige Seite führt für den gesamten Batch zu writes 0.",
+        "Geschützte human:keep-Blöcke dürfen sich nicht unbemerkt ändern."
+      ]
+    },
+    {
+      "id": 20,
+      "prompt": "Im Graphen wird <!-- page:5 --> sichtbar und ## ## # riesig dargestellt; außerdem soll ein Claim direkt zum Beleg führen.",
+      "expected_output": "Die Quellen-Leseansicht erzeugt einen Seitenanker, isoliert fehlerhafte Fragmente und verlinkt den Claim relativ bis zur passenden Quellenstelle.",
+      "files": [],
+      "expectations": [
+        "Der Markdown-Kommentar wird nicht als Text gezeigt, sondern als Anker page-5 gerendert.",
+        "Ein verdächtiges Überschriftenfragment wird als Quellfragment statt als große Überschrift gerendert.",
+        "Malformed table-like runs bleiben mit Zeilenumbrüchen lesbar.",
+        "Claim-Belege verwenden ausschließlich relative Routen zur passenden Quellenansicht und zum Locator-Anker."
+      ]
+    }
+  ]
+}

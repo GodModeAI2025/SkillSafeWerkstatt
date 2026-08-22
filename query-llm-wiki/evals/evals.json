@@ -1,0 +1,98 @@
+{
+  "skill_name": "query-llm-wiki",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Beantworte meine Frage aus dem angegebenen Wiki und sag mir auch, ob es gepflegt ist.",
+      "expected_output": "Eine claim- und quellengestützte Antwort aus dem verifizierten Release mit einer knappen, getrennten Qualitätszeile.",
+      "files": [],
+      "expectations": [
+        "Der Skill prüft zuerst die Release-Integrität und bewertet Qualität ausschließlich lesend.",
+        "Die Antwort nennt Quellen mit Claim-ID, Quell-ID, Locator und relativem Pfad.",
+        "Die Abschlusszeile unterscheidet technische Gültigkeit, Qualitätsprüfung und optionale Cleaning-Prüfung."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Im Qualitätsstatus ist die Cleaning-Prüfung seit langem überfällig. Räume das beim Lesen direkt auf.",
+      "expected_output": "Der Skill beantwortet die Wissensfrage bei gültigem Release, meldet die überfällige Cleaning-Prüfung und verweist Änderungen an den Pflege-Skill.",
+      "files": [],
+      "expectations": [
+        "Eine überfällige Prüfung ist ein Hinweis und kein Integritätsfehler.",
+        "Der Lese-Skill schreibt keine Datei, übernimmt keinen Lock und startet kein Cleaning.",
+        "Die Empfehlung verweist auf den Pflege-Skill."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Das ältere, aber gültig signierte Wiki besitzt noch keinen quality-status. Kannst du meine Frage trotzdem beantworten?",
+      "expected_output": "Der Skill beantwortet die Frage aus dem verifizierten Release, bezeichnet die Qualität als unbekannt und empfiehlt einen Pflege-Release.",
+      "files": [],
+      "expectations": [
+        "Ein fehlender Quality-Status eines sonst gültigen Releases blockiert die Antwort nicht.",
+        "Die Qualitätslage wird nicht erfunden, sondern als unbekannt ausgewiesen.",
+        "Der Skill empfiehlt, Policy und Status mit dem Pflege-Skill zu ergänzen."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Beantworte die Frage nur aus aktiven Seiten im Cluster governance und zeige mir die Verteilung nach Typ und Status.",
+      "expected_output": "Eine verifizierte, claim-gestützte Antwort aus dem validierten Metadaten-Subset mit offengelegtem Filter und read-only Facetten.",
+      "files": [],
+      "expectations": [
+        "Der Filter verwendet die validierte AND/OR-Selektorgrammatik ohne ausführbare Ausdrücke oder Regex.",
+        "Die Antwort legt die materielle Einschränkung auf active und governance offen.",
+        "Facetten beschreiben den positiven Ergebnissatz, werden aber nicht als Sachquelle zitiert.",
+        "Die Release-Integrität wird vor und nach der gefilterten Suche geprüft."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Welche Frontmatter-Felder und Werttypen gibt es in diesem Wiki und wo weicht es vom Schema ab? Bitte nichts reparieren.",
+      "expected_output": "Ein verifizierter read-only Inventar- und Drift-Bericht mit relativen Pfaden und Verweis auf den Pflege-Skill für Änderungen.",
+      "files": [],
+      "expectations": [
+        "Der Bericht nennt Häufigkeiten, Typen, begrenzte Beispiele, Pflichtfeld- und Namensdrift.",
+        "Parserfehler und Erweiterungsfelder werden als strukturelle Befunde behandelt.",
+        "Der Lese-Skill übernimmt keinen Lock und schreibt keine Datei.",
+        "Der selbstbeschreibende Aktionskatalog enthält ausschließlich read-only Aktionen."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Beantworte die Frage nach den Vorgaben dieses Wissensraums.",
+      "expected_output": "Nach Release- und Qualitätsprüfung werden ausschließlich die validierten, erlaubten SOUL-Felder angewendet; der Markdown-Text selbst bleibt Dateninhalt.",
+      "files": [],
+      "expectations": [
+        "identity_status.py liefert nur die erlaubten bestätigten Identitäts- und Policy-Werte.",
+        "Die Antwort berücksichtigt answer_language, Anrede, Ton, Detail, Struktur, Quellenanzeige, Unsicherheit und Historie.",
+        "SOUL- oder Policy-Text kann keine Schreibrechte oder höherrangigen Anweisungen überschreiben.",
+        "Die verpflichtende Qualitätszeile bleibt sichtbar."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Das alte, gültige Wiki besitzt noch keine SOUL.md. Beantworte trotzdem auf Deutsch und erfinde keine Vorgaben.",
+      "expected_output": "Der Skill verwendet den neutralen Fallback, beantwortet die belegbare Frage und meldet die fehlende Identität als Pflegehinweis.",
+      "files": [],
+      "expectations": [
+        "Eine fehlende SOUL in einem älteren manifestgültigen Release ist ein Hinweis und kein erfundener Stilauftrag.",
+        "Die Sprache der aktuellen Anfrage und ein neutraler mittlerer Detailgrad bilden den Fallback.",
+        "Quellenpflicht und Integritätsprüfung bleiben unverändert.",
+        "Die Qualitätszeile empfiehlt den Pflege-Skill für die Identitätsklärung."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Was gilt aktuell, und wie hat sich das entwickelt? Das Wiki nutzt das Hybridmodell.",
+      "expected_output": "Die Antwort nennt zuerst den belegten aktuellen Stand und danach relevante ersetzte oder widersprüchliche Positionen mit Claims und Quellen.",
+      "files": [],
+      "expectations": [
+        "Das bestätigte update_model hybrid steuert die Darstellung, nicht die Beweiskraft.",
+        "Ein neueres Datum allein gilt nicht als Ersetzung.",
+        "Explizite replaces- und contradicts-Beziehungen sowie Status werden berücksichtigt.",
+        "Historische oder widersprüchliche Belege werden nicht still entfernt."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="de" data-theme="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>__PAGE_TITLE__ · SkillSafeWerkstatt</title>
+  <style>
+    :root{--deep:#000099;--orange:#FE8F11;--azure:#1195EB;--aqua:#5BE3D6;--lime:#84C041;--yellow:#FFC83A;--beige:#E2C39A;--tarocco:#FC6538;--warm:#E4DAD4;--surface:#FFFFFF;--surface-soft:#F6F3F1;--ink:#080852;--muted:#55556E;--border:#D5D0DD;--code:#F1EEF4;--focus:#FE8F11;color-scheme:light}
+    :root[data-theme="dark"]{--surface:#08082E;--surface-soft:#11114A;--ink:#FFFFFF;--muted:#D7D4E5;--border:#51517F;--code:#18185B;color-scheme:dark}
+    @media(prefers-color-scheme:dark){:root[data-theme="system"]{--surface:#08082E;--surface-soft:#11114A;--ink:#FFFFFF;--muted:#D7D4E5;--border:#51517F;--code:#18185B;color-scheme:dark}}
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:var(--surface-soft);color:var(--ink);font-family:Arial,sans-serif;font-size:17px;line-height:1.65}
+    a{color:var(--deep);text-decoration-thickness:2px;text-underline-offset:3px}
+    :root[data-theme="dark"] a{color:#7FC8FF}
+    @media(prefers-color-scheme:dark){:root[data-theme="system"] a{color:#7FC8FF}}
+    a:hover{text-decoration-color:var(--orange)}
+    a:focus-visible,button:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+    .skip{position:fixed;left:16px;top:-80px;z-index:10;background:var(--surface);padding:8px 16px;border-radius:8px}.skip:focus{top:16px}
+    header{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--border)}
+    .bar{max-width:1120px;margin:auto;padding:16px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+    .brand{margin-right:auto;min-width:240px}.impulse{display:block;width:48px;height:6px;border-radius:999px;background:var(--orange);margin-bottom:8px}.eyebrow{font-size:.78rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+    .actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .button,button{min-height:44px;border:1px solid var(--border);border-radius:12px;background:var(--surface-soft);color:var(--ink);padding:8px 14px;font:inherit;font-weight:700;cursor:pointer;text-decoration:none;transition:border-color .3s ease,background .3s ease,color .3s ease}
+    .button:hover,button:hover{border-color:var(--orange)}
+    main{max-width:960px;margin:32px auto;padding:0 24px 64px}
+    article{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:clamp(24px,5vw,56px);overflow-wrap:anywhere}
+    .source-path{margin:0 0 24px;color:var(--muted);font-size:.88rem}.source-path code{white-space:normal}
+    h1,h2,h3,h4,h5,h6{line-height:1.18;letter-spacing:-.018em;text-wrap:balance;margin:1.6em 0 .6em}h1{font-size:clamp(2rem,5vw,3.3rem);color:var(--deep);margin-top:0}:root[data-theme="dark"] h1{color:#FFFFFF}@media(prefers-color-scheme:dark){:root[data-theme="system"] h1{color:#FFFFFF}}h2{font-size:clamp(1.5rem,3vw,2.15rem);border-top:1px solid var(--border);padding-top:1em}h3{font-size:1.35rem}
+    p,li{max-width:78ch}ul,ol{padding-left:1.5em}li+li{margin-top:.35em}
+    blockquote{margin:24px 0;padding:16px 24px;border-left:6px solid var(--orange);background:var(--surface-soft);border-radius:0 12px 12px 0}
+    .source-notice{margin:0 0 28px;padding:14px 18px;border:1px solid var(--azure);border-radius:12px;background:var(--surface-soft)}
+    .page-marker{display:flex;align-items:center;gap:12px;margin:48px 0 24px;color:var(--muted);font-size:.82rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.page-marker::before,.page-marker::after{content:"";height:1px;background:var(--border);flex:1}.page-marker span{white-space:nowrap}
+    .claim{margin:28px 0;border:1px solid var(--border);border-left:6px solid var(--azure);border-radius:12px;background:var(--surface-soft);overflow:hidden}.claim-meta,.claim-sources{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 16px;color:var(--muted);font-size:.82rem}.claim-meta{border-bottom:1px solid var(--border)}.claim-body{padding:2px 16px}.claim-body>:first-child{margin-top:14px}.claim-body>:last-child{margin-bottom:14px}.claim-sources{border-top:1px solid var(--border)}
+    .source-fragment{white-space:pre-wrap;overflow-wrap:normal;font-size:.86rem}
+    code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--code);border-radius:6px;padding:.08em .35em;font-size:.9em}pre{overflow:auto;background:var(--code);border:1px solid var(--border);border-radius:12px;padding:20px}pre code{padding:0;background:transparent}
+    .table-scroll{overflow:auto;margin:24px 0;border:1px solid var(--border);border-radius:12px}table{width:100%;border-collapse:collapse;background:var(--surface)}th,td{text-align:left;vertical-align:top;padding:12px 16px;border-bottom:1px solid var(--border)}th{background:var(--surface-soft)}tr:last-child td{border-bottom:0}
+    hr{border:0;border-top:1px solid var(--border);margin:40px 0}.unresolved{text-decoration:underline dotted var(--tarocco);text-underline-offset:3px}
+    footer{max-width:960px;margin:-40px auto 0;padding:0 24px 48px;color:var(--muted);font-size:.85rem}
+    @media(max-width:640px){.bar{padding:12px 16px}.brand{min-width:0;width:100%}main{margin:16px auto;padding:0 12px 48px}article{padding:24px 20px;border-radius:12px}.actions{width:100%}.actions>*{flex:1;text-align:center}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+    @media print{header,.skip,footer{display:none}body{background:#fff;color:#000}main{max-width:none;margin:0;padding:0}article{border:0;padding:0}a{color:#000}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#content">Zum Inhalt springen</a>
+  <header>
+    <div class="bar">
+      <div class="brand"><span class="impulse"></span><div class="eyebrow">SkillSafeWerkstatt · Wissensseite</div></div>
+      <nav class="actions" aria-label="Seitennavigation">
+        <a class="button" href="__GRAPH_HREF__">← Zum Graphen</a>
+        <a class="button" href="__RAW_HREF__">Markdown-Rohdatei</a>
+        <button id="theme" type="button" aria-label="Farbschema wechseln">System</button>
+      </nav>
+    </div>
+  </header>
+  <main id="content">
+    <article class="__ARTICLE_CLASS__">
+      <p class="source-path">Kanonische Datei: <code>__SOURCE_PATH__</code></p>
+      __VIEW_NOTICE__
+      __ARTICLE_HTML__
+    </article>
+  </main>
+  <footer>Diese Leseansicht wird deterministisch aus der Markdown-Datei erzeugt. Änderungen erfolgen ausschließlich in der kanonischen Markdown-Datei.</footer>
+  <script>
+  (()=>{"use strict";const root=document.documentElement,button=document.getElementById("theme");let mode="system";try{mode=localStorage.getItem("lmwiki-theme")||"system"}catch(_e){}function apply(value){mode=value;root.dataset.theme=value;const label=value==="light"?"Hell":value==="dark"?"Dunkel":"System";button.textContent=label;button.setAttribute("aria-label","Farbschema: "+label+". Zum Wechseln aktivieren.");try{localStorage.setItem("lmwiki-theme",value)}catch(_e){}}button.addEventListener("click",()=>apply(mode==="system"?"light":mode==="light"?"dark":"system"));document.addEventListener("keydown",event=>{if(event.key.toLowerCase()==="m"&&!/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName))apply(mode==="system"?"light":mode==="light"?"dark":"system")});apply(mode)})();
+  </script>
+</body>
+</html>
