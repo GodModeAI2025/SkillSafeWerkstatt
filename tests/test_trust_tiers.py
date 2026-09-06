@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "maintain-llm-wiki" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "query-llm-wiki" / "scripts"))
 
 import trust_contract as tc  # noqa: E402
 from harness import TempWiki  # noqa: E402
@@ -239,5 +240,40 @@ class Parity(unittest.TestCase):
         self.assertEqual(maintain.read_bytes(), query.read_bytes())
 
 
+
+class BackwardCompatibility(unittest.TestCase):
+    """A wiki written before this work must keep working unchanged."""
+
+    def test_a_page_without_trust_metadata_lints_and_answers(self) -> None:
+        with TempWiki() as wiki:
+            page = wiki.read("wiki/overview.md")
+            self.assertNotIn("generated_by", page, "the fixture must predate the new fields")
+            report = json.loads(wiki.lint().stdout)
+            self.assertTrue(report["valid"], report["errors"])
+            found = wiki.query_json(
+                "search_wiki.py", "--target", str(wiki.path), "--query", "Wiki"
+            )
+            self.assertTrue(found["results"])
+            self.assertEqual(found["results"][0]["trust_tier"], tc.UNVERIFIED)
+
+    def test_a_missing_generated_by_is_a_warning_not_an_error(self) -> None:
+        with TempWiki() as wiki:
+            report = json.loads(wiki.lint().stdout)
+            self.assertTrue(report["valid"])
+            self.assertTrue(
+                any("generated_by" in item for item in report["warnings"]),
+                report["warnings"],
+            )
+
+    def test_a_quality_status_without_a_trust_block_degrades_quietly(self) -> None:
+        """An older release has no trust block; the reader must not fail on it."""
+        import assess_quality
+
+        for status in ({}, {"trust": None}, {"trust": {"counts": None}}):
+            with self.subTest(status=status):
+                trust = status.get("trust") if isinstance(status.get("trust"), dict) else {}
+                counts = trust.get("counts") if isinstance(trust.get("counts"), dict) else {}
+                self.assertEqual(assess_quality.safe_int(counts.get("human-reviewed")), 0)
+                self.assertEqual(assess_quality.safe_int(trust.get("pages")), 0)
 if __name__ == "__main__":
     unittest.main(verbosity=2)
