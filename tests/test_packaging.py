@@ -148,5 +148,65 @@ class SkillFrontmatter(unittest.TestCase):
                 )
 
 
+class LandingPage(unittest.TestCase):
+    """The published page must not point at sections that do not exist."""
+
+    def _html(self) -> str:
+        return (REPO / "index.html").read_text(encoding="utf-8")
+
+    def test_every_navigation_anchor_resolves(self) -> None:
+        import re
+
+        html = self._html()
+        ids = set(re.findall(r'id="([a-zA-Z0-9_-]+)"', html))
+        anchors = set(re.findall(r'href="#([a-zA-Z0-9_-]+)"', html))
+        self.assertTrue(anchors, "the page should have in-page navigation")
+        self.assertEqual(
+            sorted(anchors - ids), [], "navigation points at sections that do not exist"
+        )
+
+    def test_the_downloads_exist(self) -> None:
+        import re
+
+        for name in re.findall(r'href="([^"]+\.skill)"', self._html()):
+            with self.subTest(download=name):
+                self.assertTrue((REPO / name).is_file(), name)
+
+    def test_the_page_parses(self) -> None:
+        import html.parser
+
+        class Strict(html.parser.HTMLParser):
+            def error(self, message: str) -> None:  # pragma: no cover - defensive
+                raise AssertionError(message)
+
+        Strict().feed(self._html())
+
+
+class Documentation(unittest.TestCase):
+    """The README must describe the capabilities that actually exist."""
+
+    def test_the_readme_covers_every_maintenance_helper_group(self) -> None:
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
+        for topic in (
+            "Vertrauensstufe",
+            "Konfliktkopie",
+            "Open Knowledge Format",
+            "storage_path_prefix",
+            "hydration_required",
+        ):
+            with self.subTest(topic=topic):
+                self.assertIn(topic, readme)
+
+    def test_the_readme_links_only_to_files_that_exist(self) -> None:
+        import re
+
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
+        for target in re.findall(r"\]\(([^)#:]+)\)", readme):
+            if target.startswith(("http", "//", "mailto")):
+                continue
+            with self.subTest(link=target):
+                self.assertTrue((REPO / target).exists(), target)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

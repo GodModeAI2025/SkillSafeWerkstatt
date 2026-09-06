@@ -5,6 +5,8 @@ Diese Distribution enthält zwei zusammengehörige Agent Skills für einen porta
 - [maintain-llm-wiki](maintain-llm-wiki/SKILL.md) erstellt, pflegt, prüft, veröffentlicht und exportiert ein Wiki.
 - [query-llm-wiki](query-llm-wiki/SKILL.md) liest ein veröffentlichtes Wiki, sucht darin und beantwortet Fragen mit nachvollziehbaren Belegen.
 
+Ein gepflegtes Wiki ist außerdem **exportierbar**: Jeder verifizierte Release lässt sich als Bündel im [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format) ausgeben — dem herstellerneutralen Standard von Google Cloud für Wissen als Markdown. Das Wissen bleibt damit nicht in diesem Werkzeug gefangen. Abschnitt 4.20 beschreibt den Export, seine Grenzen und was er bewusst nicht mitnimmt.
+
 Die installierbaren Pakete liegen als [maintain-llm-wiki.skill](maintain-llm-wiki.skill) und [query-llm-wiki.skill](query-llm-wiki.skill) vor. Die danebenliegenden Ordner enthalten dieselben Skills entpackt und sind für Prüfung, Weiterentwicklung oder lokale Installation gedacht.
 
 Beide Skills sind organisationsneutral, verwenden innerhalb erzeugter Artefakte ausschließlich portable relative Pfade und folgen mit `SKILL.md`, `scripts/`, `references/` und `assets/` dem von Claude Code verwendeten Agent-Skills-Aufbau. Sie funktionieren außerdem in Claude Cowork und Codex. Die deterministischen Helfer sind Bestandteil der Skills. Der Anwender formuliert seine Wünsche in natürlicher Sprache und muss weder Python noch einzelne Skripte selbst aufrufen.
@@ -17,6 +19,7 @@ Das System trennt konsequent zwischen vier Ebenen:
 2. **Quellen als treues Markdown:** Lesbarer Inhalt wird ohne Synthese in Markdown umgewandelt und unter `sources/` registriert. Dieses Markdown ist die nachweisbare Quellenebene im Wiki.
 3. **Kuratierte Wissensseiten:** Unter `wiki/` entsteht eine thematisch gepflegte, verlinkte und in der festgelegten Wiki-Sprache geschriebene Wissensschicht.
 4. **Abgeleitete Darstellung:** Unter `graph/` entsteht eine statische Website mit Graph, Clustern und HTML-Leseansichten. Diese Dateien können jederzeit aus dem Markdown neu erzeugt werden.
+5. **Ausgang in den Standard:** Aus einem verifizierten Release entsteht auf Wunsch ein OKF-v0.2-Bündel in einem beliebigen Zielverzeichnis. Es ist eine Kopie, keine zweite Wahrheit, und es beschreibt selbst, was es gegenüber dem Wiki verliert.
 
 ```text
 Ausgangsmaterial außerhalb des Wikis
@@ -65,7 +68,7 @@ Das Zielverzeichnis ist die kanonische Arbeitskopie. Ob es später lokal bleibt,
 | Eingefrorenen Wissens-Skill exportieren | Ja | Nein |
 | Seiten als geprüft aufzeichnen | Ja, mit Bestätigung | Nein, nur Stufe lesen und nennen |
 | Konfliktkopien auflösen | Ja, nach Vergleich und Bestätigung | Nein, nur melden |
-| OKF-Bündel exportieren | Ja, aus verifiziertem Release | Nein |
+| OKF-Bündel exportieren | Ja, aus verifiziertem Release, mit Quellen | Nein |
 | Wiki verändern | Ja, kontrolliert | Niemals |
 
 Diese Trennung verhindert, dass eine normale Wissensabfrage versehentlich Dateien verändert oder einen Pflegeprozess auslöst.
@@ -448,17 +451,51 @@ Die Erkennung synchronisierter Ablagen ist eine **Heuristik** auf sichtbaren Pfa
 
 `fsync` macht einen Schreibvorgang auf **dieser Platte** dauerhaft — nicht hochgeladen. Auf einer offenbar synchronisierten Ablage meldet ein erfolgreicher Release seinen entfernten Zustand als `unconfirmed` und weist darauf hin, anderen die Verfügbarkeit erst zuzusagen, wenn der Client den Ordner als vollständig synchronisiert zeigt.
 
-### 4.20 Open Knowledge Format v0.2
+### 4.20 Open Knowledge Format v0.2: der Weg nach draußen
 
-Zwei Operationen, keine verändert das Wiki.
+Der OKF-Export ist ein **eigenständiges Ziel** dieser Distribution, keine Kompatibilitätsnotiz. Ein Wissensraum, aus dem man sein Wissen nicht wieder herausbekommt, ist eine Falle — auch dann, wenn er intern noch so sauber gebaut ist. Deshalb kann jeder verifizierte Release als Bündel im Open Knowledge Format v0.2 ausgegeben werden, dem herstellerneutralen Markdown-Standard von Google Cloud.
 
-Der **Bericht** prüft das Pflichtfeld `type`, die empfohlenen `title`, `description`, `resource` und `tags` sowie die v0.2-Ergänzungen `status`, `stale_after`, `generated` und `verified`. `timestamp` ist kein Feld dieser Spezifikation und wird nicht mehr geprüft. Vorschläge bleiben Vorschläge; Titel, Beschreibungen, Ressourcen und Zuordnungen werden nie erfunden.
+**Was ein Bündel enthält.**
 
-Der **Export** schreibt einen verifizierten Release als konformes Bündel in ein separat gewähltes, leeres Zielverzeichnis außerhalb des Wikis. Er läuft bewusst ohne Pflege-Lock: Ein aktiver Lock bedeutet laufende Pflege, und ein halbfertiger Stand darf gar nicht exportiert werden. Ein Fehlschlag entfernt das Ziel wieder, damit kein Teilbündel einen Release falsch darstellt.
+```text
+<ziel>/
+|-- index.md        Wurzelindex; trägt laut Spezifikation nur okf_version
+|-- log.md          reserviertes Änderungsjournal aus meta/changes.md
+|-- README.md       was dieses Bündel ist und was es nicht ist
+|-- overview.md     Wissensseiten als OKF-Konzepte
+|-- concepts/
+|-- entities/
+|-- topics/
+|-- comparisons/
+`-- sources/        registrierte Extraktionen als type: Source
+```
 
-Der Export ist **konstruktionsbedingt verlustbehaftet**. Jedes Bündel trägt eine `README.md`, die benennt, was nicht mitkam: Claim-Blöcke und ihre `source_id@locator`-Belege, das Release-Manifest und seine Hash-Grenze, Snapshots, `SOUL.md`, kontrollierte Begriffswelten, Cluster und Graph sowie die strenge Frontmatter-Teilmenge. Die Statusabbildung ist ausdrücklich: `active` → `stable`, `superseded` → `deprecated`, `draft` bleibt `draft`. `disputed` hat kein OKF-Gegenstück und wird als `draft` exportiert — der Verlust wird protokolliert, nicht stillschweigend vollzogen.
+Das Bündel ist **standardmäßig selbsttragend**: Die registrierten Quellenextraktionen wandern mit. Ein Bündel, dessen Konzepte auf Quellen verweisen, die es nicht enthält, hat seine Belegkette in dem Moment verloren, in dem es den Rechner verlässt. Wer bewusst nur die Konzepte will, kann die Quellen abwählen.
 
-OKF bleibt eine Interoperabilitätssicht und ersetzt nicht den nativen SkillSafeWerkstatt-Vertrag.
+**Was abgebildet wird.**
+
+| SkillSafeWerkstatt | OKF v0.2 | Anmerkung |
+|---|---|---|
+| `type`, `title`, `description`, `tags` | gleichnamig | direkt |
+| `status: active` | `status: stable` | Abbildung |
+| `status: superseded` | `status: deprecated` | Abbildung |
+| `status: disputed` | `status: draft` | **verlustbehaftet**, wird im Bündel protokolliert |
+| Quelle mit `status: partial` | `status: draft` | **verlustbehaftet**, wird protokolliert |
+| `generated_by` + `generated_at` | `generated: { by, at }` | flach gespeichert, beim Export verschachtelt |
+| `verified_by` + `verified_at` | `verified: { by, at }` | ebenso |
+| registrierte Quellen | `sources: [{id, title, resource}]` | angereichert aus dem Quellenregister |
+| Wikilinks | bündelrelative Markdown-Links | umgeschrieben |
+| Claim-Text | gewöhnlicher Fließtext | Aussage bleibt, Marker fällt weg |
+
+**Was nicht mitkommt.** Der Export ist konstruktionsbedingt ärmer als das Wiki, und das Bündel sagt das selbst in seiner `README.md`: Claim-Blöcke mit ihren `source_id@locator`-Belegen, das Release-Manifest und seine Hash-Grenze, Snapshots, `SOUL.md`, kontrollierte Begriffswelten, Cluster und Graph sowie die strenge Frontmatter-Teilmenge. Ein OKF-Konsument muss laut Spezifikation unbekannte Schlüssel und gebrochene Querverweise akzeptieren — das ist bewusst permissiver als dieses Wiki.
+
+**Wie der Export sich selbst prüft.** Nach dem Schreiben validiert der Export das erzeugte Bündel gegen die Konformitätsregeln: Wurzelindex mit `okf_version` und sonst nichts, jede nicht reservierte Markdown-Datei mit lesbarem Frontmatter und nicht leerem `type`. Scheitert diese Prüfung, wird das Bündel entfernt und kein Erfolg gemeldet.
+
+Bemerkenswert dabei: Die Prüfung kann **nicht** mit dem Frontmatter-Parser des Wikis erfolgen. Der lehnt verschachtelte Strukturen bewusst ab — genau die, die OKF für `generated`, `verified` und `sources` verlangt. Der Export bringt deshalb einen eigenen Leser für die OKF-Teilmenge mit. Das ist keine Doppelung, sondern die ehrliche Konsequenz aus zwei unterschiedlich strengen Formaten.
+
+**Was nie erfunden wird.** Fehlt ein empfohlenes Feld im Wiki, bleibt es im Bündel leer und wird in der `README.md` als nicht füllbar aufgeführt. Für eine kuratierte Wissensseite existiert etwa keine `resource`-URI; der Export konstruiert dafür keine.
+
+**Der Bericht.** Unabhängig vom Export bewertet ein reiner Bericht die Kompatibilität: Pflichtfeld `type`, empfohlene `title`, `description`, `resource` und `tags` sowie die v0.2-Ergänzungen `status`, `stale_after`, `generated` und `verified`. Er verändert nichts und schlägt nur vor.
 
 ### 4.21 Selbstbeschreibender Aktionskatalog
 
@@ -744,6 +781,8 @@ Beispiele für den Pflege-Skill:
 - „Stelle diese beiden Dateien aus Snapshot X wieder her.“
 - „Ändere die gepflegte Wiki-Sprache vollständig auf Englisch.“
 - „Erzeuge aus dem aktuellen Release einen unveränderlichen Wissens-Skill.“
+- „Exportiere das Wiki als Open-Knowledge-Format-Bündel, damit ein anderes Team damit arbeiten kann.“
+- „Wie kompatibel ist mein Wiki zum Open Knowledge Format, und was ginge beim Export verloren?“
 
 Beispiele für den Lese-Skill:
 
@@ -778,7 +817,7 @@ Beispiele für den Lese-Skill:
 | Seiten als geprüft aufzeichnen | Vertrauensstufe pro Seite | Plan/Apply, Snapshot, Extra-Bestätigung für `human:` |
 | Konfliktkopie auflösen | Sync-Konflikt entscheiden | Beide Seiten im Vergleich, Bestätigung, Snapshot |
 | OKF berichten | Kompatibilität mit v0.2 bewerten | Read-only, keine erfundenen Werte |
-| OKF-Bündel exportieren | Verifizierten Release als OKF v0.2 schreiben | Read-only, leeres Ziel außerhalb, Verlustliste im Bündel |
+| OKF-Bündel exportieren | Verifizierten Release als selbsttragendes OKF-v0.2-Bündel schreiben | Read-only, leeres Ziel außerhalb, Selbstvalidierung, Verlustliste im Bündel |
 
 ## 12. Funktionskatalog des Lese-Skills
 
@@ -812,6 +851,8 @@ Die Skills sind absichtlich konservativ:
 - Eine Konfliktkopie wird nie ohne Bestätigung gelöscht; ihr Inhalt kann einzigartig sein.
 - Ein erfolgreicher Release ist lokal dauerhaft; ob die Ablage ihn übernommen hat, wird nicht behauptet.
 - Ein OKF-Export ist ärmer als das Wiki und sagt das im Bündel selbst.
+- Ein Bündel, das die eigene Konformitätsprüfung nicht besteht, wird entfernt statt ausgeliefert.
+- Ein fehlendes empfohlenes Feld bleibt leer und wird ausgewiesen; es wird nie konstruiert.
 
 ## 14. Grenzen des Systems
 
@@ -860,6 +901,7 @@ Die beiden Rollen sollen auch bei späteren Erweiterungen getrennt bleiben:
 - neue Pflege-, Migrations- oder Reparaturfähigkeiten gehören in `maintain-llm-wiki`;
 - neue Such-, Filter-, Darstellungs- oder Quellenverfolgungsfähigkeiten ohne Schreibzugriff gehören in `query-llm-wiki`;
 - ein zusätzlich exportierter Wissens-Skill ist ein unveränderlicher Abzug eines konkreten Wikis, keine dritte allgemeine Pflegekomponente;
+- der OKF-Export bleibt ein eigenständiges Ziel: Wissen muss dieses Werkzeug wieder verlassen können. Neue Wiki-Fähigkeiten sind daraufhin zu prüfen, ob sie sich abbilden lassen — und wenn nicht, gehört das in die Verlustliste des Bündels statt stillschweigend zu verschwinden;
 - Änderungen an gemeinsamen Verträgen wie Frontmatter, Release oder Filtern müssen in beiden Skills kompatibel umgesetzt und gemeinsam getestet werden.
 
 So bleibt das System einfach verständlich: **ein Skill pflegt und veröffentlicht, ein Skill liest und belegt.**

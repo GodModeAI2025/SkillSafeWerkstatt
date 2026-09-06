@@ -434,6 +434,7 @@
         <a href="#skills">Zwei Skills</a>
         <a href="#workflow">Ablauf</a>
         <a href="#features">Prinzipien</a>
+        <a href="#export">Export</a>
         <a href="#download">Download</a>
       </div>
       <button class="theme-toggle" id="themeToggle" type="button" aria-label="Farbschema wechseln" title="Farbschema wechseln">◐</button>
@@ -545,12 +546,47 @@
         </div>
       </section>
 
+      <section id="export" aria-labelledby="export-title">
+        <div class="section-heading">
+          <p class="eyebrow">Kein Datensilo</p>
+          <h2 id="export-title">Dein Wissen kann wieder gehen.</h2>
+          <p>Ein Wissensraum, aus dem man sein Wissen nicht herausbekommt, ist eine Falle. Jeder verifizierte Release lässt sich als Bündel im Open Knowledge Format v0.2 ausgeben — dem herstellerneutralen Markdown-Standard von Google Cloud.</p>
+        </div>
+        <div class="split-grid">
+          <article class="skill-card maintain">
+            <span class="card-index">OKF · v0.2 BUNDLE</span>
+            <h3>Selbsttragend</h3>
+            <p>Das Bündel nimmt die registrierten Quellenextraktionen mit. Ein Export, dessen Konzepte auf Quellen verweisen, die er nicht enthält, hat seine Belegkette in dem Moment verloren, in dem er den Rechner verlässt.</p>
+            <ul class="check-list">
+              <li>Konzepte, Quellen, reserviertes <code>log.md</code> und Wurzelindex</li>
+              <li>Vertrauensangaben werden in die verschachtelte OKF-Form überführt</li>
+              <li>Wikilinks werden zu bündelrelativen Markdown-Links</li>
+            </ul>
+          </article>
+          <article class="skill-card query">
+            <span class="card-index">OKF · EHRLICHE GRENZEN</span>
+            <h3>Und sagt, was fehlt</h3>
+            <p>Der Export ist konstruktionsbedingt ärmer als das Wiki. Statt das zu verschweigen, führt jedes Bündel in seiner eigenen <code>README.md</code> auf, was nicht mitkam.</p>
+            <ul class="check-list">
+              <li>Claim-Locatoren, Release-Manifest, Snapshots und <code>SOUL.md</code> bleiben im Wiki</li>
+              <li>Verlustbehaftete Abbildungen werden protokolliert, nicht stillschweigend vollzogen</li>
+              <li>Fehlende Felder bleiben leer – erfunden wird nichts</li>
+            </ul>
+          </article>
+        </div>
+        <div class="feature-grid">
+          <article class="feature"><div class="feature-dot"></div><h3>Prüft sich selbst</h3><p>Nach dem Schreiben validiert der Export das Bündel gegen die Konformitätsregeln. Was die Prüfung nicht besteht, wird entfernt statt ausgeliefert.</p></article>
+          <article class="feature"><div class="feature-dot"></div><h3>Bindet an einen Release</h3><p>Exportiert wird nur ein verifizierter Stand. Läuft gerade eine Pflege, entsteht kein Bündel – ein halbfertiger Stand darf das Haus nicht verlassen.</p></article>
+          <article class="feature"><div class="feature-dot"></div><h3>Berührt nichts</h3><p>Der Export schreibt ausschließlich in das gewählte Zielverzeichnis. Das Wiki bleibt unverändert, und das Bündel ist eine Kopie, keine zweite Wahrheit.</p></article>
+        </div>
+      </section>
+
       <section id="download" aria-labelledby="download-title">
         <div class="cta">
           <div>
             <p class="eyebrow">Startklar als Agent Skill</p>
             <h2 id="download-title">Baue deinen belegbaren Wissensraum.</h2>
-            <p>Lade beide Skills herunter: einer für die kontrollierte Pflege, einer für das sichere Konsumieren veröffentlichter Wissensstände.</p>
+            <p>Lade beide Skills herunter: einer für die kontrollierte Pflege, einer für das sichere Konsumieren veröffentlichter Wissensstände. Der Weg nach draußen ins Open Knowledge Format ist eingebaut.</p>
           </div>
           <div class="actions">
             <a class="button orange" href="maintain-llm-wiki.skill" download>Pflege-Skill ↓</a>
