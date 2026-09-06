@@ -520,3 +520,49 @@ Ablage gemessen werden, bevor die betroffenen Teile umgesetzt werden:
 - [Guide to migrating file shares to OneDrive, Teams, and SharePoint — ungültige Zeichen und Namen](https://learn.microsoft.com/sharepointmigration/fileshare-to-odsp-migration-guide#assess-and-remediate-your-content)
 - [Restrictions and limitations in OneDrive and SharePoint](https://support.microsoft.com/en-us/onedrive/restrictions-and-limitations-in-onedrive-and-sharepoint) (Liste der gesperrten Namen; über den Proxy dieser Sitzung nicht direkt abrufbar, Inhalt über Sekundärquellen und die Microsoft-Learn-Migrationsleitfäden abgeglichen)
 - [How OneDrive Sync resolves sync conflicts](https://sharepointmaven.com/how-onedrive-sync-resolves-sync-conflicts/) (Konfliktkopien-Benennung, Sekundärquelle)
+
+---
+
+## Umsetzungsstand (2026-09-06)
+
+Alle drei Stufen sind umgesetzt. Die Testsuite läuft mit `python3 tests/run_tests.py`;
+150 Tests sind grün, davon 39 für die Speicherthemen.
+
+| Befund | Stand | Belegt durch |
+|---|---|---|
+| B1 Konfliktkopie macht Release unlesbar | behoben | `sync_artifacts.py`, `verify_release.py`, `tests/test_sync_artifacts.py` |
+| B2 Lock schützt nicht, meldet zu spät | offengelegt, nicht behebbar | `wiki_lock.py`, `tests/test_storage_resilience.py` |
+| B3 Files On-Demand lädt bei jeder Frage | behoben | `hydration_report`, Zustand `hydration_required` |
+| B4 Persistenz falsch behauptet | behoben | `persistence_statement` in `release_wiki.py` |
+| B5 Falsche Diagnose bei Sync-Reihenfolge | behoben | Zustand `sync_in_progress` |
+| B6 `.DS_Store` bricht Lint | behoben | gemeinsames Modul für Lint, Release und Verify |
+| B7 Pfadlängen ungeprüft | behoben | `storage_path_prefix`, `path_budget_findings` |
+| B8 Verbotene Namen und Zeichen | behoben | `classify`, Lint-Fehler vor der Erzeugung |
+| B9 Groß-/Kleinschreibung | behoben | `case_collisions` |
+| B10 Selective Sync verbirgt Snapshots | teilweise | Hydrierungserkennung meldet datenlose Dateien |
+| Nebenbefund: kein Retry | behoben | `portable_io.py`, alle zwölf Schreibstellen |
+
+**B2 ist ausdrücklich nicht behoben, sondern offengelegt.** Ein Dateilock kann zwei später
+abgeglichene Dateisysteme nicht ausschließen; das ließe sich nur mit einer zentralen
+Koordination lösen, die es hier nicht gibt. Der Skill sagt das jetzt beim Erwerb, weist
+einen Lock von einem fremden Gerät als solchen aus und stellt klar, dass Alter nichts
+beweist. Mehr ist an dieser Stelle ehrlich nicht möglich.
+
+### Ein Befund kam beim Testen dazu
+
+Die erste Fassung des Klassifikators behandelte `<stamm>-<GROSSBUCHSTABEN>` neben `<stamm>`
+als Konfliktkopie. Das ist ein **gravierender Falschtreffer**: `energie-KRITIS` neben
+`energie` ist normale Kuration, und die Fehldeutung hätte Lint und Lesen blockiert — also
+genau den Schaden angerichtet, den dieser Bericht verhindern sollte. Die Regel ist
+entfernt, nicht verschärft: Ein Falschtreffer legt ein funktionierendes Wiki lahm, eine
+übersehene Konfliktkopie wird lediglich als unerwartete Datei mit Pfad gemeldet. Nur
+dokumentierte Client-Muster zählen noch.
+
+### Die vier empirischen Punkte bleiben offen
+
+Abschnitt 8 nennt vier Fragen, die nur auf einer echten Ablage zu beantworten sind. Sie
+sind weiterhin offen und im Code entsprechend konservativ behandelt: Die Erkennung
+synchronisierter Ablagen ist als Heuristik gekennzeichnet, die Erkennung datenloser
+Dateien liefert ausdrücklich „unbekannt" statt einer Vermutung, und der Lock-Vorbehalt ist
+so formuliert, dass er auch dann stimmt, wenn `.llmwiki.lock` gar nicht synchronisiert
+wird.

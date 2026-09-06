@@ -566,3 +566,48 @@ Diese Punkte sind nicht aus dem Code ableitbar und gehören dir:
    technische.
 5. **Ist MCP die richtige Reichweitenwette?** Alternative wäre, die Skill-Hosts als Zielgruppe zu
    akzeptieren und die Tiefe weiter auszubauen statt die Breite.
+
+---
+
+## Umsetzungsstand (2026-09-06)
+
+Dieser Plan ist umgesetzt, mit einer bewusst offenen Ausnahme. Die Testsuite läuft mit
+`python3 tests/run_tests.py`; 150 Tests sind grün.
+
+| Stufe | Stand | Belegt durch |
+|---|---|---|
+| **1 — Vertrauensstufe pro Seite** | umgesetzt | `trust_contract.py`, `verify_pages.py`, `tests/test_trust_tiers.py` (27 Tests) |
+| **2a — Verzeichnis-Indizes** | **offen**, siehe unten | — |
+| **2b — BM25 statt Heuristik** | umgesetzt | `bm25.py`, `tests/test_ranking.py` (14 Tests) |
+| **3 — OKF v0.2 Bericht und Export** | umgesetzt | `okf_contract.py`, `report_okf.py`, `export_okf_bundle.py`, `tests/test_okf.py` (27 Tests) |
+| **4 — Reichweite** | offen, wie geplant nachgelagert | — |
+
+### Was beim Umsetzen anders entschieden wurde
+
+**Multiplikative statt additiver Rangmodifikatoren (Befund 4).** Der Plan sah vor, die
+bestehenden Boni als Aufschlag auf BM25 zu erhalten. Beim Testen zeigte sich, dass das
+falsch ist: BM25-Werte skalieren mit Korpusgröße und Termseltenheit, ein fester Abzug von
+`-0.5` für eine Entwurfsseite konnte einen echten Treffer unter null drücken und damit
+ganz aus den Ergebnissen entfernen. Die Signale wirken jetzt als Faktoren. Sie ordnen
+vergleichbare Treffer um, unterdrücken aber keinen und erfinden keinen.
+
+**`resource` wird beim Export nicht gefüllt.** Für eine kuratierte Wissensseite existiert
+keine URI der zugrundeliegenden Ressource. Das Feld bleibt leer und wird im Bündel als
+nicht füllbar ausgewiesen, statt einen Wert zu konstruieren.
+
+### Warum 2a offen bleibt
+
+Verzeichnis-Indizes sind der einzige substanzielle Punkt dieses Plans, den ich nicht
+umgesetzt habe. Der Grund ist keine Aufwandsfrage, sondern eine Entscheidung, die dir
+gehört: Generierte Indizes würden **erzeugte Dateien in die kuratierte Wissensschicht
+`wiki/`** legen. Bisher ist alles unter `wiki/` von Menschen oder unter Bestätigung
+kuratiert, während Erzeugtes unter `graph/` liegt. Der Plan schlug die generierte Variante
+vor; das ändert aber die Form jedes bestehenden Wikis und die Bedeutung des
+Verzeichnisses.
+
+Die Alternative wäre, die Indizes unter `graph/` zu erzeugen — dann helfen sie dem
+Lese-Skill aber nicht beim Token-Verbrauch, was der ganze Zweck war.
+
+Beides ist vertretbar. Die Wahl ist eine Produktentscheidung, keine technische, und sie
+ist ohne dich nicht sinnvoll zu treffen. Alles andere ist unabhängig davon lieferbar und
+geliefert.
