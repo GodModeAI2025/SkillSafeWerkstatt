@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Retry behaviour, storage hints, and honest lock reporting (S1d, S1e)."""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "maintain-llm-wiki" / "scripts"))
+
+import portable_io  # noqa: E402
+import sync_artifacts  # noqa: E402
+from harness import TempWiki  # noqa: E402
+
+
+class RetryBehaviour(unittest.TestCase):
+    def test_a_transient_sharing_violation_is_retried_and_succeeds(self) -> None:
+        attempts = {"count": 0}
+
+        def flaky() -> str:
+            attempts["count"] += 1
+            if attempts["count"] < 3:
+                raise PermissionError(13, "held by another process")
+            return "done"
+
+        self.assertEqual(portable_io.with_retry(flaky, what="test"), "done")
+        self.assertEqual(attempts["count"], 3)
+
+    def test_a_persistent_violation_reports_the_likely_cause(self) -> None:
+        def always() -> str:
+            raise PermissionError(13, "held forever")
+
+        with self.assertRaises(portable_io.TransientStorageError) as caught:
+            portable_io.with_retry(always, what="replacing manifest.json")
+        message = str(caught.exception)
+        self.assertIn("replacing manifest.json", message)
+        self.assertIn("synchronization client", message)
+
+    def test_a_real_error_is_not_retried(self) -> None:
+        attempts = {"count": 0}
+
+        def missing() -> str:
+            attempts["count"] += 1
+            raise FileNotFoundError(2, "no such file")
+
+        with self.assertRaises(FileNotFoundError):
+            portable_io.with_retry(missing, what="test")
+        self.assertEqual(attempts["count"], 1, "a missing file must fail immediately")
+
+    def test_atomic_write_leaves_no_temporary_behind(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "out.json"
+            portable_io.atomic_write_text(path, '{"a": 1}\n')
+            self.assertEqual(path.read_text(encoding="utf-8"), '{"a": 1}\n')
+            self.assertEqual(
+                [item.name for item in Path(directory).iterdir()],
+                ["out.json"],
+                "the temporary file must not survive a successful write",
+            )
+
+
+class StorageHint(unittest.TestCase):
+    def test_an_ordinary_path_is_not_flagged(self) -> None:
+        hint = sync_artifacts.storage_hint(Path("/tmp/plain-wiki"), environment={})
+        self.assertFalse(hint["synchronized"])
+        self.assertEqual(hint["advisory"], "")
+
+    def test_a_onedrive_path_component_is_flagged(self) -> None:
+        hint = sync_artifacts.storage_hint(
+            Path("/Users/max/OneDrive - Contoso/Wiki"), environment={}
+        )
+        self.assertTrue(hint["synchronized"])
+        self.assertIn("cooperative file lock", hint["advisory"])
+
+    def test_the_hint_is_labelled_as_a_heuristic(self) -> None:
+        hint = sync_artifacts.storage_hint(Path("/x/SharePoint/w"), environment={})
+        self.assertEqual(
+            hint["confidence"],
+            "heuristic",
+            "the skill must not present a guess about the storage as a fact",
+        )
+
+    def test_the_environment_variable_is_honoured(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "cloud"
+            inner = root / "team" / "wiki"
+            inner.mkdir(parents=True)
+            hint = sync_artifacts.storage_hint(inner, environment={"OneDrive": str(root)})
+            self.assertTrue(hint["synchronized"])
+
+
+class LockHonesty(unittest.TestCase):
+    def test_a_lock_from_another_machine_is_disclosed(self) -> None:
+        with TempWiki() as wiki:
+            token_file = wiki.root / "token"
+            wiki.maintain(
+                "wiki_lock.py", "acquire",
+                "--target", str(wiki.path),
+                "--token-file", str(token_file),
+                "--owner", "test/holder",
+            )
+            try:
+                # Simulate the record a second device would have written.
+                lock_path = wiki.path / ".llmwiki.lock"
+                record = json.loads(lock_path.read_text(encoding="utf-8"))
+                record["host"] = "OTHER-MACHINE"
+                lock_path.write_text(json.dumps(record), encoding="utf-8")
+
+                status = json.loads(
+                    wiki.maintain(
+                        "wiki_lock.py", "status", "--target", str(wiki.path)
+                    ).stdout
+                )
+                self.assertEqual(status["foreign_host"], "OTHER-MACHINE")
+                self.assertIn("age", status["note"], status["note"])
+            finally:
+                (wiki.path / ".llmwiki.lock").unlink(missing_ok=True)
+
+    def test_a_local_lock_is_not_flagged_as_foreign(self) -> None:
+        with TempWiki() as wiki:
+            token_file = wiki.root / "token"
+            wiki.maintain(
+                "wiki_lock.py", "acquire",
+                "--target", str(wiki.path),
+                "--token-file", str(token_file),
+                "--owner", "test/holder",
+            )
+            try:
+                status = json.loads(
+                    wiki.maintain(
+                        "wiki_lock.py", "status", "--target", str(wiki.path)
+                    ).stdout
+                )
+                self.assertNotIn("foreign_host", status)
+            finally:
+                wiki.maintain(
+                    "wiki_lock.py", "release",
+                    "--target", str(wiki.path),
+                    "--token-file", str(token_file),
+                    check=False,
+                )
+
+    def test_the_private_token_never_reaches_standard_output(self) -> None:
+        with TempWiki() as wiki:
+            token_file = wiki.root / "token"
+            result = wiki.maintain(
+                "wiki_lock.py", "acquire",
+                "--target", str(wiki.path),
+                "--token-file", str(token_file),
+                "--owner", "test/holder",
+            )
+            token = token_file.read_text(encoding="utf-8").strip()
+            try:
+                self.assertNotIn(token, result.stdout)
+                self.assertNotIn(token, result.stderr)
+                status = wiki.maintain(
+                    "wiki_lock.py", "status", "--target", str(wiki.path)
+                ).stdout
+                self.assertNotIn(token, status)
+            finally:
+                wiki.maintain(
+                    "wiki_lock.py", "release",
+                    "--target", str(wiki.path),
+                    "--token-file", str(token_file),
+                    check=False,
+                )
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

@@ -15,6 +15,7 @@ from pathlib import Path, PurePosixPath
 from typing import Optional
 from uuid import uuid4
 
+import portable_io
 import sync_artifacts
 
 from wiki_lock import require_lock
@@ -56,7 +57,7 @@ def atomic_write(path: Path, content: bytes) -> None:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(str(temporary), str(path))
+        portable_io.replace_with_retry(temporary, path)
     finally:
         if temporary.exists():
             temporary.unlink()

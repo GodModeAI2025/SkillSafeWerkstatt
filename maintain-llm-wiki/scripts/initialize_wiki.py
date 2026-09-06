@@ -11,6 +11,8 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+import portable_io
 from typing import Any
 from uuid import uuid4
 
@@ -46,7 +48,7 @@ def atomic_copy(source: Path, destination: Path) -> None:
             shutil.copyfileobj(input_handle, output_handle)
             output_handle.flush()
             os.fsync(output_handle.fileno())
-        os.replace(str(temporary), str(destination))
+        portable_io.replace_with_retry(temporary, destination)
     finally:
         if temporary.exists():
             temporary.unlink()

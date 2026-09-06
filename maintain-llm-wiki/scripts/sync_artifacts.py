@@ -250,6 +250,57 @@ def case_collisions(relatives: Iterable[str]) -> list[dict[str, Any]]:
     ]
 
 
+#: Path components that indicate a locally synchronized cloud library.
+_SYNC_MARKERS = ("onedrive", "sharepoint")
+
+#: Environment variables the OneDrive client sets for its sync roots.
+_SYNC_ENVIRONMENT = ("OneDrive", "OneDriveCommercial", "OneDriveConsumer")
+
+
+def storage_hint(target: Path, environment: Optional[dict[str, str]] = None) -> dict[str, Any]:
+    """Guess whether `target` lives inside a synchronized cloud folder.
+
+    This is a heuristic on visible path names and the client's own environment
+    variables. There is no supported way to query a sync client's state, so the
+    answer is advisory: it may miss a renamed sync root and it may flag an
+    ordinary directory that merely contains the word. Callers must present it as
+    a hint, never as a fact about the storage.
+    """
+    import os as _os
+
+    environment = _os.environ if environment is None else environment
+    resolved = target.expanduser().resolve()
+    parts = [part.casefold() for part in resolved.parts]
+    reasons: list[str] = []
+    for part in parts:
+        for marker in _SYNC_MARKERS:
+            if marker in part:
+                reasons.append(f"path component {part!r} names a synchronized library")
+                break
+    for name in _SYNC_ENVIRONMENT:
+        root = environment.get(name)
+        if not root:
+            continue
+        try:
+            resolved.relative_to(Path(root).expanduser().resolve())
+        except (ValueError, OSError):
+            continue
+        reasons.append(f"the target lies inside {name}")
+    return {
+        "synchronized": bool(reasons),
+        "confidence": "heuristic",
+        "reasons": reasons,
+        "advisory": (
+            "This wiki appears to live in a synchronized folder. The maintenance lock is a "
+            "cooperative file lock on one filesystem; it cannot exclude a second device whose "
+            "changes are reconciled later. Do not maintain the same wiki from two machines at "
+            "once, and treat a published release as local until the client confirms upload."
+        )
+        if reasons
+        else "",
+    }
+
+
 def walk(root: Path, directories: Iterable[str]) -> frozenset[str]:
     """Collect every file under `directories` as wiki-relative POSIX paths."""
     found: set[str] = set()

@@ -10,6 +10,8 @@ import re
 import os
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
+
+import portable_io
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -222,9 +224,9 @@ def main() -> int:
     try:
         temporary_source.write_text(destination_text, encoding="utf-8")
         temporary_registry.write_text(updated_registry, encoding="utf-8")
-        os.replace(str(temporary_source), str(destination))
+        portable_io.replace_with_retry(temporary_source, destination)
         source_committed = True
-        os.replace(str(temporary_registry), str(registry_path))
+        portable_io.replace_with_retry(temporary_registry, registry_path)
     except Exception:
         # Source Markdown and its registry row form one canonical invariant.
         # Roll the new file back when publishing the registry fails.

@@ -12,6 +12,8 @@ import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
+
+import portable_io
 from typing import Any, Optional
 from urllib.parse import quote
 from uuid import uuid4
@@ -324,7 +326,7 @@ def atomic_write(path: Path, content: bytes) -> None:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(str(temporary), str(path))
+        portable_io.replace_with_retry(temporary, path)
     finally:
         if temporary.exists():
             temporary.unlink()

@@ -15,7 +15,11 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent / "maintain-llm-wiki" / "scripts")
+)
 
+import sync_artifacts as sa  # noqa: E402
 from harness import TempWiki  # noqa: E402
 
 
@@ -193,3 +197,157 @@ class ReservedNameTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class ConflictResolutionTests(unittest.TestCase):
+    """S1c: resolving a conflict copy is a confirmed, snapshotted transaction."""
+
+    def _wiki_with_conflict(self, wiki, copy_text: str) -> str:
+        wiki.write("wiki/concepts/governance.md", PAGE)
+        wiki.write("wiki/concepts/governance-DESKTOP-A1B2C3.md", copy_text)
+        return "wiki/concepts/governance-DESKTOP-A1B2C3.md"
+
+    def _plan(self, wiki):
+        plan_file = wiki.root / "conflict-plan.json"
+        wiki.locked(
+            "resolve_conflict_copy.py", "plan", "--output", str(plan_file)
+        )
+        return plan_file, json.loads(plan_file.read_text(encoding="utf-8"))
+
+    def test_plan_shows_both_sides_and_changes_nothing(self) -> None:
+        with TempWiki() as wiki:
+            copy = self._wiki_with_conflict(wiki, PAGE + "\nZusatz aus Geraet B.\n")
+            _, plan = self._plan(wiki)
+            self.assertEqual(len(plan["conflicts"]), 1)
+            entry = plan["conflicts"][0]
+            self.assertEqual(entry["copy"]["path"], copy)
+            self.assertEqual(entry["original"]["path"], "wiki/concepts/governance.md")
+            self.assertFalse(entry["identical"])
+            self.assertEqual(entry["recommended"], "", "a diverged copy is the user's decision")
+            self.assertTrue((wiki.path / copy).is_file(), "planning must not delete anything")
+
+    def test_an_identical_copy_is_recommended_for_removal(self) -> None:
+        with TempWiki() as wiki:
+            self._wiki_with_conflict(wiki, PAGE)
+            _, plan = self._plan(wiki)
+            entry = plan["conflicts"][0]
+            self.assertTrue(entry["identical"])
+            self.assertEqual(entry["recommended"], "keep-original")
+
+    def test_apply_without_a_decision_writes_nothing(self) -> None:
+        with TempWiki() as wiki:
+            copy = self._wiki_with_conflict(wiki, PAGE + "\nAbweichung.\n")
+            plan_file, plan = self._plan(wiki)
+            result = json.loads(
+                wiki.locked(
+                    "resolve_conflict_copy.py", "apply",
+                    "--plan-file", str(plan_file),
+                    "--expect-plan-sha256", plan["plan_sha256"],
+                    check=False,
+                ).stdout
+            )
+            self.assertEqual(result["state"], "decision_required")
+            self.assertEqual(result["writes"], 0)
+            self.assertTrue((wiki.path / copy).is_file())
+
+    def test_a_stale_plan_writes_nothing(self) -> None:
+        with TempWiki() as wiki:
+            copy = self._wiki_with_conflict(wiki, PAGE + "\nAbweichung.\n")
+            plan_file, plan = self._plan(wiki)
+            # The copy changes after the plan was confirmed.
+            wiki.write(copy, PAGE + "\nSpaetere Abweichung.\n")
+            result = json.loads(
+                wiki.locked(
+                    "resolve_conflict_copy.py", "apply",
+                    "--plan-file", str(plan_file),
+                    "--expect-plan-sha256", plan["plan_sha256"],
+                    "--decision", f"{copy}=keep-original",
+                    check=False,
+                ).stdout
+            )
+            self.assertEqual(result["state"], "stale_plan")
+            self.assertEqual(result["writes"], 0)
+            self.assertTrue((wiki.path / copy).is_file())
+
+    def test_keep_original_removes_the_copy_after_a_snapshot(self) -> None:
+        with TempWiki() as wiki:
+            copy = self._wiki_with_conflict(wiki, PAGE + "\nAbweichung.\n")
+            plan_file, plan = self._plan(wiki)
+            result = json.loads(
+                wiki.locked(
+                    "resolve_conflict_copy.py", "apply",
+                    "--plan-file", str(plan_file),
+                    "--expect-plan-sha256", plan["plan_sha256"],
+                    "--decision", f"{copy}=keep-original",
+                ).stdout
+            )
+            self.assertEqual(result["state"], "applied")
+            self.assertFalse((wiki.path / copy).exists())
+            self.assertTrue((wiki.path / "wiki/concepts/governance.md").is_file())
+            snapshots = list((wiki.path / "meta/history").iterdir())
+            self.assertEqual(len(snapshots), 1, "the removal must be recoverable")
+            recovered = snapshots[0] / copy
+            self.assertTrue(recovered.is_file(), "the discarded copy must live on in the snapshot")
+
+    def test_keep_copy_promotes_the_copy_content(self) -> None:
+        with TempWiki() as wiki:
+            diverged = PAGE + "\nNur auf Geraet B.\n"
+            copy = self._wiki_with_conflict(wiki, diverged)
+            plan_file, plan = self._plan(wiki)
+            wiki.locked(
+                "resolve_conflict_copy.py", "apply",
+                "--plan-file", str(plan_file),
+                "--expect-plan-sha256", plan["plan_sha256"],
+                "--decision", f"{copy}=keep-copy",
+            )
+            self.assertFalse((wiki.path / copy).exists())
+            self.assertEqual(wiki.read("wiki/concepts/governance.md"), diverged)
+
+    def test_keep_both_renames_to_a_storage_safe_name(self) -> None:
+        with TempWiki() as wiki:
+            copy = self._wiki_with_conflict(wiki, PAGE + "\nAbweichung.\n")
+            plan_file, plan = self._plan(wiki)
+            result = json.loads(
+                wiki.locked(
+                    "resolve_conflict_copy.py", "apply",
+                    "--plan-file", str(plan_file),
+                    "--expect-plan-sha256", plan["plan_sha256"],
+                    "--decision", f"{copy}=keep-both",
+                ).stdout
+            )
+            self.assertEqual(result["state"], "applied")
+            self.assertFalse((wiki.path / copy).exists())
+            renamed = wiki.path / "wiki/concepts/governance-konflikt.md"
+            self.assertTrue(renamed.is_file())
+            # The new name must itself be acceptable to the storage layer.
+            self.assertIsNone(sa.classify("wiki/concepts/governance-konflikt.md"))
+
+    def test_resolution_restores_a_readable_release(self) -> None:
+        with TempWiki() as wiki:
+            # A conflict copy of a file that is part of the current release.
+            copy = "wiki/overview-DESKTOP-A1B2C3.md"
+            wiki.write(copy, wiki.read("wiki/overview.md") + "\nAbweichung.\n")
+            self.assertEqual(wiki.verify()["state"], "sync_artifacts_present")
+
+            plan_file, plan = self._plan(wiki)
+            wiki.locked(
+                "resolve_conflict_copy.py", "apply",
+                "--plan-file", str(plan_file),
+                "--expect-plan-sha256", plan["plan_sha256"],
+                "--decision", f"{copy}=keep-original",
+            )
+            self.assertEqual(
+                wiki.verify()["state"],
+                "ready",
+                "resolving the copy must make the release readable again",
+            )
+
+    def test_an_unreleased_real_page_still_fails_closed(self) -> None:
+        with TempWiki() as wiki:
+            # Not a sync artifact: a genuine file the manifest does not describe.
+            wiki.write("wiki/concepts/governance.md", PAGE)
+            self.assertEqual(
+                wiki.verify()["state"],
+                "invalid_wiki",
+                "only sync artifacts get the softer diagnosis",
+            )
