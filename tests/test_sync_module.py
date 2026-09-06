@@ -29,19 +29,32 @@ class ConflictCopyRecognition(unittest.TestCase):
         self.assertIsNotNone(artifact)
         self.assertEqual(artifact.kind, sa.CONFLICT_COPY)
 
-    def test_ambiguous_suffix_needs_the_original_next_to_it(self) -> None:
-        # Without the original present this is an ordinary page name.
-        self.assertIsNone(sa.classify("wiki/concepts/nis2-KRITIS.md", siblings=frozenset()))
-        # With the original present the same name is a conflict copy.
-        siblings = frozenset({"wiki/concepts/nis2.md", "wiki/concepts/nis2-KRITIS.md"})
-        artifact = sa.classify("wiki/concepts/nis2-KRITIS.md", siblings=siblings)
-        self.assertIsNotNone(artifact)
-        self.assertEqual(artifact.kind, sa.CONFLICT_COPY)
-        self.assertEqual(artifact.original, "wiki/concepts/nis2.md")
+    def test_an_uppercase_suffix_beside_its_base_page_is_ordinary_curation(self) -> None:
+        """The decisive false positive: this must never block a wiki.
 
-    def test_ordinary_hyphenated_page_is_not_an_artifact(self) -> None:
-        siblings = frozenset({"wiki/concepts/energie-wende.md"})
-        self.assertIsNone(sa.classify("wiki/concepts/energie-wende.md", siblings=siblings))
+        German wikis routinely hold `energie-KRITIS` beside `energie`. Reading
+        that as a conflict copy fails the lint and takes the whole wiki offline,
+        whereas a missed conflict copy is merely reported as an unexpected file.
+        The asymmetry is why only documented client patterns count.
+        """
+        for name in (
+            "wiki/concepts/energie-KRITIS.md",
+            "wiki/concepts/nis2-DORA.md",
+            "wiki/concepts/weg-BGB.md",
+            "wiki/concepts/vertrag-AGB.md",
+        ):
+            with self.subTest(name=name):
+                self.assertIsNone(sa.classify(name))
+
+    def test_classification_does_not_depend_on_neighbouring_files(self) -> None:
+        # Whatever else exists, a name classifies the same way.
+        self.assertIsNone(sa.classify("wiki/concepts/energie-wende.md"))
+        self.assertEqual(
+            sa.classify_all(
+                ["wiki/concepts/energie.md", "wiki/concepts/energie-KRITIS.md"]
+            ),
+            [],
+        )
 
     def test_a_normal_page_never_classifies(self) -> None:
         for name in (

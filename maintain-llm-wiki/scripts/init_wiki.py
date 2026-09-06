@@ -56,6 +56,15 @@ def main() -> int:
         help="Human-readable language name, for example Deutsch or English",
     )
     parser.add_argument(
+        "--storage-path-prefix",
+        default="",
+        help=(
+            "Decoded library path this wiki will live under on a OneDrive or SharePoint "
+            "target, for example sites/Team/Freigegebene Dokumente/Wiki. Enables the "
+            "400-character storage and 260-character Windows path checks."
+        ),
+    )
+    parser.add_argument(
         "--topic",
         "--description",
         dest="topic",
@@ -93,6 +102,10 @@ def main() -> int:
         identity_plan = load_plan(Path(args.identity_plan), args.expect_identity_sha256)
     except IdentityError as exc:
         raise SystemExit(str(exc)) from exc
+    storage_path_prefix = (getattr(args, "storage_path_prefix", "") or "").strip().strip("/")
+    if storage_path_prefix and len(storage_path_prefix) >= 400:
+        raise SystemExit("--storage-path-prefix already exceeds the 400-character storage limit")
+    storage_path_prefix_yaml = json.dumps(storage_path_prefix, ensure_ascii=False)
     wiki_language_yaml = json.dumps(wiki_language, ensure_ascii=False)
     wiki_language_label_yaml = json.dumps(wiki_language_label, ensure_ascii=False)
     primary_language = wiki_language.split("-", 1)[0].casefold()
@@ -182,6 +195,7 @@ wiki_language_label: {wiki_language_label_yaml}
 source_language_policy: "preserve-original"
 synthesis_language_policy: "translate-to-wiki-language"
 language_migration_policy: "preview-confirm-snapshot-major-release"
+storage_path_prefix: {storage_path_prefix_yaml}
 ---
 
 # Wiki profile
@@ -192,6 +206,14 @@ cluster descriptions, and preferred concept terms use {wiki_language_label}.
 Multilingual aliases and source terminology may remain in `schema/CONCEPTS.md`.
 Changing the wiki language requires a complete confirmed migration and a major
 release; changing this file alone is invalid.
+
+`storage_path_prefix` is the decoded library path this wiki will live under, for
+example `sites/Team/Freigegebene Dokumente/Wiki`. Set it only for a OneDrive or
+SharePoint library. When present, the linter checks generated paths against the
+400-character storage limit and warns at the default Windows limit of 260, so a
+file that would silently never reach the storage is caught before it is written.
+An empty value means the limits are unknown and only the wiki-relative length is
+checked.
 """,
         created,
     )

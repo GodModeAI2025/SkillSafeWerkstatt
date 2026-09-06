@@ -77,9 +77,12 @@ _CONFLICT_PATTERNS = (
     re.compile(r"-konfliktkopie(?:-[0-9]{1,4})?$", re.IGNORECASE),
 )
 
-# A bare device suffix is ambiguous on its own, so it only counts as a conflict
-# copy when the original it was derived from still sits next to it.
-_DEVICE_SUFFIX = re.compile(r"^(?P<stem>.+)-(?P<device>[A-Z0-9][A-Z0-9-]{2,30})$")
+# Deliberately absent: a rule that treats "<stem>-<UPPERCASE>" as a conflict copy
+# whenever "<stem>" sits next to it. It looks helpful and is not: a wiki page
+# named "energie-KRITIS" beside "energie" is ordinary curation, and misreading it
+# as a conflict copy fails the lint and takes the whole wiki offline. A missed
+# conflict copy is merely reported as an unexpected file, naming the path, which
+# is recoverable. The asymmetry decides it - only documented patterns count.
 
 
 class Artifact:
@@ -113,36 +116,26 @@ def _is_os_artifact(name: str) -> bool:
     return lowered in OS_ARTIFACT_NAMES or lowered.startswith("~$")
 
 
-def _conflict_original(relative: str, name: str, siblings: Optional[frozenset[str]]) -> Optional[str]:
-    """Return the original file name when `name` looks like a conflict copy."""
+def _conflict_original(name: str) -> Optional[str]:
+    """Return the original file name when `name` matches a known conflict pattern.
+
+    Only the documented client-generated forms count. See the note above the
+    patterns for why an ambiguous name is never guessed at.
+    """
     stem = PurePosixPath(name).stem
     suffix = PurePosixPath(name).suffix
     for pattern in _CONFLICT_PATTERNS:
         match = pattern.search(stem)
         if match:
             return f"{stem[: match.start()]}{suffix}"
-    if siblings is None:
-        return None
-    # Ambiguous device suffix: only a conflict copy when the original survives.
-    match = _DEVICE_SUFFIX.match(stem)
-    if match:
-        candidate = f"{match.group('stem')}{suffix}"
-        parent = PurePosixPath(relative).parent
-        if (parent / candidate).as_posix() in siblings:
-            return candidate
     return None
 
 
-def classify(
-    relative: str,
-    *,
-    siblings: Optional[frozenset[str]] = None,
-) -> Optional[Artifact]:
+def classify(relative: str) -> Optional[Artifact]:
     """Classify one wiki-relative POSIX path, or return None for ordinary content.
 
-    `siblings` is the set of wiki-relative paths that exist alongside this file.
-    It is only consulted to disambiguate a device-suffixed name; pass None to
-    skip that check entirely.
+    Classification depends only on the name, never on what sits beside it, so a
+    page cannot be reclassified by an unrelated file appearing next to it.
     """
     name = PurePosixPath(relative).name
     if not name:
@@ -151,7 +144,7 @@ def classify(
     if _is_os_artifact(name):
         return Artifact(relative, IGNORABLE, f"operating-system or Office artifact {name!r}")
 
-    original = _conflict_original(relative, name, siblings)
+    original = _conflict_original(name)
     if original:
         return Artifact(
             relative,
@@ -193,9 +186,8 @@ def classify(
 
 
 def classify_all(relatives: Iterable[str]) -> list[Artifact]:
-    """Classify a whole set of wiki-relative paths, resolving sibling context once."""
-    known = frozenset(relatives)
-    found = [classify(relative, siblings=known) for relative in sorted(known)]
+    """Classify a whole set of wiki-relative paths."""
+    found = [classify(relative) for relative in sorted(set(relatives))]
     return [artifact for artifact in found if artifact is not None]
 
 

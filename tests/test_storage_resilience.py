@@ -241,3 +241,61 @@ class HonestPersistence(unittest.TestCase):
         self.assertIn("do not tell others", statement["statement"])
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class StoragePathProfile(unittest.TestCase):
+    """S3: a wiki that could never sync must be refused before it is created."""
+
+    def _initialize(self, prefix: str):
+        import shutil as _shutil
+        import tempfile as _tempfile
+
+        import harness
+        from harness import MAINTAIN, run, run_json
+
+        directory = Path(_tempfile.mkdtemp(prefix="lmwiki-prefix-"))
+        self.addCleanup(_shutil.rmtree, directory, True)
+        (directory / "i.json").write_text(json.dumps(harness.IDENTITY), encoding="utf-8")
+        plan = run_json(
+            MAINTAIN / "plan_identity.py",
+            "--input", str(directory / "i.json"),
+            "--output", str(directory / "p.json"),
+        )
+        result = run(
+            MAINTAIN / "initialize_wiki.py",
+            "--target", str(directory / "w"),
+            "--title", "T", "--topic", "X", "--wiki-language", "de",
+            "--storage-path-prefix", prefix,
+            "--identity-plan", str(directory / "p.json"),
+            "--expect-identity-sha256", plan["proposal_sha256"],
+            "--owner", "test/prefix",
+            check=False,
+        )
+        return directory, json.loads(result.stdout)
+
+    def test_a_realistic_library_path_initializes_normally(self) -> None:
+        directory, payload = self._initialize("sites/Team/Dokumente/Wiki")
+        self.assertEqual(payload["state"], "initialized", payload)
+        profile = (directory / "w" / "schema" / "WIKI_PROFILE.md").read_text(encoding="utf-8")
+        self.assertIn('storage_path_prefix: "sites/Team/Dokumente/Wiki"', profile)
+
+    def test_a_prefix_that_makes_every_path_too_long_is_refused(self) -> None:
+        _, payload = self._initialize("sites/Team/" + "x" * 380)
+        self.assertEqual(payload["state"], "initialization_failed")
+        self.assertFalse(payload["partial_state_preserved"])
+
+    def test_the_failure_names_the_actual_reason(self) -> None:
+        _, payload = self._initialize("sites/Team/" + "x" * 380)
+        self.assertIn(
+            "400-character",
+            payload["error"],
+            "a failed initialization must say why, not return a JSON fragment",
+        )
+
+    def test_no_prefix_leaves_the_limits_unchecked(self) -> None:
+        directory, payload = self._initialize("")
+        self.assertEqual(payload["state"], "initialized")
+        profile = (directory / "w" / "schema" / "WIKI_PROFILE.md").read_text(encoding="utf-8")
+        self.assertIn('storage_path_prefix: ""', profile)
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
