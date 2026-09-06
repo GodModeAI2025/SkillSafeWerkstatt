@@ -198,14 +198,30 @@ def apply_plan(
             "writes": len(actions),
             "snapshot": snapshot,
             "actions": actions,
-            "next_steps": [
-                "Rebuild the graph and reading views.",
-                "Run the strict linter.",
-                "Publish a new release so readers see one consistent state.",
-            ],
+            "next_steps": next_steps(actions),
         },
         0,
     )
+
+
+def next_steps(actions: list[dict[str, str]]) -> list[str]:
+    """Say what still has to happen, including work a decision created."""
+    steps = []
+    if any(action["decision"] == "keep-both" for action in actions):
+        # A renamed copy is a new page: unlisted, unlinked, and without its own
+        # claims, so the linter will reject a release until it is curated.
+        steps.append(
+            "Curate each renamed copy as a real page: give it its own id, list it in "
+            "wiki/index.md, and check its claims. Until then the linter will refuse a release."
+        )
+    steps.extend(
+        [
+            "Rebuild the graph and reading views.",
+            "Run the strict linter.",
+            "Publish a new release so readers see one consistent state.",
+        ]
+    )
+    return steps
 
 
 def main() -> int:

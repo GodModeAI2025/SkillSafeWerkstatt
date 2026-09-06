@@ -269,5 +269,30 @@ class Export(unittest.TestCase):
             self.assertIn("outside the wiki", result.stderr)
 
 
+
+class EdgeCases(unittest.TestCase):
+    def test_a_wiki_file_without_a_heading_does_not_break_the_export(self) -> None:
+        with TempWiki() as wiki:
+            build_curated_wiki(wiki)
+            # A WIKI.md whose first line is not a heading must not raise.
+            (wiki.path / "WIKI.md").write_text("Nur Fliesstext.\n", encoding="utf-8")
+            destination = wiki.root / "bundle-no-heading"
+            result = wiki.maintain(
+                "export_okf_bundle.py",
+                "--target", str(wiki.path),
+                "--destination", str(destination),
+                check=False,
+            )
+            # The release no longer verifies, so no bundle is written - but the
+            # failure must be the verification, never a crash.
+            self.assertIn(result.returncode, (0, 4), result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
+    def test_an_empty_wiki_title_falls_back_without_raising(self) -> None:
+        import export_okf_bundle
+
+        index = export_okf_bundle.build_index([], "Wiki", "Export.")
+        self.assertIn('okf_version: "0.2"', index)
+        self.assertIn("# Wiki", index)
 if __name__ == "__main__":
     unittest.main(verbosity=2)

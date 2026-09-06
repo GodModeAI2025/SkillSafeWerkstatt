@@ -110,7 +110,6 @@ def load_registry(path: Path) -> dict[str, dict[str, Any]]:
 
 def convert_page(
     data: dict[str, Any],
-    body: str,
     registry: dict[str, dict[str, Any]],
 ) -> tuple[dict[str, Any], list[str]]:
     """Map one wiki page onto OKF frontmatter, reporting what was left out."""
@@ -255,7 +254,7 @@ def main() -> int:
         if document.data.get("type") == "index":
             # The bundle root index is generated; a wiki index has no OKF role.
             continue
-        okf, notes = convert_page(document.data, document.body, registry)
+        okf, notes = convert_page(document.data, registry)
         bundle_path = relative.removeprefix("wiki/")
         staged.append((bundle_path, render_frontmatter(okf) + convert_body(document.body)))
         pages.append(
@@ -275,9 +274,16 @@ def main() -> int:
             output = destination / bundle_path
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(content, encoding="utf-8")
-        title = (target / "WIKI.md").read_text(encoding="utf-8").splitlines()[0].lstrip("# ").strip()
+        heading = next(
+            (
+                line.lstrip("# ").strip()
+                for line in (target / "WIKI.md").read_text(encoding="utf-8").splitlines()
+                if line.startswith("#")
+            ),
+            "",
+        )
         (destination / "index.md").write_text(
-            build_index(pages, title or "Wiki", f"Exported from SkillSafeWerkstatt release "
+            build_index(pages, heading or "Wiki", f"Exported from SkillSafeWerkstatt release "
                                                 f"{verification['version']}."),
             encoding="utf-8",
         )
