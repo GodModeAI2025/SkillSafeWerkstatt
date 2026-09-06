@@ -14,7 +14,7 @@ Reference: https://github.com/GoogleCloudPlatform/open-knowledge-format
 from __future__ import annotations
 
 import re
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -179,3 +179,182 @@ def source_records(
             entry["last_modified"] = modified
         records.append(entry)
     return records
+
+#: Files the specification reserves; every other .md is a concept document.
+RESERVED_FILES = ("index.md", "log.md")
+
+
+def validate_bundle(root: "Path") -> list[str]:
+    """Check a written bundle against the OKF v0.2 conformance rules.
+
+    The specification requires three things of a conformant bundle: every
+    non-reserved Markdown file parses as frontmatter, every such block carries a
+    non-empty `type`, and the reserved files follow their prescribed shape. An
+    export that claims conformance should be able to demonstrate it, so this runs
+    over the bundle that was actually written rather than over the intent.
+    """
+    problems: list[str] = []
+    root_index = root / "index.md"
+    if not root_index.is_file():
+        problems.append("index.md is missing at the bundle root")
+    else:
+        try:
+            data = read_okf_frontmatter(root_index.read_text(encoding="utf-8"), "index.md")
+        except (OSError, UnicodeError, ValueError) as exc:
+            problems.append(str(exc))
+        else:
+            keys = set(data)
+            if keys != {"okf_version"}:
+                problems.append(
+                    f"index.md must declare okf_version and nothing else, found {sorted(keys)}"
+                )
+            elif str(data.get("okf_version")) != OKF_VERSION:
+                problems.append(
+                    f"index.md declares okf_version {data.get('okf_version')!r}, "
+                    f"expected {OKF_VERSION!r}"
+                )
+
+    for path in sorted(root.rglob("*.md")):
+        relative = path.relative_to(root).as_posix()
+        if PurePosixPath(relative).name in RESERVED_FILES:
+            continue
+        try:
+            data = read_okf_frontmatter(path.read_text(encoding="utf-8"), relative)
+        except (OSError, UnicodeError, ValueError) as exc:
+            problems.append(str(exc))
+            continue
+        value = data.get("type")
+        if not isinstance(value, str) or not value.strip():
+            problems.append(f"{relative}: required field type is missing or empty")
+    return problems
+
+def read_okf_frontmatter(text: str, label: str) -> dict[str, Any]:
+    """Parse the YAML subset an OKF bundle uses.
+
+    The wiki's own frontmatter contract deliberately rejects nested mappings and
+    lists of mappings, which is exactly what OKF v0.2 requires for `generated`,
+    `verified` and `sources`. So a bundle cannot be validated with the wiki's
+    parser, and this reads the OKF surface instead: scalars, inline mappings,
+    scalar lists, and lists of mappings, one level deep.
+
+    Anything outside that surface raises, because the exporter is the only writer
+    of these bundles and must not emit a shape it cannot read back.
+    """
+    if not text.startswith("---"):
+        raise ValueError(f"{label}: no frontmatter block")
+    lines = text.splitlines()
+    try:
+        end = next(index for index, line in enumerate(lines[1:], 1) if line.strip() == "---")
+    except StopIteration:
+        raise ValueError(f"{label}: unterminated frontmatter block") from None
+
+    data: dict[str, Any] = {}
+    key: Optional[str] = None
+    index = 1
+    while index < end:
+        raw = lines[index]
+        line = raw.rstrip()
+        if not line.strip():
+            index += 1
+            continue
+        if not raw.startswith(" "):
+            name, separator, value = line.partition(":")
+            if not separator:
+                raise ValueError(f"{label}:{index + 1}: expected 'key: value'")
+            key = name.strip()
+            if not key:
+                raise ValueError(f"{label}:{index + 1}: empty property name")
+            if key in data:
+                raise ValueError(f"{label}:{index + 1}: duplicate property {key!r}")
+            remainder = value.strip()
+            if not remainder:
+                data[key] = []          # a block list follows
+            elif remainder.startswith("{"):
+                data[key] = _inline_mapping(remainder, label, index + 1)
+            else:
+                data[key] = _scalar(remainder)
+            index += 1
+            continue
+        if key is None:
+            raise ValueError(f"{label}:{index + 1}: indented line before any property")
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            item = stripped[2:].strip()
+            name, separator, value = item.partition(":")
+            if separator and not item.startswith(('"', "'")):
+                entry: dict[str, Any] = {name.strip(): _scalar(value.strip())}
+                index += 1
+                # Continuation lines of the same mapping are indented further.
+                while index < end and lines[index].startswith("    ") and not lines[index].strip().startswith("- "):
+                    inner, inner_separator, inner_value = lines[index].strip().partition(":")
+                    if not inner_separator:
+                        raise ValueError(f"{label}:{index + 1}: expected 'key: value' in list item")
+                    entry[inner.strip()] = _scalar(inner_value.strip())
+                    index += 1
+                _append(data, key, entry, label, index)
+                continue
+            _append(data, key, _scalar(item), label, index + 1)
+            index += 1
+            continue
+        raise ValueError(f"{label}:{index + 1}: unsupported frontmatter line")
+    return data
+
+
+def _append(data: dict[str, Any], key: str, value: Any, label: str, line: int) -> None:
+    holder = data.get(key)
+    if not isinstance(holder, list):
+        raise ValueError(f"{label}:{line}: list item under a non-list property {key!r}")
+    holder.append(value)
+
+
+def _inline_mapping(raw: str, label: str, line: int) -> dict[str, Any]:
+    body = raw.strip()
+    if not body.startswith("{") or not body.endswith("}"):
+        raise ValueError(f"{label}:{line}: malformed inline mapping")
+    mapping: dict[str, Any] = {}
+    inner = body[1:-1].strip()
+    if not inner:
+        return mapping
+    for part in _split_inline(inner, label, line):
+        name, separator, value = part.partition(":")
+        if not separator:
+            raise ValueError(f"{label}:{line}: expected 'key: value' inside the inline mapping")
+        mapping[name.strip()] = _scalar(value.strip())
+    return mapping
+
+
+def _split_inline(inner: str, label: str, line: int) -> list[str]:
+    """Split on commas that are not inside a quoted value."""
+    parts: list[str] = []
+    current: list[str] = []
+    quote = ""
+    for character in inner:
+        if quote:
+            if character == quote:
+                quote = ""
+            current.append(character)
+        elif character in "\"'":
+            quote = character
+            current.append(character)
+        elif character == ",":
+            parts.append("".join(current).strip())
+            current = []
+        else:
+            current.append(character)
+    if quote:
+        raise ValueError(f"{label}:{line}: unterminated quoted value")
+    parts.append("".join(current).strip())
+    return [part for part in parts if part]
+
+
+def _scalar(raw: str) -> Any:
+    value = raw.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+    if value in {"true", "false"}:
+        return value == "true"
+    if value == "null" or value == "":
+        return None
+    if re.fullmatch(r"-?\d+", value):
+        return int(value)
+    return value

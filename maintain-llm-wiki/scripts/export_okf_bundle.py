@@ -153,7 +153,75 @@ def convert_page(
     return okf, ([note] if note else []) + [f"missing recommended field: {field}" for field in omitted]
 
 
-def build_index(pages: list[dict[str, Any]], title: str, topic: str) -> str:
+
+def convert_source(record: dict[str, Any], body: str) -> tuple[dict[str, Any], list[str]]:
+    """Map one registered source extraction onto an OKF concept.
+
+    A bundle whose pages cite sources it does not contain has broken provenance
+    the moment it leaves this machine. Exporting the faithful extractions makes
+    the bundle answer its own citations.
+    """
+    notes: list[str] = []
+    okf: dict[str, Any] = {"type": "Source"}
+    title = record.get("title")
+    if isinstance(title, str) and title.strip():
+        okf["title"] = title
+    else:
+        notes.append("missing recommended field: title")
+    original = record.get("original_ref")
+    if isinstance(original, str) and original.strip():
+        # The underlying asset, which stays outside the bundle by design.
+        okf["resource"] = original
+    else:
+        notes.append("missing recommended field: resource")
+    okf["description"] = (
+        f"Faithful Markdown extraction of {title or 'a registered source'}, "
+        "preserved in its original language."
+    )
+    status = str(record.get("status") or "")
+    okf["status"] = "draft" if status == "partial" else okf_contract.okf_status(status)
+    if status == "partial":
+        notes.append(
+            "The extraction is incomplete in the wiki. OKF has no partial status, so it "
+            "is exported as draft."
+        )
+    extracted_at = record.get("extracted_at")
+    extractor = record.get("extractor")
+    generated = okf_contract.actor_record(f"agent/{extractor}" if extractor else None, extracted_at)
+    if generated:
+        okf["generated"] = generated
+    language = record.get("content_language")
+    if isinstance(language, str) and language.strip():
+        okf["tags"] = [f"language/{language}"]
+    else:
+        notes.append("missing recommended field: tags")
+    return okf, notes
+
+
+def build_log(target: Path, version: str) -> str:
+    """Render the wiki's change record as OKF's reserved chronological log."""
+    changes = target / "meta/changes.md"
+    body = changes.read_text(encoding="utf-8").strip() if changes.is_file() else ""
+    lines = [
+        "# Log",
+        "",
+        f"Chronological record carried over from the wiki at release {version}.",
+        "",
+    ]
+    if body:
+        # Keep the maintained record verbatim below the generated heading.
+        lines.extend(convert_body(body).splitlines())
+    else:
+        lines.append("No change entries were recorded for this release.")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def build_index(
+    pages: list[dict[str, Any]],
+    sources: list[dict[str, Any]],
+    title: str,
+    topic: str,
+) -> str:
     """Build the bundle root index. Per the spec it carries okf_version only."""
     lines = [
         "---",
@@ -170,11 +238,34 @@ def build_index(pages: list[dict[str, Any]], title: str, topic: str) -> str:
     for page in sorted(pages, key=lambda item: str(item["path"])):
         label = str(page["title"] or PurePosixPath(str(page["path"])).stem)
         lines.append(f"- [{label}](/{page['path']}) — {page['status']}, {page['trust_tier']}")
+    if sources:
+        lines.extend(
+            [
+                "",
+                "## Sources",
+                "",
+                "Faithful extractions the concepts above cite, in their original language.",
+                "",
+            ]
+        )
+        for source in sorted(sources, key=lambda item: str(item["path"])):
+            label = str(source["title"] or PurePosixPath(str(source["path"])).stem)
+            lines.append(f"- [{label}](/{source['path']})")
+    lines.extend(["", "See [About this bundle](/README.md) for what this export leaves behind."])
     return "\n".join(lines) + "\n"
 
 
 def build_readme(version: str, release_id: str, findings: list[dict[str, Any]]) -> str:
+    # Everything that is not a reserved file is a concept document, so the README
+    # carries frontmatter too rather than making its own bundle non-conformant.
     lines = [
+        "---",
+        'type: "Documentation"',
+        'title: "About this bundle"',
+        'description: "What this OKF export contains and what it deliberately leaves behind."',
+        'status: "stable"',
+        "---",
+        "",
         "# What this bundle is, and what it is not",
         "",
         f"This is an Open Knowledge Format v{okf_contract.OKF_VERSION} export of "
@@ -218,6 +309,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", required=True)
     parser.add_argument("--destination", required=True, help="Empty or non-existing output directory")
+    parser.add_argument(
+        "--no-sources",
+        action="store_true",
+        help="Omit the registered source extractions; the bundle can then not answer its own citations",
+    )
     parser.add_argument("--allow-hydration", action="store_true")
     args = parser.parse_args()
 
@@ -268,6 +364,25 @@ def main() -> int:
         if notes:
             findings.append({"path": bundle_path, "notes": notes})
 
+    sources: list[dict[str, Any]] = []
+    if not args.no_sources:
+        for path in sorted((target / "sources").glob("*.md")):
+            relative = path.relative_to(target).as_posix()
+            source_id = PurePosixPath(relative).stem.split("-")[0:2]
+            record = registry.get("-".join(source_id)) or {}
+            try:
+                document = parse_document(
+                    path.read_text(encoding="utf-8"), relative, require_frontmatter=True
+                )
+            except (OSError, UnicodeError, FrontmatterError) as exc:
+                raise SystemExit(f"{relative}: {exc}") from exc
+            merged = {**document.data, **record}
+            okf, notes = convert_source(merged, document.body)
+            staged.append((relative, render_frontmatter(okf) + convert_body(document.body)))
+            sources.append({"path": relative, "title": okf.get("title", "")})
+            if notes:
+                findings.append({"path": relative, "notes": notes})
+
     destination.mkdir(parents=True, exist_ok=True)
     try:
         for bundle_path, content in staged:
@@ -283,9 +398,16 @@ def main() -> int:
             "",
         )
         (destination / "index.md").write_text(
-            build_index(pages, heading or "Wiki", f"Exported from SkillSafeWerkstatt release "
-                                                f"{verification['version']}."),
+            build_index(
+                pages,
+                sources,
+                heading or "Wiki",
+                f"Exported from SkillSafeWerkstatt release {verification['version']}.",
+            ),
             encoding="utf-8",
+        )
+        (destination / "log.md").write_text(
+            build_log(target, str(verification["version"])), encoding="utf-8"
         )
         (destination / "README.md").write_text(
             build_readme(str(verification["version"]), str(verification["release_id"]), findings),
@@ -295,6 +417,24 @@ def main() -> int:
         # A partial bundle would misrepresent the release, so leave none behind.
         shutil.rmtree(destination, ignore_errors=True)
         raise
+
+    # Claiming conformance is cheap; demonstrating it is the point. Validate what
+    # was actually written, and leave no bundle behind that fails its own check.
+    problems = okf_contract.validate_bundle(destination)
+    if problems:
+        shutil.rmtree(destination, ignore_errors=True)
+        print(
+            json.dumps(
+                {
+                    "state": "not_exported",
+                    "reason": "the generated bundle does not satisfy the OKF conformance rules",
+                    "conformance_errors": problems,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 5
 
     print(
         json.dumps(
@@ -307,7 +447,10 @@ def main() -> int:
                     "release_id": verification["release_id"],
                     "manifest_sha256": verification["manifest_sha256"],
                 },
-                "documents": len(pages),
+                "documents": len(pages) + len(sources),
+                "concepts": len(pages),
+                "sources": len(sources),
+                "conformance": "validated against OKF v0.2 after writing",
                 "unfilled_fields": findings,
                 "not_exported": list(okf_contract.NOT_EXPORTED),
                 "wiki_unchanged": True,

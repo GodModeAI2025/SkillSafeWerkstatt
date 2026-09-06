@@ -133,7 +133,9 @@ Use locked `scripts/verify_pages.py plan` to show which pages a confirmation wou
 
 Run locked `scripts/report_okf.py` only when the user asks about interoperability or an OKF migration. Never make OKF the native contract or invent its recommended metadata.
 
-Run `scripts/export_okf_bundle.py` when the user wants an OKF v0.2 bundle. It takes no lock token, requires an empty destination outside the wiki, and refuses to export anything but a verified release. Before exporting, tell the user what the bundle cannot carry: claim locators, the release manifest, snapshots, `SOUL.md`, concept worlds, and clusters. After exporting, name the release version it was bound to and repeat that editing the bundle does not change the wiki.
+An OKF bundle is a first-class deliverable of this skill, not a footnote. Run `scripts/export_okf_bundle.py` whenever the user wants their knowledge in an interoperable form. It takes no lock token, requires an empty destination outside the wiki, refuses to export anything but a verified release, and validates the bundle it wrote before reporting success.
+
+The bundle carries the registered source extractions by default so it can answer its own citations; pass `--no-sources` only when the user asks for concepts alone and say what that costs. Before exporting, tell the user what the bundle cannot carry: claim locators, the release manifest, snapshots, `SOUL.md`, concept worlds, and clusters. After exporting, name the release version it was bound to, report the concept and source counts, list the recommended fields that had no basis in the wiki, and repeat that editing the bundle does not change the wiki. Never fill a missing field to make a bundle look complete.
 
 ## Workflow
 

@@ -157,16 +157,22 @@ class Export(unittest.TestCase):
             frontmatter = text.split("---")[1].strip().splitlines()
             self.assertEqual(frontmatter, ['okf_version: "0.2"'])
 
-    def test_type_is_present_on_every_concept(self) -> None:
+    def test_type_is_present_on_every_non_reserved_document(self) -> None:
+        """OKF reserves index.md and log.md; everything else is a concept."""
         with TempWiki() as wiki:
             build_curated_wiki(wiki)
             destination, _ = self._export(wiki)
+            checked = 0
             for path in destination.rglob("*.md"):
-                if path.name in {"index.md", "README.md"}:
+                if path.name in okf_contract.RESERVED_FILES:
                     continue
-                text = path.read_text(encoding="utf-8")
-                self.assertTrue(text.startswith("---"), path)
-                self.assertIn("type:", text.split("---")[1], path)
+                with self.subTest(path=path.name):
+                    data = okf_contract.read_okf_frontmatter(
+                        path.read_text(encoding="utf-8"), path.name
+                    )
+                    self.assertTrue(str(data.get("type") or "").strip(), path)
+                    checked += 1
+            self.assertGreater(checked, 0)
 
     def test_trust_metadata_is_composed_into_the_nested_okf_form(self) -> None:
         with TempWiki() as wiki:
@@ -291,8 +297,172 @@ class EdgeCases(unittest.TestCase):
     def test_an_empty_wiki_title_falls_back_without_raising(self) -> None:
         import export_okf_bundle
 
-        index = export_okf_bundle.build_index([], "Wiki", "Export.")
+        index = export_okf_bundle.build_index([], [], "Wiki", "Export.")
         self.assertIn('okf_version: "0.2"', index)
         self.assertIn("# Wiki", index)
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
+
+
+class OkfSubsetReader(unittest.TestCase):
+    """The bundle uses shapes the wiki's own parser rejects, so it needs its own."""
+
+    def test_the_wiki_parser_cannot_read_an_okf_bundle(self) -> None:
+        from frontmatter_contract import FrontmatterError, parse_document
+
+        text = '---\ngenerated: { by: "agent/x", at: "2026-09-06T09:00:00Z" }\n---\n'
+        with self.assertRaises(FrontmatterError):
+            parse_document(text, "x", require_frontmatter=True)
+
+    def test_the_okf_reader_handles_every_shape_the_export_emits(self) -> None:
+        text = (
+            '---\n'
+            'type: "Concept"\n'
+            'title: "Netzentgelte"\n'
+            'generated: { by: "agent/x", at: "2026-09-06T09:00:00Z" }\n'
+            'tags:\n'
+            '  - "type/wiki-concept"\n'
+            'sources:\n'
+            '  - id: "src-0123456789abcdef"\n'
+            '    title: "Titel, mit Komma"\n'
+            '    resource: "a/b.pdf"\n'
+            '---\nbody\n'
+        )
+        data = okf_contract.read_okf_frontmatter(text, "x")
+        self.assertEqual(data["generated"], {"by": "agent/x", "at": "2026-09-06T09:00:00Z"})
+        self.assertEqual(data["tags"], ["type/wiki-concept"])
+        self.assertEqual(data["sources"][0]["title"], "Titel, mit Komma")
+
+    def test_a_missing_block_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            okf_contract.read_okf_frontmatter("kein frontmatter\n", "x")
+
+    def test_an_unterminated_block_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            okf_contract.read_okf_frontmatter('---\ntype: "C"\n', "x")
+
+    def test_a_duplicate_property_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            okf_contract.read_okf_frontmatter('---\ntype: "A"\ntype: "B"\n---\n', "x")
+
+
+class BundleConformance(unittest.TestCase):
+    def test_a_written_bundle_validates(self) -> None:
+        with TempWiki() as wiki:
+            build_curated_wiki(wiki)
+            destination = wiki.root / "bundle"
+            result = wiki.maintain(
+                "export_okf_bundle.py",
+                "--target", str(wiki.path), "--destination", str(destination),
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(okf_contract.validate_bundle(destination), [])
+            self.assertIn("validated against OKF", json.loads(result.stdout)["conformance"])
+
+    def test_a_non_conformant_bundle_is_detected(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "index.md").write_text('---\nokf_version: "0.2"\n---\n', encoding="utf-8")
+            (root / "broken.md").write_text("kein frontmatter\n", encoding="utf-8")
+            (root / "typeless.md").write_text('---\ntitle: "X"\n---\n', encoding="utf-8")
+            problems = okf_contract.validate_bundle(root)
+            self.assertEqual(len(problems), 2, problems)
+
+    def test_a_missing_root_index_is_detected(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            problems = okf_contract.validate_bundle(Path(directory))
+            self.assertTrue(any("index.md is missing" in item for item in problems))
+
+    def test_the_readme_is_itself_a_conformant_concept(self) -> None:
+        with TempWiki() as wiki:
+            build_curated_wiki(wiki)
+            destination = wiki.root / "bundle"
+            wiki.maintain(
+                "export_okf_bundle.py",
+                "--target", str(wiki.path), "--destination", str(destination),
+                check=False,
+            )
+            data = okf_contract.read_okf_frontmatter(
+                (destination / "README.md").read_text(encoding="utf-8"), "README.md"
+            )
+            self.assertEqual(data["type"], "Documentation")
+
+
+class SelfContainedBundle(unittest.TestCase):
+    """A bundle whose pages cite sources it lacks has broken provenance."""
+
+    def _export(self, wiki, *extra: str):
+        destination = wiki.root / "bundle"
+        result = wiki.maintain(
+            "export_okf_bundle.py",
+            "--target", str(wiki.path), "--destination", str(destination),
+            *extra, check=False,
+        )
+        return destination, result
+
+    def test_registered_sources_are_part_of_the_bundle(self) -> None:
+        with TempWiki() as wiki:
+            build_curated_wiki(wiki)
+            destination, result = self._export(wiki)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["sources"], 1)
+            exported = list((destination / "sources").glob("*.md"))
+            self.assertEqual(len(exported), 1)
+            data = okf_contract.read_okf_frontmatter(
+                exported[0].read_text(encoding="utf-8"), "source"
+            )
+            self.assertEqual(data["type"], "Source")
+            self.assertEqual(data["resource"], "intern/netzentgelte-2026.pdf")
+            self.assertIn("language/de", data["tags"])
+
+    def test_the_source_extraction_text_survives(self) -> None:
+        with TempWiki() as wiki:
+            build_curated_wiki(wiki)
+            destination, _ = self._export(wiki)
+            text = next((destination / "sources").glob("*.md")).read_text(encoding="utf-8")
+            self.assertIn("7,2 Cent", text, "the faithful extraction must come with the bundle")
+
+    def test_the_index_lists_the_sources(self) -> None:
+        with TempWiki() as wiki:
+            build_curated_wiki(wiki)
+            destination, _ = self._export(wiki)
+            index = (destination / "index.md").read_text(encoding="utf-8")
+            self.assertIn("## Sources", index)
+            self.assertIn("/sources/src-", index)
+
+    def test_sources_can_be_omitted_deliberately(self) -> None:
+        with TempWiki() as wiki:
+            build_curated_wiki(wiki)
+            destination, result = self._export(wiki, "--no-sources")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["sources"], 0)
+            self.assertFalse((destination / "sources").exists())
+            self.assertEqual(okf_contract.validate_bundle(destination), [])
+
+    def test_the_reserved_log_carries_the_change_record(self) -> None:
+        with TempWiki() as wiki:
+            build_curated_wiki(wiki)
+            destination, _ = self._export(wiki)
+            log = destination / "log.md"
+            self.assertTrue(log.is_file(), "OKF reserves log.md for the chronological record")
+            text = log.read_text(encoding="utf-8")
+            self.assertTrue(text.startswith("# Log"))
+            self.assertNotIn("[[", text, "wikilinks must be converted in the log too")
+
+    def test_a_partial_extraction_maps_to_draft_with_a_note(self) -> None:
+        record = {"title": "Q", "original_ref": "a/b.pdf", "status": "partial"}
+        import export_okf_bundle
+
+        okf, notes = export_okf_bundle.convert_source(record, "body")
+        self.assertEqual(okf["status"], "draft")
+        self.assertTrue(any("no partial status" in note for note in notes))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
