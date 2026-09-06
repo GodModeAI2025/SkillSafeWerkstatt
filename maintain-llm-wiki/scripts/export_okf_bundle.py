@@ -131,6 +131,9 @@ def convert_page(
 
     okf["status"] = okf_contract.okf_status(data.get("status"))
     note = okf_contract.status_note(data.get("status"))
+    expiry = data.get("stale_after")
+    if isinstance(expiry, str) and expiry.strip():
+        okf["stale_after"] = expiry.strip()
 
     generated = okf_contract.actor_record(
         data.get(trust_contract.GENERATED_BY), data.get(trust_contract.GENERATED_AT)

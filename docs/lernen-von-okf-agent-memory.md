@@ -565,12 +565,11 @@ Diese Punkte sind nicht aus dem Code ableitbar und gehören dir:
    entscheiden.
 2. ~~**Ist der OKF-Export ein Produktziel oder eine Fußnote?**~~ **Entschieden: Produktziel.**
    Siehe den Nachtrag unten.
-3. **Soll `stale_after` pro Seite eingeführt werden?** OKF kennt es; SkillSafeWerkstatt regelt
-   Aktualität heute global über `QUALITY_POLICY.md`. Seitengenaue Verfallsdaten sind mächtiger,
-   aber pflegeintensiver. Nicht in den Stufen enthalten — bewusst offen gelassen.
-4. **Wie streng wird Stufe 4a?** Ein Wiki, das Beobachtungen aufnimmt, ist nützlicher, aber weniger
-   streng belegt als eines, das nur Dokumente kuratiert. Das ist eine Produktentscheidung, keine
-   technische.
+3. ~~**Soll `stale_after` pro Seite eingeführt werden?**~~ **Entschieden: ja, optional.**
+   Siehe den Nachtrag „Die drei Nachzügler" unten.
+4. ~~**Wie streng wird Stufe 4a?**~~ **Entschieden: streng.** Eine Beobachtung ist eine
+   registrierte Quelle mit Pflichtfeldern für Akteur und Anlass — kein zweiter, lockererer
+   Belegweg. Siehe den Nachtrag unten.
 5. ~~**Ist MCP die richtige Reichweitenwette?**~~ **Entschieden: nein.** Die Distribution bleibt
    skill-only, ohne Serverkomponente. Siehe Befund 7 und README §16.
 
@@ -690,3 +689,82 @@ Eine Designänderung fiel dabei ab: Der Index nennt Status und Vertrauensstufe n
 wenn sie vom Normalfall abweichen. `active` und `unverified` auf jeder Zeile zu
 wiederholen kostet Tokens, um nichts zu sagen — und macht die eine abgelöste oder
 tatsächlich geprüfte Seite unsichtbar.
+
+
+---
+
+## Nachtrag: Die drei Nachzügler (2026-09-06)
+
+Nach den Stufen 1 bis 3 und den Indizes blieben drei Punkte offen: das seitengenaue
+`stale_after` aus offener Entscheidung 3, die Strenge von Stufe 4a und der Adoptionspfad
+4c. Alle drei sind jetzt umgesetzt. Was dabei entschieden wurde, ist interessanter als
+dass es umgesetzt wurde.
+
+### `stale_after`: eine Offenlegung, kein Filter
+
+Der naheliegende Fehler wäre gewesen, ein überschrittenes Ablaufdatum wie einen Mangel zu
+behandeln — abgelaufene Seiten aus Suchtreffern nehmen, im Index abwerten, zur Löschung
+vorschlagen. Genau das tut die Umsetzung **nicht**.
+
+Ein abgelaufenes `stale_after` sagt: Diese Seite hat selbst ein Enddatum genannt, und das
+ist vorbei. Es sagt nicht, dass ihr Inhalt falsch ist. Eine abgelöste Regelung ist häufig
+exakt das, wonach jemand fragt. Also bleibt die Seite im Release, im Index, im Suchergebnis
+und in der Antwort — der Lese-Skill *nennt* den Zustand, er entscheidet ihn nicht.
+
+Zwei Details fielen dabei an. Ein unlesbarer Wert lässt den Linter fehlschlagen, statt die
+Seite still ablaufen zu lassen: Ein Tippfehler im Datum darf keine Wirkung entfalten, die
+niemand beabsichtigt hat. Und ein fehlendes Feld ist keine Aussage in die andere Richtung —
+„kein Ablaufdatum" heißt nicht „geprüft aktuell". Das steht im Antwortvertrag, weil die
+Verwechslung sonst in der Antwort passiert.
+
+Das seitengenaue Datum ersetzt die wiki-weite `QUALITY_POLICY.md` nicht. Die regelt einen
+Prüfrhythmus, das Feld ein Enddatum. Beide Instrumente zu vermischen hätte beide entwertet.
+
+### Beobachtungen: streng, oder gar nicht
+
+Offene Entscheidung 4 fragte, wie streng Stufe 4a wird. Die Antwort ist: so streng, dass
+sie keinen zweiten Belegweg aufmacht. Eine Beobachtung ist eine reguläre registrierte
+Quelle mit eigener ID, eigenem Markdown-Extrakt und eigenem Hash. Sie hat lediglich zwei
+Pflichtfelder mehr — `observed_by` in der Akteursnotation der Vertrauensstufen und
+`occasion`, was sie hervorgebracht hat. Ohne beides verweigert die Registrierung, und der
+Linter prüft dieselbe Regel nochmal am Registereintrag. Beide Felder an einer anderen
+Quellenart mitzugeben ist ein Fehler, keine stille Ignoranz.
+
+Der Effekt: Wissen, das in einer Besprechung entsteht, bekommt einen Weg ins Wiki, ohne dass
+die Belegkette eine Lücke bekommt. Was es ausdrücklich **nicht** ist, steht im Pflegevertrag:
+eine Erlaubnis, aufzuschreiben, was ein Agent glaubt. Lässt sich niemand benennen, gibt es
+keine Beobachtung zu registrieren.
+
+### Adoption: Evidenz importieren, nicht Wissen
+
+Bei 4c stand die schwächere Variante zur Wahl — nur berichten, was ein Verzeichnis enthält,
+und die Übernahme dem Anwender überlassen. Die Entscheidung fiel auf die stärkere: Übernahme
+im Plan/Apply-Muster. Der Einwand dagegen war ernst gemeint und lautete, dass so Material
+ohne registrierte Quellen ins Wiki wandert und die Belegkette eine Hintertür bekommt.
+
+Die Umsetzung löst das an der Wurzel, und zwar durch die Beobachtung, dass eine adoptierte
+Datei **selbst ein Dokument ist**. Sie wird deshalb als Quelle registriert — durch denselben
+Helfer wie jede handgepflegte Quelle, also durch jede Prüfung, die der auch macht. Unter
+`wiki/` entsteht dabei nichts. Kein Seiteninhalt, keine Behauptung, kein Claim.
+
+Damit importiert die Adoption **Evidenz, kein Wissen**, und die Hintertür existiert nicht:
+Aus 300 übernommenen Notizen wird kein gefülltes Wiki, sondern ein gefülltes Quellenregister.
+Der Weg von dort zu belegten Seiten ist derselbe wie vorher. Der Pflegevertrag verbietet
+ausdrücklich, einen abgeschlossenen Import als fertiges Wiki darzustellen, und zwei
+Eval-Szenarien prüfen genau diese Versuchung.
+
+Der Plan liest nur und zeigt pro Datei den Titel, den das Dokument selbst trägt, Hash,
+Blocker und Hinweise; blockiert sind unter anderem Inhalte, die byte-identisch bereits
+registriert sind. Beim Anwenden wird jeder Hash vor dem ersten Schreibvorgang erneut
+geprüft: Eine Abweichung stoppt die **gesamte** Auswahl, nicht nur die betroffene Datei.
+Eine halb angewandte Übernahme wäre schlimmer als gar keine.
+
+### Was das für den Vergleich mit `okf-agent-memory` bedeutet
+
+Damit sind alle Befunde außer Nummer 6 (Attested Computation, bewusst zurückgestellt) und
+Nummer 7 (MCP, bewusst verworfen) abgearbeitet. Die Richtung der Übernahme ist dabei
+durchgehend dieselbe geblieben: Übernommen wurde, was OKF an *Vokabular* anbietet — Felder,
+Akteursnotation, Reserveddateien. Nicht übernommen wurde, was OKF an *Strenge fehlt*. Ein
+`stale_after`, das filtert statt offenzulegen, eine Beobachtung ohne Akteur, eine Adoption
+ohne Registrierung: Jede dieser drei Varianten wäre näher an der Vorlage und schlechter für
+dieses Wiki gewesen.

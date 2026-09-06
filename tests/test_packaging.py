@@ -67,7 +67,7 @@ class ImportIntegrity(unittest.TestCase):
 class SharedModuleParity(unittest.TestCase):
     """Modules both skills carry must be byte-identical, or they will diverge."""
 
-    SHARED = ("sync_artifacts.py", "trust_contract.py")
+    SHARED = ("sync_artifacts.py", "trust_contract.py", "freshness.py")
 
     def test_shared_modules_are_identical(self) -> None:
         for name in self.SHARED:

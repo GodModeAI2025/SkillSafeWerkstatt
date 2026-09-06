@@ -129,6 +129,28 @@
         "Die Beschreibungen im Zweigindex werden zur Auswahl genutzt, statt mehrere Seiten probeweise zu öffnen.",
         "Ein Zweigindex wird nicht als inhaltlicher Beleg zitiert."
       ]
+    },
+    {
+      "id": 12,
+      "prompt": "Was gilt aktuell für die Netzentgelte?",
+      "expected_output": "Die Antwort nutzt die tragende Seite, nennt aber, dass deren angegebene Gültigkeit abgelaufen ist.",
+      "files": [],
+      "expectations": [
+        "Die abgelaufene Seite wird verwendet und nicht aus der Antwort entfernt.",
+        "Das überschrittene Ablaufdatum wird als Offenlegung benannt, nicht als Urteil über die Richtigkeit.",
+        "Als Abhilfe wird der Pflege-Skill genannt; der Lese-Skill ändert nichts."
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Zeig mir nur Seiten, die noch gültig sind.",
+      "expected_output": "Der Skill erklärt, dass ein fehlendes Ablaufdatum keine Aussage über Gültigkeit ist, und liefert die Treffer mit ausgewiesenem Ablaufstatus.",
+      "files": [],
+      "expectations": [
+        "Seiten ohne stale_after werden nicht als geprüft gültig ausgegeben.",
+        "Abgelaufene Treffer werden markiert statt stillschweigend unterdrückt.",
+        "Der Skill unterscheidet Ablaufdatum, Vertrauensstufe und Qualitätsstatus voneinander."
+      ]
     }
   ]
 }
