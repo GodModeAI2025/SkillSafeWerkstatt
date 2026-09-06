@@ -9,6 +9,8 @@ import json
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
+import sync_artifacts
+
 
 ROOT_FILES = ("WIKI.md", "WIKI_VERSION", "SOUL.md", "STANDARDS.md")
 CONTROLLED_DIRS = ("schema", "sources", "wiki", "graph")
@@ -31,6 +33,26 @@ def result(state: str, **values: Any) -> dict[str, Any]:
     return {"state": state, **values}
 
 
+def transfer_pending(target: Path, drifted: list[str]) -> bool:
+    """True when the manifest is newer than every file whose content disagrees.
+
+    A synchronization client transfers in its own order, so a second device can
+    receive the new manifest before the content it describes. That is a transient
+    state rather than a damaged release, and only waiting fixes it.
+    """
+    try:
+        manifest_mtime = (target / "meta/manifest.json").stat().st_mtime
+    except OSError:
+        return False
+    for relative in set(drifted):
+        try:
+            if (target / relative).stat().st_mtime >= manifest_mtime:
+                return False
+        except OSError:
+            return False
+    return True
+
+
 def controlled_paths(target: Path) -> set[str]:
     paths: set[str] = set()
     for name in ROOT_FILES:
@@ -41,8 +63,14 @@ def controlled_paths(target: Path) -> set[str]:
         if not root.is_dir():
             continue
         for path in root.rglob("*"):
-            if path.is_file() and not path.name.startswith(".") and not path.name.endswith(".tmp"):
-                paths.add(path.relative_to(target).as_posix())
+            if not path.is_file() or path.name.endswith(".tmp"):
+                continue
+            relative = path.relative_to(target).as_posix()
+            # A dot-prefixed name is skipped as before. Operating-system noise is
+            # kept here so it can be disclosed, and filtered out when judging.
+            if path.name.startswith(".") and not sync_artifacts.is_ignorable(relative):
+                continue
+            paths.add(relative)
     for name in META_FILES:
         if (target / name).is_file():
             paths.add(name)
@@ -53,7 +81,6 @@ def verify_snapshot(target: Path, expected_manifest_sha256: str = "") -> dict[st
     lock_path = target / ".llmwiki.lock"
     if lock_path.exists():
         return result("wiki_busy", reason="A maintenance writer currently owns the wiki lock")
-
     manifest_path = target / "meta/manifest.json"
     try:
         first_bytes = manifest_path.read_bytes()
@@ -77,6 +104,7 @@ def verify_snapshot(target: Path, expected_manifest_sha256: str = "") -> dict[st
         return result("invalid_wiki", reason="Release manifest contains no files")
 
     errors: list[str] = []
+    content_drift: list[str] = []
     seen: set[str] = set()
     for entry in files:
         if not isinstance(entry, dict):
@@ -111,13 +139,25 @@ def verify_snapshot(target: Path, expected_manifest_sha256: str = "") -> dict[st
             continue
         if sha256_bytes(content) != entry.get("sha256"):
             errors.append(f"Released file hash differs: {relative}")
+            content_drift.append(relative)
         if len(content) != entry.get("bytes"):
             errors.append(f"Released file size differs: {relative}")
+            content_drift.append(relative)
 
     unexpected = sorted(controlled_paths(target) - seen)
-    if unexpected:
-        errors.append(f"Controlled files exist outside the release manifest: {unexpected}")
-
+    # A synchronization client writes into this directory too. Separate the
+    # files it created from genuine release damage before judging the wiki.
+    artifacts = [
+        artifact
+        for artifact in sync_artifacts.classify_all(unexpected)
+        if artifact.kind in sync_artifacts.NON_CONTENT_KINDS
+    ]
+    artifact_paths = {artifact.path for artifact in artifacts}
+    genuinely_unexpected = [path for path in unexpected if path not in artifact_paths]
+    if genuinely_unexpected:
+        errors.append(
+            f"Controlled files exist outside the release manifest: {genuinely_unexpected}"
+        )
     version_path = target / "WIKI_VERSION"
     version = version_path.read_text(encoding="utf-8").strip() if version_path.is_file() else ""
     if version != manifest.get("version"):
@@ -135,9 +175,40 @@ def verify_snapshot(target: Path, expected_manifest_sha256: str = "") -> dict[st
             manifest_sha256=sha256_bytes(second_bytes),
         )
     if errors:
+        # Content that lags behind a freshly arrived manifest is a transfer still
+        # in flight, not damage. Waiting resolves it; repairing would not.
+        if content_drift and not genuinely_unexpected and transfer_pending(target, content_drift):
+            return result(
+                "sync_in_progress",
+                manifest_sha256=first_hash,
+                version=version,
+                pending=sorted(set(content_drift)),
+                reason=(
+                    "The manifest is newer than the files it describes. A synchronization "
+                    "transfer is most likely still running; retry once it settles."
+                ),
+            )
         return result("invalid_wiki", manifest_sha256=first_hash, version=version, errors=errors)
+    # A conflict copy carries content that diverged across devices, so reading
+    # must stop until a human decides. Operating-system noise carries nothing and
+    # must never block a reader; it is reported and otherwise ignored.
+    blocking = [artifact for artifact in artifacts if artifact.kind == sync_artifacts.CONFLICT_COPY]
+    notices = [artifact.as_dict() for artifact in artifacts if artifact.ignorable]
+    if blocking:
+        return result(
+            "sync_artifacts_present",
+            manifest_sha256=first_hash,
+            version=version,
+            sync_artifacts=[artifact.as_dict() for artifact in blocking],
+            ignored_artifacts=notices,
+            reason=(
+                "A synchronization client kept a conflicting copy next to a released file. "
+                "Resolve it with the maintenance skill before reading; the release itself is intact."
+            ),
+        )
     return result(
         "ready",
+        ignored_artifacts=notices,
         manifest_sha256=first_hash,
         release_id=manifest.get("release_id", ""),
         version=version,
@@ -154,7 +225,13 @@ def main() -> int:
     target = Path(args.target).expanduser().resolve()
     report = verify_snapshot(target, args.expect_manifest_sha256)
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    return {"ready": 0, "wiki_busy": 2, "snapshot_changed": 3}.get(str(report.get("state")), 4)
+    return {
+        "ready": 0,
+        "wiki_busy": 2,
+        "snapshot_changed": 3,
+        "sync_artifacts_present": 5,
+        "sync_in_progress": 6,
+    }.get(str(report.get("state")), 4)
 
 
 if __name__ == "__main__":

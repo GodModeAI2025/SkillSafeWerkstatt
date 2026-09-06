@@ -17,6 +17,11 @@ from urllib.parse import urlparse
 
 from design_contract import CLUSTER_COLORS
 
+import sync_artifacts
+
+#: Directories a synchronization client writes into alongside the maintainer.
+SYNC_SCANNED_DIRS = ("schema", "sources", "wiki", "graph")
+
 REQUIRED_PATHS = (
     "WIKI.md",
     "SOUL.md",
@@ -349,6 +354,73 @@ def load_concepts(path: Path, errors: list[str]) -> dict[str, dict[str, str]]:
     return definitions
 
 
+def check_storage_layer(
+    target: Path,
+    errors: list[str],
+    warnings: list[str],
+) -> dict[str, Any]:
+    """Report files the synchronization client or the storage layer objects to.
+
+    Returns the paths other checks must skip: `ignorable` for operating-system
+    noise and `excluded` for everything that must not be parsed as wiki content.
+    """
+    relatives = sync_artifacts.walk(target, SYNC_SCANNED_DIRS)
+    ignorable: set[str] = set()
+    excluded: set[str] = set()
+    reported: list[dict[str, Any]] = []
+
+    for artifact in sync_artifacts.classify_all(relatives):
+        reported.append(artifact.as_dict())
+        if artifact.kind == sync_artifacts.IGNORABLE:
+            # Expected noise. Never an error, and never wiki content.
+            ignorable.add(artifact.path)
+            excluded.add(artifact.path)
+        elif artifact.kind == sync_artifacts.CONFLICT_COPY:
+            excluded.add(artifact.path)
+            errors.append(
+                f"{artifact.path}: synchronization conflict copy of {artifact.original}; "
+                "resolve it before releasing instead of maintaining both files"
+            )
+        else:
+            errors.append(f"{artifact.path}: {artifact.reason}")
+
+    for collision in sync_artifacts.case_collisions(relatives):
+        errors.append(
+            f"{collision['paths']}: these paths differ only in case; "
+            "SharePoint cannot hold both at once"
+        )
+
+    profile_prefix = read_storage_prefix(target)
+    for finding in sync_artifacts.path_budget_findings(relatives, prefix=profile_prefix):
+        errors.append(
+            f"{finding['path']}: the storage path would need {finding['characters']} characters, "
+            f"above the {finding['budget']}-character OneDrive and SharePoint limit"
+        )
+    if profile_prefix:
+        for finding in sync_artifacts.path_budget_findings(
+            relatives, prefix=profile_prefix, budget=sync_artifacts.WINDOWS_PATH_BUDGET
+        ):
+            warnings.append(
+                f"{finding['path']}: {finding['characters']} characters exceeds the default "
+                "Windows limit of 260; the file needs long-path support locally"
+            )
+
+    return {"ignorable": ignorable, "excluded": excluded, "artifacts": reported}
+
+
+def read_storage_prefix(target: Path) -> str:
+    """Read the confirmed storage path prefix from the wiki profile, if present."""
+    path = target / "schema/WIKI_PROFILE.md"
+    if not path.is_file():
+        return ""
+    try:
+        document = parse_file(path)
+    except (OSError, UnicodeError, FrontmatterError):
+        return ""
+    value = document.data.get("storage_path_prefix")
+    return str(value).strip() if isinstance(value, str) else ""
+
+
 def repair_index_sources(path: Path) -> bool:
     """Add an empty sources list to an index page when that is the only omission."""
     if not path.is_file():
@@ -480,10 +552,18 @@ def main() -> int:
     registry = load_registry(target / "meta/sources.jsonl", errors)
     cluster_definitions = load_clusters(target / "schema/CLUSTERS.md", errors, warnings)
     concept_definitions = load_concepts(target / "schema/CONCEPTS.md", errors)
+    # Classify what the storage layer and the operating system put here before
+    # judging any of it as wiki content.
+    storage_findings = check_storage_layer(target, errors, warnings)
+    ignorable_paths = storage_findings["ignorable"]
+
     sources_root = target / "sources"
     if sources_root.is_dir():
         for source_entry in sorted(sources_root.rglob("*")):
             relative_entry = source_entry.relative_to(target).as_posix()
+            if relative_entry in ignorable_paths:
+                # Reported once by check_storage_layer; never a smuggled original.
+                continue
             if source_entry.is_symlink():
                 errors.append(
                     f"{relative_entry}: sources/ permits registered Markdown files only; symlinks are not allowed"
@@ -540,7 +620,13 @@ def main() -> int:
         ):
             errors.append(f"Registry source {source_id} has an invalid or missing content_language")
 
-    wiki_files = sorted((target / "wiki").rglob("*.md")) if (target / "wiki").is_dir() else []
+    # A conflict copy carries the frontmatter of the page it was copied from, so
+    # parsing it as a page would report a duplicate id and hide the real cause.
+    wiki_files = [
+        path
+        for path in (sorted((target / "wiki").rglob("*.md")) if (target / "wiki").is_dir() else [])
+        if path.relative_to(target).as_posix() not in storage_findings["excluded"]
+    ]
     page_ids: dict[str, Path] = {}
     page_data: dict[Path, dict[str, Any]] = {}
     page_bodies: dict[Path, str] = {}
@@ -681,6 +767,7 @@ def main() -> int:
         path
         for path in target.rglob("*.md")
         if "meta/history" not in path.relative_to(target).as_posix()
+        and path.relative_to(target).as_posix() not in storage_findings["excluded"]
     ]
     known_targets = {path.relative_to(target).with_suffix("").as_posix() for path in markdown_files}
     inbound: dict[str, int] = {key: 0 for key in known_targets}

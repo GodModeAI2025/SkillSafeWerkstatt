@@ -15,6 +15,8 @@ from pathlib import Path, PurePosixPath
 from typing import Optional
 from uuid import uuid4
 
+import sync_artifacts
+
 from wiki_lock import require_lock
 
 
@@ -106,8 +108,13 @@ def controlled_files(target: Path) -> list[Path]:
         root = target / directory
         if root.is_dir():
             for path in root.rglob("*"):
-                if path.is_file() and not path.name.startswith(".") and not path.name.endswith(".tmp"):
-                    found.add(path)
+                if not path.is_file() or path.name.startswith(".") or path.name.endswith(".tmp"):
+                    continue
+                # Never hash operating-system noise into a release boundary; the
+                # storage layer does not carry it, so its hash cannot be reproduced.
+                if sync_artifacts.is_ignorable(path.relative_to(target).as_posix()):
+                    continue
+                found.add(path)
     for name in META_FILES:
         path = target / name
         if path.is_file():
