@@ -250,6 +250,71 @@ def case_collisions(relatives: Iterable[str]) -> list[dict[str, Any]]:
     ]
 
 
+#: Windows attribute set on a file whose content lives only in the cloud.
+FILE_ATTRIBUTE_OFFLINE = 0x1000
+
+#: Windows attribute meaning any read triggers a download. Absent from the
+#: standard library's `stat` module, so the documented literal is used.
+FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS = 0x400000
+
+
+def is_dataless(path: Path) -> Optional[bool]:
+    """True when reading `path` would pull its content down from the cloud.
+
+    Files On-Demand hydrates transparently on read, and the reparse points it
+    uses are hidden from ordinary applications, so this inspects only metadata
+    and never opens the file. Returns None when the platform gives no usable
+    signal, so callers can tell "not dataless" apart from "cannot tell".
+    """
+    try:
+        status = path.stat()
+    except OSError:
+        return None
+    attributes = getattr(status, "st_file_attributes", None)
+    if attributes is not None:
+        return bool(attributes & (FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS))
+    blocks = getattr(status, "st_blocks", None)
+    if blocks is None:
+        return None
+    # A file that reports a size but occupies no blocks holds no local content.
+    return bool(status.st_size > 0 and blocks == 0)
+
+
+def hydration_report(root: Path, relatives: Iterable[str]) -> dict[str, Any]:
+    """Estimate what verifying these files would download.
+
+    Reading every released file to hash it is the safety property, but on a
+    dehydrated library it also means downloading the whole wiki for one question.
+    This measures the cost first so a caller can ask before paying it.
+    """
+    dataless: list[str] = []
+    dataless_bytes = 0
+    inspected = 0
+    undetermined = 0
+    for relative in sorted(set(relatives)):
+        path = root / relative
+        state = is_dataless(path)
+        if state is None:
+            undetermined += 1
+            continue
+        inspected += 1
+        if state:
+            dataless.append(relative)
+            try:
+                dataless_bytes += path.stat().st_size
+            except OSError:
+                pass
+    return {
+        "inspected": inspected,
+        "undetermined": undetermined,
+        "dataless": len(dataless),
+        "dataless_bytes": dataless_bytes,
+        "share": round(len(dataless) / inspected, 4) if inspected else 0.0,
+        "paths": dataless[:50],
+        "method": "file metadata only; no file was opened, so nothing was hydrated",
+    }
+
+
 #: Path components that indicate a locally synchronized cloud library.
 _SYNC_MARKERS = ("onedrive", "sharepoint")
 

@@ -178,6 +178,33 @@ def count_open_question_items(path: Path) -> int:
     )
 
 
+def persistence_statement(target: Path) -> dict[str, object]:
+    """State what a successful release actually guarantees on this storage.
+
+    A durable local write is not an upload. On a synchronized library the release
+    is published for this machine only until the client finishes transferring it,
+    and no supported interface reports when that happened.
+    """
+    hint = sync_artifacts.storage_hint(target)
+    if not hint["synchronized"]:
+        return {
+            "local": "durable",
+            "remote": "not-applicable",
+            "statement": "The release is written durably to local storage.",
+        }
+    return {
+        "local": "durable",
+        "remote": "unconfirmed",
+        "storage_hint": hint,
+        "statement": (
+            "The release is written durably to local storage. This wiki appears to live in a "
+            "synchronized folder, and no supported interface reports whether the client has "
+            "uploaded it yet, so do not tell others the release is available to them until the "
+            "client shows the folder as fully synchronized."
+        ),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", required=True)
@@ -358,6 +385,9 @@ def main() -> int:
                 "manifest_written_last": True,
                 "lint_valid": bool(lint_result.get("valid")),
                 "stats": lint_result.get("stats", {}),
+                # fsync guarantees this disk, not the storage provider. Say which
+                # one was actually achieved instead of implying both.
+                "persistence": persistence_statement(target),
             },
             ensure_ascii=False,
             indent=2,

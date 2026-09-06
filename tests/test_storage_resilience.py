@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 import tempfile
 import unittest
@@ -171,5 +170,74 @@ class LockHonesty(unittest.TestCase):
                 )
 
 
+
+class HydrationGate(unittest.TestCase):
+    """S2a: measure what verification would download before paying for it."""
+
+    def test_a_local_wiki_needs_no_hydration(self) -> None:
+        with TempWiki() as wiki:
+            state = wiki.verify()
+            self.assertEqual(state["state"], "ready")
+
+    def test_detection_reads_only_metadata(self) -> None:
+        with TempWiki() as wiki:
+            report = sync_artifacts.hydration_report(
+                wiki.path, ["wiki/index.md", "wiki/overview.md"]
+            )
+            self.assertEqual(report["dataless"], 0)
+            self.assertEqual(report["inspected"], 2)
+            self.assertIn("nothing was hydrated", report["method"])
+
+    def test_a_missing_file_is_undetermined_not_dataless(self) -> None:
+        with TempWiki() as wiki:
+            report = sync_artifacts.hydration_report(wiki.path, ["wiki/does-not-exist.md"])
+            self.assertEqual(report["dataless"], 0)
+            self.assertEqual(report["undetermined"], 1)
+
+    def test_a_sparse_file_is_recognised_as_dataless(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sparse = root / "placeholder.md"
+            # A file that reports a size but occupies no blocks is exactly the
+            # shape Files On-Demand leaves behind.
+            with open(sparse, "wb") as handle:
+                handle.truncate(4096)
+            state = sync_artifacts.is_dataless(sparse)
+            if state is None:
+                self.skipTest("this platform exposes no usable dataless signal")
+            self.assertTrue(state, "a size without blocks must count as dataless")
+
+    def test_verification_stops_before_downloading_the_wiki(self) -> None:
+        with TempWiki() as wiki:
+            manifest = json.loads(wiki.read("meta/manifest.json"))
+            victim = manifest["files"][0]["path"]
+            # Replace one released file with a dataless placeholder of equal size.
+            path = wiki.path / victim
+            size = path.stat().st_size
+            path.unlink()
+            with open(path, "wb") as handle:
+                handle.truncate(size)
+            if sync_artifacts.is_dataless(path) is not True:
+                self.skipTest("this platform exposes no usable dataless signal")
+            state = wiki.verify()
+            self.assertEqual(state["state"], "hydration_required")
+            self.assertGreaterEqual(state["hydration"]["dataless"], 1)
+            self.assertIn("offline", state["reason"])
+
+
+class HonestPersistence(unittest.TestCase):
+    """S2c: a durable local write is not an upload."""
+
+    def test_a_local_release_claims_only_local_durability(self) -> None:
+        with TempWiki() as wiki:
+            payload = json.loads(wiki.release("persist-local").stdout)
+            self.assertEqual(payload["persistence"]["remote"], "not-applicable")
+
+    def test_a_synchronized_release_never_claims_the_upload_happened(self) -> None:
+        import release_wiki
+
+        statement = release_wiki.persistence_statement(Path("/Users/x/OneDrive - Contoso/wiki"))
+        self.assertEqual(statement["remote"], "unconfirmed")
+        self.assertIn("do not tell others", statement["statement"])
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -77,7 +77,12 @@ def controlled_paths(target: Path) -> set[str]:
     return paths
 
 
-def verify_snapshot(target: Path, expected_manifest_sha256: str = "") -> dict[str, Any]:
+def verify_snapshot(
+    target: Path,
+    expected_manifest_sha256: str = "",
+    *,
+    allow_hydration: bool = False,
+) -> dict[str, Any]:
     lock_path = target / ".llmwiki.lock"
     if lock_path.exists():
         return result("wiki_busy", reason="A maintenance writer currently owns the wiki lock")
@@ -102,6 +107,27 @@ def verify_snapshot(target: Path, expected_manifest_sha256: str = "") -> dict[st
     files = manifest.get("files")
     if not isinstance(files, list) or not files:
         return result("invalid_wiki", reason="Release manifest contains no files")
+
+    # Reading every file to hash it is the safety property, but on a dehydrated
+    # cloud library it also downloads the whole wiki. Measure first, then decide.
+    manifest_paths = [
+        str(entry.get("path"))
+        for entry in files
+        if isinstance(entry, dict) and isinstance(entry.get("path"), str)
+    ]
+    hydration = sync_artifacts.hydration_report(target, manifest_paths)
+    if hydration["dataless"] and not allow_hydration:
+        return result(
+            "hydration_required",
+            manifest_sha256=first_hash,
+            hydration=hydration,
+            reason=(
+                f"{hydration['dataless']} of {hydration['inspected']} released files hold no "
+                "local content. Verifying them would download roughly "
+                f"{hydration['dataless_bytes']} bytes from the storage provider and fails "
+                "offline. Re-run allowing hydration once that is acceptable."
+            ),
+        )
 
     errors: list[str] = []
     content_drift: list[str] = []
@@ -221,9 +247,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", required=True)
     parser.add_argument("--expect-manifest-sha256", default="")
+    parser.add_argument(
+        "--allow-hydration",
+        action="store_true",
+        help="Verify even when released files must be downloaded from the storage provider",
+    )
     args = parser.parse_args()
     target = Path(args.target).expanduser().resolve()
-    report = verify_snapshot(target, args.expect_manifest_sha256)
+    report = verify_snapshot(
+        target, args.expect_manifest_sha256, allow_hydration=bool(args.allow_hydration)
+    )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return {
         "ready": 0,
@@ -231,6 +264,7 @@ def main() -> int:
         "snapshot_changed": 3,
         "sync_artifacts_present": 5,
         "sync_in_progress": 6,
+        "hydration_required": 7,
     }.get(str(report.get("state")), 4)
 
 
