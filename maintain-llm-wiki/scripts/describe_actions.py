@@ -85,6 +85,17 @@ CATALOG = {
             ],
             writes=True,
         ),
+        action(
+            "export-okf-bundle",
+            "export_okf_bundle.py",
+            "Write one verified release as an OKF v0.2 bundle into a separate destination; "
+            "lossy by construction and never modifies the wiki.",
+            [
+                {"name": "destination", "type": "string", "required": True},
+                {"name": "allow_hydration", "type": "boolean", "required": False},
+            ],
+            writes=False,
+        ),
         action("report-okf", "report_okf.py", "Report optional OKF required/recommended field compatibility without mutation.", [{"name": "include_sources", "type": "boolean", "required": False}], writes=False),
     ],
 }
