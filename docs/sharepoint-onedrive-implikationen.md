@@ -526,7 +526,7 @@ Ablage gemessen werden, bevor die betroffenen Teile umgesetzt werden:
 ## Umsetzungsstand (2026-09-06)
 
 Alle drei Stufen sind umgesetzt. Die Testsuite läuft mit `python3 tests/run_tests.py`;
-150 Tests sind grün, davon 39 für die Speicherthemen.
+150 Tests sind grün, davon 63 für die Speicherthemen (`test_sync_module` 20, `test_sync_artifacts` 21, `test_storage_resilience` 22).
 
 | Befund | Stand | Belegt durch |
 |---|---|---|
