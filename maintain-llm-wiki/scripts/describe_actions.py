@@ -63,6 +63,28 @@ CATALOG = {
             ],
             writes=True,
         ),
+        action(
+            "verify-pages-plan",
+            "verify_pages.py",
+            "Show which pages a confirmation would cover and the tier it would record.",
+            [
+                {"name": "actor", "type": "string", "required": True},
+                {"name": "page", "type": "string[]", "required": True},
+            ],
+            writes=False,
+        ),
+        action(
+            "verify-pages-apply",
+            "verify_pages.py",
+            "Record a confirmed page review after an automatic snapshot; a human actor "
+            "additionally requires explicit user confirmation.",
+            [
+                {"name": "plan_file", "type": "string", "required": True},
+                {"name": "expect_plan_sha256", "type": "string", "required": True},
+                {"name": "user_confirmed_human_review", "type": "boolean", "required": False},
+            ],
+            writes=True,
+        ),
         action("report-okf", "report_okf.py", "Report optional OKF required/recommended field compatibility without mutation.", [{"name": "include_sources", "type": "boolean", "required": False}], writes=False),
     ],
 }

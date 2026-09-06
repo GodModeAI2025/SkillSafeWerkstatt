@@ -298,6 +298,9 @@ def main() -> int:
             "warnings": len(lint_report.get("warnings") or []),
         },
         "reviews": latest_quality_reviews(target / "meta/quality-reviews.jsonl"),
+        # Wiki-wide reviews say when someone last looked; the trust distribution
+        # says how much of the wiki that actually covered.
+        "trust": (lint_report.get("stats") or {}).get("trust", {}),
         "open_question_items": count_open_question_items(target / "meta/questions.md"),
     }
     atomic_write(

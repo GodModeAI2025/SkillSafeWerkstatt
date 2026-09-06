@@ -237,6 +237,26 @@ def assess_quality(target: Path, expected_manifest_sha256: str = "", now: Option
         })
 
     severity_states = {item.get("severity") for item in advisories}
+    # A wiki-wide review says when someone last looked; the per-page tiers say
+    # how much of the wiki that covered. Report both, and never let one stand in
+    # for the other.
+    trust = status.get("trust") if isinstance(status.get("trust"), dict) else {}
+    counts = trust.get("counts") if isinstance(trust.get("counts"), dict) else {}
+    reviewed = safe_int(counts.get("human-reviewed"))
+    total = safe_int(trust.get("pages"))
+    if total and not reviewed:
+        advisories.append(
+            {
+                "severity": "notice",
+                "code": "no_page_was_human_reviewed",
+                "message": f"None of the {total} pages records a human review.",
+                "recommended_action": (
+                    "Answers may still be well sourced. Use the maintenance skill to record "
+                    "reviews on the pages that matter most."
+                ),
+            }
+        )
+
     review_states = {quality_review.get("state"), cleaning_review.get("state")}
     overall = "current"
     if "warning" in severity_states or review_states & {"overdue", "attention-needed", "unknown"}:
@@ -255,6 +275,7 @@ def assess_quality(target: Path, expected_manifest_sha256: str = "", now: Option
             "snapshot": {"state": snapshot_state, "age_days": snapshot_age},
             "open_question_items": safe_int(status.get("open_question_items")),
             "identity": identity,
+            "trust": trust,
             "advisories": advisories,
         },
     }

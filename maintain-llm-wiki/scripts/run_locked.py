@@ -28,6 +28,7 @@ HELPERS = {
     "resolve_conflict_copy.py",
     "restore_wiki.py",
     "snapshot_wiki.py",
+    "verify_pages.py",
 }
 
 

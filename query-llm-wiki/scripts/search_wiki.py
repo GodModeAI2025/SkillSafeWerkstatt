@@ -8,6 +8,8 @@ import json
 import re
 import unicodedata
 from pathlib import Path
+
+import trust_contract
 from typing import Any, Iterable, Optional
 
 from frontmatter_contract import FrontmatterError, parse_document
@@ -340,6 +342,7 @@ def main() -> int:
                 "concepts": as_list(data.get("concepts")),
                 "tags": as_list(data.get("tags")),
                 "score": round(score, 2),
+                "trust_tier": trust_contract.trust_tier(data),
                 "snippet": best_snippet(searchable_body, query_token_set),
                 "claims": relevant_claims(
                     page_claims,

@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 from pathlib import PurePosixPath
-from typing import Any, Iterable
+
+import trust_contract
+from typing import Any, Iterable, Optional
 
 from frontmatter_contract import require_safe_property_name
 
@@ -14,11 +16,13 @@ OPERATORS = {
     "starts_with", "ends_with", "is_empty", "is_not_empty", "is_list", "is_string",
     "in_path",
 }
-VIRTUAL_PROPERTIES = {"__path", "__folder", "__filename", "__extension"}
+VIRTUAL_PROPERTIES = {"__path", "__folder", "__filename", "__extension", "__trust_tier"}
 
 
-def _virtual_value(property_name: str, path: str) -> str:
+def _virtual_value(property_name: str, path: str, data: Optional[dict[str, Any]] = None) -> str:
     pure = PurePosixPath(path)
+    # Derived, never stored: a page records who confirmed it, not its own tier.
+    if property_name == "__trust_tier": return trust_contract.trust_tier(data or {})
     if property_name == "__path": return path
     if property_name == "__folder": return pure.parent.as_posix() if pure.parent.as_posix() != "." else ""
     if property_name == "__filename": return pure.stem
@@ -73,7 +77,7 @@ def matches_condition(data: dict[str, Any], path: str, condition: dict[str, Any]
     property_name = condition["property"]
     virtual = property_name in VIRTUAL_PROPERTIES
     present = virtual or property_name in data
-    value = _virtual_value(property_name, path) if virtual else data.get(property_name)
+    value = _virtual_value(property_name, path, data) if virtual else data.get(property_name)
     operator = condition["operator"]
     if operator == "exists": return present
     if operator == "not_exists": return not present

@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 from design_contract import CLUSTER_COLORS
 
 import sync_artifacts
+import trust_contract
 
 #: Directories a synchronization client writes into alongside the maintainer.
 SYNC_SCANNED_DIRS = ("schema", "sources", "wiki", "graph")
@@ -640,6 +641,12 @@ def main() -> int:
         for key in PAGE_KEYS:
             if key not in data:
                 errors.append(f"{path}: missing page field {key}")
+        # Trust metadata is optional, but must be well formed when present.
+        errors.extend(trust_contract.validate(data, str(path)))
+        if data.get("type") != "index" and not data.get(trust_contract.GENERATED_BY):
+            warnings.append(
+                f"{path}: no {trust_contract.GENERATED_BY}; the page cannot say who produced it"
+            )
         page_id = data.get("id")
         if isinstance(page_id, str):
             if page_id in page_ids:
@@ -855,6 +862,11 @@ def main() -> int:
             "claims": len(all_claims),
             "wiki_language": wiki_language,
             "identity": identity_status,
+            "trust": trust_contract.summary(
+                trust_contract.distribution(
+                    [page_data[path] for path in wiki_files if page_data.get(path)]
+                )
+            ),
         },
     }
     if not args.check_only:
