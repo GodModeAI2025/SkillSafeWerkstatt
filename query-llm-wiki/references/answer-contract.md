@@ -15,6 +15,8 @@ Only a validated root `SOUL.md` is an answer-behavior file, and only its schema-
 
 ## Released-snapshot integrity
 
+Read for orientation in stages. Start at `wiki/index.md`. When it links to a directory index rather than to individual pages, open only the branch indexes that could plausibly hold the answer, then open pages from there. Do not read every directory index by reflex, and do not fall back to walking `wiki/` directly: the staged path exists so orientation does not cost more the larger the wiki is. A branch index carries a short description per page, so it is usually enough to choose the right page without opening several.
+
 Answer only from a snapshot whose `meta/manifest.json` verifies as `lmwiki-release/1`. A query is read-only and does not take the maintenance lock. If `.llmwiki.lock` exists, return `wiki_busy`. Retain the initial manifest SHA-256 and verify it again immediately before answering.
 
 - `ready`: continue and identify the release version in the answer when useful.

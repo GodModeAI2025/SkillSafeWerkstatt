@@ -577,7 +577,7 @@ Dieser Plan ist umgesetzt, mit einer bewusst offenen Ausnahme. Die Testsuite lä
 | Stufe | Stand | Belegt durch |
 |---|---|---|
 | **1 — Vertrauensstufe pro Seite** | umgesetzt | `trust_contract.py`, `verify_pages.py`, `tests/test_trust_tiers.py` (27 Tests) |
-| **2a — Verzeichnis-Indizes** | **offen**, siehe unten | — |
+| **2a — Verzeichnis-Indizes** | umgesetzt, siehe Nachtrag | `navigation.py`, `tests/test_navigation.py` (21 Tests) |
 | **2b — BM25 statt Heuristik** | umgesetzt | `bm25.py`, `tests/test_ranking.py` (14 Tests) |
 | **3 — OKF v0.2 Bericht und Export** | umgesetzt und ausgebaut | `okf_contract.py`, `report_okf.py`, `export_okf_bundle.py`, `tests/test_okf.py` (42 Tests) |
 | **4 — Reichweite** | offen, wie geplant nachgelagert | — |
@@ -595,22 +595,20 @@ vergleichbare Treffer um, unterdrücken aber keinen und erfinden keinen.
 keine URI der zugrundeliegenden Ressource. Das Feld bleibt leer und wird im Bündel als
 nicht füllbar ausgewiesen, statt einen Wert zu konstruieren.
 
-### Warum 2a offen bleibt
+### Wie 2a entschieden wurde
 
-Verzeichnis-Indizes sind der einzige substanzielle Punkt dieses Plans, den ich nicht
-umgesetzt habe. Der Grund ist keine Aufwandsfrage, sondern eine Entscheidung, die dir
-gehört: Generierte Indizes würden **erzeugte Dateien in die kuratierte Wissensschicht
-`wiki/`** legen. Bisher ist alles unter `wiki/` von Menschen oder unter Bestätigung
-kuratiert, während Erzeugtes unter `graph/` liegt. Der Plan schlug die generierte Variante
-vor; das ändert aber die Form jedes bestehenden Wikis und die Bedeutung des
-Verzeichnisses.
+Die Wahl fiel auf **generierte Indizes unter `wiki/`**. Ausschlaggebend war ein Punkt, den
+ich beim ersten Durchgang übersehen hatte: `wiki/index.md` liegt **bereits** dort und ist
+bereits Navigation statt Wissen — mit einem eigenen `type: index`, den der Vertrag schon
+von Quellen, Clustern und Claims ausnimmt. Ein Zweigindex erweitert also eine vorhandene
+Kategorie, statt eine neue zu schaffen. Damit löst sich der Einwand auf, der die
+Entscheidung ursprünglich blockiert hat.
 
-Die Alternative wäre, die Indizes unter `graph/` zu erzeugen — dann helfen sie dem
-Lese-Skill aber nicht beim Token-Verbrauch, was der ganze Zweck war.
+Die Alternative `graph/` scheidet aus, weil sie nicht reduziert, was der Lese-Skill als
+Markdown lädt — genau das war der Zweck.
 
-Beides ist vertretbar. Die Wahl ist eine Produktentscheidung, keine technische, und sie
-ist ohne dich nicht sinnvoll zu treffen. Alles andere ist unabhängig davon lieferbar und
-geliefert.
+Bestehende Wikis brechen nicht: Ein Wurzelindex, der weiterhin jede Seite auflistet,
+bleibt gültig. Neu ist nur, dass er es nicht mehr **muss**.
 
 ---
 
@@ -648,3 +646,40 @@ unbemerkt wieder zusammenwachsen.
 Das ist zugleich der klarste Beleg für den strukturellen Blocker aus Abschnitt 5.1: Die
 Formate sind unterschiedlich streng, und Weg A (flach speichern, beim Export verschachteln)
 funktioniert genau deshalb, weil beide Seiten getrennt bleiben.
+
+---
+
+## Nachtrag: Was die Messung ergab
+
+Der Plan verlangte, den Nutzen zu **messen** statt die 80-Prozent-Angabe des Fremdprojekts
+zu übernehmen. Das war richtig, denn die Messung widerspricht der einfachen Erzählung.
+
+Am Referenzwiki mit acht Seiten in einer Gruppe:
+
+| | Zeichen |
+|---|---:|
+| Wurzelindex, jede Seite aufgeführt | 621 |
+| Wurzelindex, nur Zweige | 292 |
+| ein Zweigindex | 1202 |
+
+**Bei acht Seiten ist die gestufte Orientierung teurer**, nicht billiger — der Zweigindex
+trägt je Seite eine Beschreibung, der flache Wurzelindex nur einen Link. Ein pauschales
+„spart 80 Prozent" wäre hier schlicht falsch.
+
+Was tatsächlich gilt, ist zweierlei, und beides ist als Test festgehalten:
+
+1. **Ein Wurzelindex, der auf Zweige verweist, wächst nicht mit der Seitenzahl.** Flach
+   kostet jede Seite rund 41 Zeichen; bei 500 Seiten sind das über 20 000 Zeichen
+   Orientierung, gestuft bleiben es 292 plus ein Zweig.
+2. **Ein Zweigindex ist deutlich billiger als die Seiten, die er beschreibt** — gemessen
+   unter der Hälfte. Das ist der eigentliche Mechanismus: aus dem Index wählen, statt
+   mehrere Seiten zu öffnen.
+
+Der Umschlagpunkt hängt davon ab, über wie viele Gruppen die Seiten verteilt sind. Bei den
+vier Standardverzeichnissen liegt er grob bei 25 bis 40 Seiten. Darunter ist der flache
+Wurzelindex günstiger.
+
+Eine Designänderung fiel dabei ab: Der Index nennt Status und Vertrauensstufe nur noch,
+wenn sie vom Normalfall abweichen. `active` und `unverified` auf jeder Zeile zu
+wiederholen kostet Tokens, um nichts zu sagen — und macht die eine abgelöste oder
+tatsächlich geprüfte Seite unsichtbar.

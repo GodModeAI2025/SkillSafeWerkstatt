@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 
 from design_contract import CLUSTER_COLORS
 
+import navigation
 import sync_artifacts
 import trust_contract
 
@@ -788,16 +789,41 @@ def main() -> int:
             else:
                 inbound[link] = inbound.get(link, 0) + 1
 
-    index_path = target / "wiki/index.md"
-    index_text = index_path.read_text(encoding="utf-8") if index_path.is_file() else ""
+    # Orientation is staged: the root index may link to a directory index instead
+    # of to every page, so a page counts as listed when the index responsible for
+    # it lists it. Listing it in the root as well stays valid.
+    listing = navigation.listing_indexes(target)
+    index_text_cache: dict[str, str] = {}
+
+    def listed_in(index_relative: str, page_relative: str) -> bool:
+        if index_relative not in index_text_cache:
+            index_file = target / index_relative
+            index_text_cache[index_relative] = (
+                index_file.read_text(encoding="utf-8") if index_file.is_file() else ""
+            )
+        return any(
+            link_target(raw) == page_relative
+            for raw in WIKILINK.findall(index_text_cache[index_relative])
+        )
+
+    root_index = "wiki/index.md"
     for path in wiki_files:
-        if path == index_path:
+        relative_file = path.relative_to(target).as_posix()
+        if path.name == navigation.INDEX_NAME:
             continue
         relative = path.relative_to(target).with_suffix("").as_posix()
-        if not any(link_target(raw) == relative for raw in WIKILINK.findall(index_text)):
-            errors.append(f"wiki/index.md does not list [[{relative}]]")
+        responsible = listing.get(relative_file, root_index)
+        if not listed_in(responsible, relative) and not listed_in(root_index, relative):
+            errors.append(
+                f"{responsible} does not list [[{relative}]]"
+                if responsible != root_index
+                else f"wiki/index.md does not list [[{relative}]]"
+            )
         if inbound.get(relative, 0) == 0:
             warnings.append(f"{path}: orphan page")
+
+    for problem in navigation.stale_indexes(target, datetime.now(timezone.utc).date().isoformat()):
+        errors.append(problem)
 
     graph_path = target / "graph/graph.json"
     if graph_path.is_file():

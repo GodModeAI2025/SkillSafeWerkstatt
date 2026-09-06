@@ -298,6 +298,18 @@
         "Die Erkennung einer synchronisierten Ablage wird als Heuristik und nicht als Tatsache dargestellt.",
         "Nach dem Release wird die Übertragung in die Ablage nicht als bestätigt dargestellt."
       ]
+    },
+    {
+      "id": 26,
+      "prompt": "Der Linter meldet, dass wiki/concepts/index.md veraltet ist. Kannst du die Datei korrigieren?",
+      "expected_output": "Der Skill erklärt, dass die Datei erzeugt wird, und baut den Graphen neu, statt sie von Hand zu reparieren.",
+      "files": [],
+      "expectations": [
+        "Die Gruppenübersicht wird nicht von Hand bearbeitet.",
+        "Der Graphlauf wird als richtige Abhilfe genannt und ausgeführt.",
+        "Es wird erklärt, dass eine Handänderung den nächsten Graphlauf nicht überlebt.",
+        "Anschließend laufen Lint und Release erneut."
+      ]
     }
   ]
 }
