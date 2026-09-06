@@ -556,8 +556,8 @@ Diese Punkte sind nicht aus dem Code ableitbar und gehören dir:
 
 1. **Frontmatter-Weg A oder B** (Abschnitt 5.1). Empfehlung: A für Stufe 1, B bewusst in Stufe 3
    entscheiden.
-2. **Ist der OKF-Export ein Produktziel oder eine Fußnote?** Bei „Produktziel" rückt Stufe 3 vor
-   Stufe 2. Bei „Fußnote" genügt 3a, und 3b entfällt.
+2. ~~**Ist der OKF-Export ein Produktziel oder eine Fußnote?**~~ **Entschieden: Produktziel.**
+   Siehe den Nachtrag unten.
 3. **Soll `stale_after` pro Seite eingeführt werden?** OKF kennt es; SkillSafeWerkstatt regelt
    Aktualität heute global über `QUALITY_POLICY.md`. Seitengenaue Verfallsdaten sind mächtiger,
    aber pflegeintensiver. Nicht in den Stufen enthalten — bewusst offen gelassen.
@@ -579,7 +579,7 @@ Dieser Plan ist umgesetzt, mit einer bewusst offenen Ausnahme. Die Testsuite lä
 | **1 — Vertrauensstufe pro Seite** | umgesetzt | `trust_contract.py`, `verify_pages.py`, `tests/test_trust_tiers.py` (27 Tests) |
 | **2a — Verzeichnis-Indizes** | **offen**, siehe unten | — |
 | **2b — BM25 statt Heuristik** | umgesetzt | `bm25.py`, `tests/test_ranking.py` (14 Tests) |
-| **3 — OKF v0.2 Bericht und Export** | umgesetzt | `okf_contract.py`, `report_okf.py`, `export_okf_bundle.py`, `tests/test_okf.py` (27 Tests) |
+| **3 — OKF v0.2 Bericht und Export** | umgesetzt und ausgebaut | `okf_contract.py`, `report_okf.py`, `export_okf_bundle.py`, `tests/test_okf.py` (42 Tests) |
 | **4 — Reichweite** | offen, wie geplant nachgelagert | — |
 
 ### Was beim Umsetzen anders entschieden wurde
@@ -611,3 +611,40 @@ Lese-Skill aber nicht beim Token-Verbrauch, was der ganze Zweck war.
 Beides ist vertretbar. Die Wahl ist eine Produktentscheidung, keine technische, und sie
 ist ohne dich nicht sinnvoll zu treffen. Alles andere ist unabhängig davon lieferbar und
 geliefert.
+
+---
+
+## Nachtrag: Der OKF-Export ist ein Produktziel
+
+Offene Entscheidung 2 ist beantwortet — der Export ist ein eigenständiges Ziel, keine Fußnote.
+Das ändert den Anspruch: Ein Bündel muss für sich allein brauchbar sein, nicht nur formal
+konform. Daraus ergaben sich drei Lücken, die inzwischen geschlossen sind.
+
+**Das Bündel trug seine Quellen nicht mit.** Die Konzepte verwiesen über `sources` auf
+Quellen-IDs, die Extraktionen selbst blieben im Wiki. Ein solches Bündel hat seine Belegkette
+in dem Moment verloren, in dem es den Rechner verlässt — und Belegbarkeit ist der ganze Zweck
+dieses Systems. Registrierte Extraktionen werden jetzt als `type: Source` mitexportiert, mit
+Originalreferenz, Sprache als Tag und dem extrahierenden Akteur. `--no-sources` wählt das
+bewusst ab.
+
+**OKFs reserviertes `log.md` blieb ungenutzt.** Das Änderungsprotokoll des Wikis füllt es
+jetzt. Zugleich bekam die `README.md` des Bündels eigenes Frontmatter — nach der Spezifikation
+ist jede nicht reservierte Markdown-Datei ein Konzeptdokument, die Bündel-README war also
+bisher eine Ausnahme im eigenen Bündel.
+
+**Der Export prüfte sein Ergebnis nicht.** Er behauptete Konformität, ohne sie zu belegen.
+Jetzt validiert er das geschriebene Bündel gegen die Konformitätsregeln und entfernt es, wenn
+es durchfällt.
+
+Diese Selbstprüfung fand beim ersten Lauf sofort einen echten Fehler in meinem eigenen
+Vorgehen: Ich validierte mit dem Frontmatter-Parser des Wikis. Der lehnt verschachtelte
+Strukturen bewusst ab — genau die, die OKF für `generated`, `verified` und `sources` verlangt.
+**Ein Bündel lässt sich nicht mit dem Parser prüfen, der seinen Inhalt erzeugt hat.** Der
+Export bringt deshalb einen eigenen Leser für die OKF-Teilmenge mit: Skalare, Inline-Mappings,
+Skalarlisten und Listen von Mappings, eine Ebene tief. Ein Test hält fest, dass der
+Wiki-Parser ein Bündel tatsächlich nicht lesen kann — damit die beiden Formate nicht
+unbemerkt wieder zusammenwachsen.
+
+Das ist zugleich der klarste Beleg für den strukturellen Blocker aus Abschnitt 5.1: Die
+Formate sind unterschiedlich streng, und Weg A (flach speichern, beim Export verschachteln)
+funktioniert genau deshalb, weil beide Seiten getrennt bleiben.
