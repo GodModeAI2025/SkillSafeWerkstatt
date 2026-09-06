@@ -208,5 +208,68 @@ class Documentation(unittest.TestCase):
                 self.assertTrue((REPO / target).exists(), target)
 
 
+class SkillOnly(unittest.TestCase):
+    """No server, service, or background process - a deliberate product limit.
+
+    A wiki is a directory of Markdown files; anything that can read it can use
+    it. A server component would add operating, update, and attack surface the
+    format does not need, and would weaken the guarantee that a wiki stays fully
+    readable without running software. This test exists because that kind of
+    boundary erodes quietly.
+    """
+
+    #: Ways a helper could grow a server or long-running component.
+    FORBIDDEN_IMPORTS = {
+        "socketserver",
+        "http",
+        "asyncio",
+        "threading",
+        "multiprocessing",
+        "wsgiref",
+        "xmlrpc",
+        "ftplib",
+        "smtpd",
+    }
+
+    def test_no_helper_starts_a_server_or_background_process(self) -> None:
+        for skill in SKILLS:
+            for path in sorted((REPO / skill / "scripts").glob("*.py")):
+                with self.subTest(path=f"{skill}/{path.name}"):
+                    offending = local_imports(path) & self.FORBIDDEN_IMPORTS
+                    self.assertEqual(
+                        offending,
+                        set(),
+                        f"{path.name} imports {sorted(offending)}; this distribution is "
+                        f"skill-only and ships no server or background process",
+                    )
+
+    def test_no_helper_opens_a_listening_socket(self) -> None:
+        import re
+
+        listener = re.compile(r"\.(?:listen|bind)\s*\(|serve_forever|socket\.socket")
+        for skill in SKILLS:
+            for path in sorted((REPO / skill / "scripts").glob("*.py")):
+                with self.subTest(path=f"{skill}/{path.name}"):
+                    self.assertIsNone(
+                        listener.search(path.read_text(encoding="utf-8")),
+                        f"{path.name} appears to open a socket; the distribution is skill-only",
+                    )
+
+    def test_no_skill_advertises_an_mcp_endpoint(self) -> None:
+        for skill in SKILLS:
+            with self.subTest(skill=skill):
+                text = (REPO / skill / "SKILL.md").read_text(encoding="utf-8").lower()
+                self.assertNotIn(
+                    "mcp",
+                    text,
+                    "the skills must not offer an endpoint this distribution does not ship",
+                )
+
+    def test_the_readme_states_the_boundary(self) -> None:
+        readme = (REPO / "README.md").read_text(encoding="utf-8")
+        self.assertIn("Skill-only", readme)
+        self.assertIn("Keine Erweiterung führt einen Server", readme)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
