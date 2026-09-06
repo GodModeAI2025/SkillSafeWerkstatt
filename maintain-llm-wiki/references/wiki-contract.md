@@ -58,6 +58,36 @@ Release requires the current private token. A mismatch means another run owns th
 
 This is a cooperative filesystem lock: it is strong for compliant agents that observe the same filesystem state. A OneDrive or SharePoint synchronization client is not a distributed locking service; two offline or not-yet-synchronized machines can temporarily acquire independent local copies. Workflows requiring strict cross-machine exclusion need a central coordination service rather than file synchronization alone.
 
+## Synchronized storage
+
+A OneDrive or SharePoint client is a writer on the wiki directory, not only a transport. It creates files the wiki never authored and defers writes for an unbounded time. Both are inside this contract's concern even though the storage itself is not.
+
+`scripts/sync_artifacts.py` is the single classifier every other helper uses, so the linter, the release, and both verifiers can never disagree about the same path. It classifies only; it never deletes, moves, or renames anything.
+
+- A **conflict copy** is content that diverged across devices. The client never merges, so both versions survive and one is renamed after the device. Reading stops until a human decides, because the copy may hold work nobody else has. Resolve it with `scripts/resolve_conflict_copy.py` in the usual plan/apply shape: the plan shows both sides with hashes, sizes, and modification times, an identical copy is recommended for removal, a diverged one is left as the user's decision, and apply snapshots first. Never delete a conflict copy without confirmation.
+- An **operating-system artifact** such as `.DS_Store`, `Thumbs.db`, `desktop.ini`, or a `~$` file carries nothing. It is reported and otherwise ignored everywhere: it never blocks a reader, never fails a lint, and never enters a release manifest. Opening `sources/` in Finder must not take a wiki offline.
+- A **reserved name or character** is a file the storage layer will refuse: the names `.lock`, `CON`, `PRN`, `AUX`, `NUL`, `COM0`-`COM9`, `LPT0`-`LPT9`, and `desktop.ini`, any name starting with `~$`, `_vti_` anywhere in a name, the characters `" * : < > ? / \ |`, a leading or trailing space, and a trailing period. These are lint errors, because the file would silently never reach the storage.
+
+Two further limits are checked when `schema/WIKI_PROFILE.md` records a `storage_path_prefix`: the 400-character decoded path budget as an error, and the default Windows limit of 260 characters as a warning. Paths that differ only in case are an error regardless, because SharePoint preserves case without distinguishing it and cannot hold both.
+
+Verification separates storage conditions from release damage. `sync_artifacts_present` means the release is intact but a conflicting copy exists. `sync_in_progress` means the manifest arrived before the content it describes, which waiting resolves and repair would not. `hydration_required` means released files hold no local content, so verifying them would download the wiki and would fail offline; the check itself reads only metadata and never triggers a download.
+
+Persistence is reported honestly. `fsync` makes a write durable on this disk, not uploaded. On a folder that appears synchronized, a successful release reports its remote state as unconfirmed and says not to tell others the release is available to them until the client shows the folder as synchronized. The storage detection is a heuristic on visible path names and the client's environment variables; no supported interface reports a sync client's state, so it is never presented as a fact.
+
+The maintenance lock remains cooperative and single-filesystem. Two devices reconciled later can each hold a local lock, so the lock cannot exclude cross-device maintenance. Acquiring or inspecting a lock on a synchronized folder states this, and a lock written by another machine is disclosed as such: a release can arrive late, and age alone never proves a lock is stale.
+
+## Trust tiers
+
+A quality review records when someone last examined the wiki. It cannot record which pages that covered, so pages carry their own confirmation using the Open Knowledge Format actor convention.
+
+Four optional flat frontmatter fields hold it: `generated_by` and `generated_at` for who produced the page, `verified_by` and `verified_at` for who confirmed it. An actor is `agent/<name>`, `human:<id>`, or `process:<id>`. The fields stay flat because the frontmatter subset rejects nested mappings; the OKF export composes the nested `{ by, at }` form from them.
+
+The tier is derived, never stored. No confirmation is `unverified`, a non-human actor is `machine-confirmed`, and only a human actor is `human-reviewed`. Metadata that does not parse counts as no confirmation, so malformed input can never raise a tier.
+
+Record a confirmation with `scripts/verify_pages.py` as a hash-bound plan/apply transaction with an automatic snapshot and zero writes on a stale plan. A `human:` actor additionally requires `--user-confirmed-human-review`, and that flag may be passed only after the named person actually confirmed the review. Never mark agent output as read by a person. An index carries no assertions and cannot be confirmed.
+
+A tier states who confirmed a page and when. It does not assert that the page is correct, complete, or current, and it never replaces claim evidence. The distribution is published in `meta/quality-status.json` so a reader can say how much of a wiki a review actually covered.
+
 ## Release contract
 
 The maintenance lock protects writers. Readers do not take that exclusive lock; they consume only a complete released snapshot.
@@ -310,7 +340,15 @@ Pages reference zero or more known IDs through a `concepts` frontmatter list. Th
 
 ## Optional OKF compatibility
 
-Open Knowledge Format compatibility is an optional interoperability view, not the native SkillSafeWerkstatt contract. A report checks a non-empty `type` and reports missing recommended `title`, `description`, `resource`, `tags`, and `timestamp` fields without mutation. It may propose copying an existing `updated` value to `timestamp`; it never fabricates a title, description, resource, or mapping. Unknown SkillSafeWerkstatt properties remain preserved. OKF reporting does not weaken claim evidence, source registration, cluster/concept separation, language policy, quality reviews, history, locking, or release verification.
+Open Knowledge Format v0.2 compatibility is an interoperability view, not the native contract. Two operations exist and neither changes the wiki.
+
+`scripts/report_okf.py` reports conformance without mutation. It checks the single required field `type`, the recommended `title`, `description`, `resource`, and `tags`, and the v0.2 additions `status`, `stale_after`, `generated`, and `verified`. `timestamp` is not a field of this specification and is no longer checked. Suggestions remain proposals; titles, descriptions, resources, and mappings are never invented. Unknown SkillSafeWerkstatt properties are preserved.
+
+`scripts/export_okf_bundle.py` writes one verified release as a conformant bundle into a separately chosen destination. It runs without a maintenance lock on purpose: an active lock means maintenance is in flight, and a half-finished state must not be exported at all. The destination must be empty and must lie outside the wiki; a failure removes it so no partial bundle can misrepresent a release.
+
+The export is lossy by construction, and every bundle carries a `README.md` naming what did not come with it: claim blocks and their `source_id@locator` evidence, the release manifest and its hash boundary, snapshots, `SOUL.md`, controlled concept worlds, navigation clusters and the graph, and the strict frontmatter subset. Status mapping is explicit: `active` becomes `stable`, `superseded` becomes `deprecated`, `draft` stays `draft`, and `disputed` has no OKF equivalent, so it exports as `draft` with the loss recorded rather than performed silently.
+
+OKF reporting and export never weaken claim evidence, source registration, cluster and concept separation, language policy, quality reviews, history, locking, or release verification.
 
 ## Curation rules
 

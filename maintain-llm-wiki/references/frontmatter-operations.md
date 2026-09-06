@@ -104,8 +104,14 @@ List snapshots internally with `restore_wiki.py list`. To restore, first run `re
 
 Restore refuses stale current files or changed snapshot content and creates a recovery snapshot of the pre-restore state. It never deletes a current file merely because it was absent from the older snapshot. A successful restore is an unreleased maintained state: rebuild affected generated artifacts, lint, publish one appropriate release, verify it, and only then release the writer lock.
 
-## Self-description and OKF
+## Self-description, trust, and OKF
 
-Run `scripts/describe_actions.py` when a host or agent needs the complete machine-readable action surface. The catalog distinguishes reads and writes, preview support, snapshot behavior, destructive effects, confirmation requirements, selector grammar, and parameters. The catalog is descriptive; it grants no permission and does not replace the natural-language skill workflow.
+`scripts/describe_actions.py` returns the complete machine-readable maintenance surface. It describes capability and grants no authority; confirmation and safety rules are unchanged by it.
 
-Run locked `scripts/report_okf.py` only when the user asks about interoperability or an OKF migration. The `lmwiki-okf-compatibility/1` result checks the non-empty `type` requirement and reports missing recommended `title`, `description`, `resource`, `tags`, and `timestamp` fields. Suggestions remain proposals: `updated` may be proposed for `timestamp`, but titles, descriptions, resources, and mappings are never invented. Unknown SkillSafeWerkstatt fields are preserved. OKF reporting never replaces claims, source locators, clusters, controlled concepts, quality policy, history, or release integrity.
+`scripts/verify_pages.py` records who confirmed individual pages. `plan` shows the pages, the tier before and after, and the file hashes; `apply` requires that plan hash, snapshots first, and performs zero writes on a stale plan. A `human:` actor additionally requires `--user-confirmed-human-review`, which may be passed only after the named person confirmed the review. An index cannot be confirmed because it carries no assertions.
+
+`scripts/resolve_conflict_copy.py` resolves what a synchronization client left behind. `plan` shows each conflict copy beside its original with hashes, sizes, and modification times and changes nothing; an identical copy is recommended for removal and a diverged one is left to the user. `apply` takes one decision per copy - `keep-original`, `keep-copy`, or `keep-both` - snapshots first, and renames a kept copy to a name the storage layer accepts.
+
+Run locked `scripts/report_okf.py` only when the user asks about interoperability or an OKF migration. The `lmwiki-okf-compatibility/2` result checks the required `type`, the recommended `title`, `description`, `resource`, and `tags`, and the v0.2 `status`, `stale_after`, `generated`, and `verified`. `timestamp` is not an OKF field and is no longer checked. Suggestions remain proposals; nothing is invented. Unknown SkillSafeWerkstatt fields are preserved.
+
+`scripts/export_okf_bundle.py` writes a verified release as an OKF v0.2 bundle into an empty destination outside the wiki. It takes no lock token by design. The bundle documents its own losses; OKF never replaces claims, source locators, clusters, controlled concepts, quality policy, history, or release integrity.

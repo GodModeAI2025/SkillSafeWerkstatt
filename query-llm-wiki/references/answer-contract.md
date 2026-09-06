@@ -21,6 +21,9 @@ Answer only from a snapshot whose `meta/manifest.json` verifies as `lmwiki-relea
 - `wiki_busy`: do not read partially maintained content; ask the user to retry after maintenance.
 - `snapshot_changed`: discard the draft and restart from the new release.
 - `invalid_wiki`: do not answer from unverified files; report the release verification failure.
+- `sync_artifacts_present`: a synchronization client kept a conflicting copy beside a released file. The release itself is intact, but two devices hold different content, so do not answer. Name the file and say the maintenance skill resolves it.
+- `sync_in_progress`: the manifest is newer than the files it describes, which is a transfer still running rather than damage. Do not answer, and say that retrying shortly is the remedy; never describe this as a corrupt wiki.
+- `hydration_required`: released files hold no local content because the storage keeps them in the cloud. Verifying them would download the wiki and fails offline. Report the file count and estimated volume, and ask before proceeding rather than starting the download.
 
 ## Read-only quality status
 
@@ -28,7 +31,9 @@ After integrity verification, assess `meta/quality-status.json` against its rele
 
 The quality states `current`, `due-soon`, `overdue`, `attention-needed`, and `unknown` are advisories. They do not invalidate an otherwise verified release and do not by themselves prevent a grounded answer. Missing quality files in an older valid release produce `unknown`; explain that a maintenance release is needed to establish the schedule. Integrity states such as `invalid_wiki`, `wiki_busy`, or `snapshot_changed` remain blocking.
 
-End every answer with one short quality line, for example `Wiki-Qualität: aktuell` or `Wiki-Qualität: Prüfung überfällig; Pflege-Skill empfohlen.` Name quality review, cleaning review, frozen/released snapshot age, or open questions when material. Never write a timestamp, mark a review complete, clean content, or acquire the maintenance lock. The age of a release says nothing by itself about whether its facts are obsolete; it is a prompt to inspect applicability and newer releases.
+End every answer with one short quality line, for example `Wiki-Qualität: aktuell` or `Wiki-Qualität: Prüfung überfällig; Pflege-Skill empfohlen.` Name quality review, cleaning review, frozen/released snapshot age, or open questions when material.
+
+State the trust tier of the pages an answer actually rests on whenever it is not `human-reviewed`. A wiki-wide review says when someone last looked at the wiki; it never says which pages that covered. The tiers are `unverified` (nobody recorded a confirmation), `machine-confirmed` (an agent or automated process confirmed it), and `human-reviewed` (a named person did). A tier records who confirmed a page and when. It does not make the page correct, complete, or current, and it never substitutes for the claim evidence: a well-sourced unverified page can be a better answer than a reviewed one with weak sources. Say `Vertrauensstufe: ungeprüft` or the equivalent in the answer language when the supporting pages carry no human confirmation, and never imply that the reading skill itself reviewed anything. Never write a timestamp, mark a review complete, clean content, or acquire the maintenance lock. The age of a release says nothing by itself about whether its facts are obsolete; it is a prompt to inspect applicability and newer releases.
 
 ## SOUL.md behavior
 
