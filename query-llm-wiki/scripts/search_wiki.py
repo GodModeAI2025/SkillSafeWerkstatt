@@ -9,6 +9,7 @@ import re
 import unicodedata
 from pathlib import Path
 
+import bm25
 import trust_contract
 from typing import Any, Iterable, Optional
 
@@ -206,52 +207,17 @@ def best_snippet(body: str, query_tokens: set[str]) -> str:
     return snippet if len(snippet) <= 320 else snippet[:317].rstrip() + "..."
 
 
-def score_document(
-    query: str,
-    query_tokens: set[str],
-    data: dict[str, Any],
-    body: str,
-    matched_concepts: set[str],
-) -> float:
-    title = str(data.get("title") or "")
-    aliases = " ".join(as_list(data.get("aliases")))
-    description = str(data.get("description") or data.get("extraction_notes") or "")
-    headings = " ".join(HEADING.findall(body))
-    fields = {
-        "title": (tokens(title, False), 10.0),
-        "aliases": (tokens(aliases, False), 7.0),
-        "headings": (tokens(headings, False), 5.0),
-        "description": (tokens(description, False), 4.0),
-        "body": (tokens(body, False), 1.0),
+def document_fields(data: dict[str, Any], body: str) -> dict[str, list[str]]:
+    """Split one document into the weighted fields BM25F scores over."""
+    return {
+        "title": tokens(str(data.get("title") or ""), False),
+        "aliases": tokens(" ".join(as_list(data.get("aliases"))), False),
+        "headings": tokens(" ".join(HEADING.findall(body)), False),
+        "description": tokens(
+            str(data.get("description") or data.get("extraction_notes") or ""), False
+        ),
+        "body": tokens(body, False),
     }
-    found: set[str] = set()
-    score = 0.0
-    for field_tokens, weight in fields.values():
-        counts: dict[str, int] = {}
-        for value in field_tokens:
-            counts[value] = counts.get(value, 0) + 1
-        for query_token in query_tokens:
-            count = min(counts.get(query_token, 0), 3)
-            if count:
-                found.add(query_token)
-                score += weight * count
-    if query_tokens:
-        score += 6.0 * len(found) / len(query_tokens)
-    query_phrase = " ".join(tokens(query, False))
-    if query_phrase and query_phrase in " ".join(tokens(body, False)):
-        score += 8.0
-    document_concepts = set(as_list(data.get("concepts")))
-    score += 12.0 * len(document_concepts & matched_concepts)
-    if score <= 0:
-        return 0.0
-    status = str(data.get("status") or "")
-    if status == "active":
-        score += 3.0
-    elif status == "draft":
-        score -= 0.5
-    elif status in {"superseded", "withdrawn"}:
-        score -= 2.0
-    return max(score, 0.0)
 
 
 def facets(results: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
@@ -301,6 +267,10 @@ def main() -> int:
     searched = 0
     filtered_out = 0
     parser_errors: list[dict[str, str]] = []
+
+    # BM25 needs corpus-wide term rarity and average field lengths, so every
+    # candidate is collected before any of them is scored.
+    candidates: list[dict[str, Any]] = []
     for path in candidate_paths(target, args.include_sources, args.include_history):
         searched += 1
         text = path.read_text(encoding="utf-8")
@@ -313,20 +283,43 @@ def main() -> int:
         if not matches_selector(data, relative, selector):
             filtered_out += 1
             continue
-        page_claims = claims_in(body)
         searchable_body = visible_body(body)
         heading = H1.search(searchable_body)
         title = str(data.get("title") or (heading.group(1).strip() if heading else path.stem))
-        score = score_document(
-            args.query,
+        candidates.append(
+            {
+                "path": path,
+                "relative": relative,
+                "data": data,
+                "title": title,
+                "body": searchable_body,
+                "claims": claims_in(body),
+                "fields": document_fields({**data, "title": title}, searchable_body),
+            }
+        )
+
+    corpus = bm25.Corpus(candidate["fields"] for candidate in candidates)
+    query_phrase = " ".join(tokens(args.query, False))
+    matched_concept_set = set(matched_concepts)
+
+    for candidate in candidates:
+        data = candidate["data"]
+        relative = candidate["relative"]
+        path = candidate["path"]
+        title = candidate["title"]
+        searchable_body = candidate["body"]
+        page_claims = candidate["claims"]
+        document_concepts = set(as_list(data.get("concepts")))
+        score = bm25.score(
+            corpus,
+            candidate["fields"],
             query_token_set,
-            {**data, "title": title},
-            searchable_body,
-            set(matched_concepts),
+            phrase_match=bool(query_phrase and query_phrase in " ".join(tokens(searchable_body, False))),
+            concept_overlap=len(document_concepts & matched_concept_set),
+            status=str(data.get("status") or ""),
         )
         if score <= 0:
             continue
-        document_concepts = set(as_list(data.get("concepts")))
         results.append(
             {
                 "path": relative,
