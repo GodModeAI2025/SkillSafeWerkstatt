@@ -10,6 +10,8 @@ import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
+
+import portable_io
 from typing import Any, Iterable, Optional
 from uuid import uuid4
 
@@ -126,7 +128,7 @@ def create_snapshot(
         temporary.mkdir(parents=True, exist_ok=True)
         (temporary / "snapshot.json").write_text(json.dumps(snapshot_record, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         destination.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(str(temporary), str(destination))
+        portable_io.replace_with_retry(temporary, destination)
     finally:
         if temporary.exists():
             shutil.rmtree(temporary)

@@ -11,6 +11,8 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+import portable_io
 from typing import Any
 from uuid import uuid4
 
@@ -23,11 +25,37 @@ class InitializationFailure(RuntimeError):
         self.stage = stage
 
 
+def failure_detail(completed: "subprocess.CompletedProcess[str]") -> str:
+    """Extract a usable reason from a failed helper.
+
+    The helpers report as JSON, so taking the last output line yields "}" and
+    tells a caller nothing. Prefer the structured errors the helper reported,
+    then a plain-text message, and only then the raw tail.
+    """
+    try:
+        payload = json.loads(completed.stdout)
+    except (json.JSONDecodeError, TypeError):
+        payload = None
+    if isinstance(payload, dict):
+        errors = payload.get("errors")
+        if isinstance(errors, list) and errors:
+            shown = "; ".join(str(item) for item in errors[:5])
+            remainder = len(errors) - 5
+            return f"{shown}{f' (and {remainder} more)' if remainder > 0 else ''}"
+        for key in ("reason", "error", "state"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    text = (completed.stderr or "").strip()
+    if text:
+        return text.splitlines()[-1]
+    return "helper failed without a reported reason"
+
+
 def run_json(stage: str, command: list[str]) -> dict[str, Any]:
     completed = subprocess.run(command, capture_output=True, text=True, check=False)
     if completed.returncode != 0:
-        detail = (completed.stderr or completed.stdout or "helper failed").strip().splitlines()
-        raise InitializationFailure(stage, detail[-1] if detail else "helper failed")
+        raise InitializationFailure(stage, failure_detail(completed))
     try:
         value = json.loads(completed.stdout)
     except json.JSONDecodeError as exc:
@@ -46,7 +74,7 @@ def atomic_copy(source: Path, destination: Path) -> None:
             shutil.copyfileobj(input_handle, output_handle)
             output_handle.flush()
             os.fsync(output_handle.fileno())
-        os.replace(str(temporary), str(destination))
+        portable_io.replace_with_retry(temporary, destination)
     finally:
         if temporary.exists():
             temporary.unlink()
@@ -113,6 +141,11 @@ def main() -> int:
     parser.add_argument("--topic", required=True, help="Short topic and scope boundary")
     parser.add_argument("--wiki-language", required=True)
     parser.add_argument("--wiki-language-label")
+    parser.add_argument(
+        "--storage-path-prefix",
+        default="",
+        help="Decoded OneDrive or SharePoint library path; enables the storage path checks",
+    )
     parser.add_argument("--quality-review-days", type=int, default=30)
     parser.add_argument("--cleaning-review-days", type=int, default=90)
     parser.add_argument("--snapshot-warning-days", type=int, default=60)
@@ -158,6 +191,8 @@ def main() -> int:
                 init_command.extend(("--title", args.title))
             if args.wiki_language_label:
                 init_command.extend(("--wiki-language-label", args.wiki_language_label))
+            if args.storage_path_prefix:
+                init_command.extend(("--storage-path-prefix", args.storage_path_prefix))
             initialized = run_json("initialize", init_command)
             graph = run_json(
                 "graph",

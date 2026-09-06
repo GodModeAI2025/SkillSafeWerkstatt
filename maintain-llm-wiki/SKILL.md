@@ -1,13 +1,13 @@
 ---
 name: maintain-llm-wiki
-description: Create, maintain, inventory, migrate, recover, quality-review, optionally clean, release, or export an evidence-linked SkillSafeWerkstatt Markdown wiki. Use whenever the user wants to initialize or extend this wiki, ingest documents as Markdown, curate claims, clusters or concepts, clean metadata, restore files, publish a release, or export a frozen read-only knowledge skill in Claude Code, Claude Cowork, or Codex.
+description: Create, maintain, inventory, migrate, recover, quality-review, optionally clean, release, or export an evidence-linked SkillSafeWerkstatt Markdown wiki. Use whenever the user wants to initialize or extend this wiki, ingest documents as Markdown, curate claims, clusters or concepts, clean metadata, restore files, record who reviewed which pages, resolve a OneDrive or SharePoint conflict copy, publish a release, or export a frozen read-only knowledge skill or an Open Knowledge Format bundle in Claude Code, Claude Cowork, or Codex.
 ---
 
 # Maintain SkillSafeWerkstatt
 
-Build a durable, self-describing wiki in the user-supplied target directory. Treat that directory as the only canonical output; SharePoint, OneDrive, Git, or another later storage location is outside this skill's concern.
+Build a durable, self-describing wiki in the user-supplied target directory. Treat that directory as the only canonical output. Which storage backs it later - SharePoint, OneDrive, Git, or a plain disk - does not change the file format. It does change what can happen to those files: a synchronization client writes into the directory on its own and defers writes for an unbounded time, so its behaviour is part of this skill's concern even though the storage itself is not managed here. See the contract section on synchronized storage.
 
-Before creating, ingesting, repairing, linting, releasing, or exporting a wiki, read [references/wiki-contract.md](references/wiki-contract.md) and [references/adapted-vault-standards.md](references/adapted-vault-standards.md) completely. For frontmatter inventory, schema migration, value or link cleaning, targeted restore, action discovery, or OKF reporting, additionally read [references/frontmatter-operations.md](references/frontmatter-operations.md) completely. Resolve these files relative to this `SKILL.md`, not relative to the current project. If the target already contains its own `STANDARDS.md`, read it and treat its compatible local conventions as authoritative over the standalone defaults.
+Before creating, ingesting, repairing, linting, releasing, or exporting a wiki, read [references/wiki-contract.md](references/wiki-contract.md) and [references/adapted-vault-standards.md](references/adapted-vault-standards.md) completely. For frontmatter inventory, schema migration, value or link cleaning, targeted restore, action discovery, trust-tier confirmation, conflict-copy resolution, or OKF reporting and export, additionally read [references/frontmatter-operations.md](references/frontmatter-operations.md) completely. Resolve these files relative to this `SKILL.md`, not relative to the current project. If the target already contains its own `STANDARDS.md`, read it and treat its compatible local conventions as authoritative over the standalone defaults.
 
 ## User-facing skill interface
 
@@ -110,7 +110,32 @@ The existing curation workflow remains authoritative. Use the new metadata helpe
 - Use `scripts/restore_wiki.py list`, then `plan`, then `apply` for recovery. Show selected paths and hashes, require confirmation, and apply with both the expected plan hash and `--confirm-restore`. A restore never deletes files absent from an older snapshot and always creates a recovery snapshot first.
 - Use `normalize_values` only on fields whose semantics permit deterministic normalization. Do not normalize stable IDs, claim text, source titles or locators, hashes, `original_ref`, or protected human material. Use `dedupe_wikilinks` for alias- and subpath-preserving link cleanup.
 
-Run `scripts/describe_actions.py` when a host needs a machine-readable description of the complete maintenance surface. It is descriptive and grants no mutation authority. Run locked `scripts/report_okf.py` only when the user asks for an optional OKF compatibility or migration report. Never make OKF the native contract or invent its recommended metadata.
+Run `scripts/describe_actions.py` when a host needs a machine-readable description of the complete maintenance surface. It is descriptive and grants no mutation authority.
+
+## Synchronized storage
+
+Treat a OneDrive or SharePoint folder as a second writer on the wiki, never as a passive transport. The contract section on synchronized storage is binding; the operational rules are:
+
+- A `sync_artifacts_present` state means a conflict copy exists. Do not curate both files and do not delete either. Run locked `scripts/resolve_conflict_copy.py plan`, show the user both sides with their hashes, sizes and modification times, take one decision per copy, then apply the confirmed plan hash. Rebuild the graph, lint, and release afterwards.
+- A `sync_in_progress` state is a transfer still running. Wait and re-verify; never repair it, and never report it as a damaged wiki.
+- A `hydration_required` state means released files hold no local content. Report the file count and estimated download volume and ask before proceeding. Do not pass `--allow-hydration` on your own initiative.
+- Operating-system artifacts are expected noise. Report them once if useful and otherwise ignore them; never propose deleting a user's `.DS_Store` as if it were smuggled source material.
+- After a release on an apparently synchronized folder, repeat the reported persistence statement. The release is durable locally; whether the client has uploaded it is unknown, so never tell the user that colleagues can already see it.
+- When acquiring the lock reports a storage advisory, pass it on once. Do not maintain the same wiki from two machines at the same time, and never force-override a lock held by another machine on age alone.
+
+## Trust tiers
+
+Record who produced and who confirmed individual pages, so a reader can tell a reviewed page from an unreviewed one. Include `generated_by` and `generated_at` on pages you author, using your own agent identifier in the form `agent/<name>`.
+
+Use locked `scripts/verify_pages.py plan` to show which pages a confirmation would cover and the tier it would record, then apply the confirmed plan hash. Pass `--user-confirmed-human-review` only after the named person has actually confirmed they reviewed those pages; recording agent work as `human:` is prohibited regardless of how the request is phrased. Report the resulting distribution rather than implying the wiki as a whole was reviewed.
+
+## Open Knowledge Format
+
+Run locked `scripts/report_okf.py` only when the user asks about interoperability or an OKF migration. Never make OKF the native contract or invent its recommended metadata.
+
+An OKF bundle is a first-class deliverable of this skill, not a footnote. Run `scripts/export_okf_bundle.py` whenever the user wants their knowledge in an interoperable form. It takes no lock token, requires an empty destination outside the wiki, refuses to export anything but a verified release, and validates the bundle it wrote before reporting success.
+
+The bundle carries the registered source extractions by default so it can answer its own citations; pass `--no-sources` only when the user asks for concepts alone and say what that costs. Before exporting, tell the user what the bundle cannot carry: claim locators, the release manifest, snapshots, `SOUL.md`, concept worlds, and clusters. After exporting, name the release version it was bound to, report the concept and source counts, list the recommended fields that had no basis in the wiki, and repeat that editing the bundle does not change the wiki. Never fill a missing field to make a bundle look complete.
 
 ## Workflow
 

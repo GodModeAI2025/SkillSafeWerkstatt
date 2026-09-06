@@ -45,6 +45,57 @@ CATALOG = {
         action("release", "release_wiki.py", "Idempotently lint, version, record quality status, hash controlled files, and publish the manifest last.", [{"name": "bump", "type": "patch | minor | major", "required": True}, {"name": "operation_id", "type": "portable idempotency key", "required": True}, {"name": "expect_current_version", "type": "semantic version", "required": True}], writes=True),
         action("verify-release", "verify_release.py", "Verify a released snapshot read-only.", [{"name": "expect_manifest_sha256", "type": "sha256", "required": False}], writes=False),
         action("export-frozen-skill", "export_wiki_skill.py", "Export one verified release as an immutable knowledge-only skill.", [{"name": "skill_name", "type": "lowercase-hyphenated", "required": True}], writes=False),
+        action(
+            "resolve-conflict-copy-plan",
+            "resolve_conflict_copy.py",
+            "Report synchronization conflict copies with both sides, without changing anything.",
+            [],
+            writes=False,
+        ),
+        action(
+            "resolve-conflict-copy-apply",
+            "resolve_conflict_copy.py",
+            "Apply one confirmed, hash-bound conflict resolution after an automatic snapshot.",
+            [
+                {"name": "plan_file", "type": "string", "required": True},
+                {"name": "expect_plan_sha256", "type": "string", "required": True},
+                {"name": "decision", "type": "string[]", "required": True},
+            ],
+            writes=True,
+        ),
+        action(
+            "verify-pages-plan",
+            "verify_pages.py",
+            "Show which pages a confirmation would cover and the tier it would record.",
+            [
+                {"name": "actor", "type": "string", "required": True},
+                {"name": "page", "type": "string[]", "required": True},
+            ],
+            writes=False,
+        ),
+        action(
+            "verify-pages-apply",
+            "verify_pages.py",
+            "Record a confirmed page review after an automatic snapshot; a human actor "
+            "additionally requires explicit user confirmation.",
+            [
+                {"name": "plan_file", "type": "string", "required": True},
+                {"name": "expect_plan_sha256", "type": "string", "required": True},
+                {"name": "user_confirmed_human_review", "type": "boolean", "required": False},
+            ],
+            writes=True,
+        ),
+        action(
+            "export-okf-bundle",
+            "export_okf_bundle.py",
+            "Write one verified release as an OKF v0.2 bundle into a separate destination; "
+            "lossy by construction and never modifies the wiki.",
+            [
+                {"name": "destination", "type": "string", "required": True},
+                {"name": "allow_hydration", "type": "boolean", "required": False},
+            ],
+            writes=False,
+        ),
         action("report-okf", "report_okf.py", "Report optional OKF required/recommended field compatibility without mutation.", [{"name": "include_sources", "type": "boolean", "required": False}], writes=False),
     ],
 }

@@ -25,8 +25,10 @@ HELPERS = {
     "register_source.py",
     "release_wiki.py",
     "report_okf.py",
+    "resolve_conflict_copy.py",
     "restore_wiki.py",
     "snapshot_wiki.py",
+    "verify_pages.py",
 }
 
 

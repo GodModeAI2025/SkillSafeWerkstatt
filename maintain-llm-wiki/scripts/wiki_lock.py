@@ -12,6 +12,9 @@ import secrets
 import socket
 from datetime import datetime, timezone
 from pathlib import Path
+
+import portable_io
+import sync_artifacts
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -83,7 +86,7 @@ def replace_atomically(path: Path, record: dict[str, Any]) -> None:
     temporary = path.with_name(f"{LOCK_NAME}.{uuid4().hex}.tmp")
     write_exclusive(temporary, record)
     try:
-        os.replace(str(temporary), str(path))
+        portable_io.replace_with_retry(temporary, path)
     finally:
         if temporary.exists():
             temporary.unlink()
@@ -226,8 +229,35 @@ def acquire(args: argparse.Namespace) -> int:
     }
     if previous is not None:
         result["overridden_lock"] = previous
+    # State the cross-device limit where a maintainer will actually see it,
+    # instead of leaving it in the contract alone.
+    hint = sync_artifacts.storage_hint(target)
+    if hint["synchronized"]:
+        result["storage_advisory"] = hint
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
+
+
+def describe_foreign_host(record: dict[str, Any]) -> dict[str, Any]:
+    """Describe a lock that a different machine wrote.
+
+    On a synchronized folder a released lock can linger for minutes, and an
+    unreleased one can belong to a device that is currently offline. Neither is
+    proof that maintenance is still running, so the caller is told what it is
+    rather than being left to guess from the age alone.
+    """
+    holder = str(record.get("host") or "")
+    if not holder or holder == socket.gethostname():
+        return {}
+    return {
+        "foreign_host": holder,
+        "note": (
+            f"The lock was written by {holder!r}, not by this machine. On a synchronized "
+            "folder a lock release can arrive late, so this may be a lock that no longer "
+            "exists elsewhere. Confirm with the other maintainer before overriding; age "
+            "alone never proves a lock is stale."
+        ),
+    }
 
 
 def status(args: argparse.Namespace) -> int:
@@ -238,6 +268,10 @@ def status(args: argparse.Namespace) -> int:
     try:
         record = public_lock(read_lock(target))
         result = {"locked": True, "lock_file": LOCK_NAME, "lock": record}
+        result.update(describe_foreign_host(record))
+        hint = sync_artifacts.storage_hint(target)
+        if hint["synchronized"]:
+            result["storage_advisory"] = hint
     except RuntimeError as exc:
         result = {"locked": True, "lock_file": LOCK_NAME, "invalid_lock": str(exc)}
     print(json.dumps(result, ensure_ascii=False, indent=2))

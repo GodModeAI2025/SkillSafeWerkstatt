@@ -15,6 +15,9 @@ from pathlib import Path, PurePosixPath
 from typing import Optional
 from uuid import uuid4
 
+import portable_io
+import sync_artifacts
+
 from wiki_lock import require_lock
 
 
@@ -54,7 +57,7 @@ def atomic_write(path: Path, content: bytes) -> None:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(str(temporary), str(path))
+        portable_io.replace_with_retry(temporary, path)
     finally:
         if temporary.exists():
             temporary.unlink()
@@ -106,8 +109,13 @@ def controlled_files(target: Path) -> list[Path]:
         root = target / directory
         if root.is_dir():
             for path in root.rglob("*"):
-                if path.is_file() and not path.name.startswith(".") and not path.name.endswith(".tmp"):
-                    found.add(path)
+                if not path.is_file() or path.name.startswith(".") or path.name.endswith(".tmp"):
+                    continue
+                # Never hash operating-system noise into a release boundary; the
+                # storage layer does not carry it, so its hash cannot be reproduced.
+                if sync_artifacts.is_ignorable(path.relative_to(target).as_posix()):
+                    continue
+                found.add(path)
     for name in META_FILES:
         path = target / name
         if path.is_file():
@@ -168,6 +176,33 @@ def count_open_question_items(path: Path) -> int:
         for line in path.read_text(encoding="utf-8").splitlines()
         if re.match(r"^\s*[-*+]\s+\S", line)
     )
+
+
+def persistence_statement(target: Path) -> dict[str, object]:
+    """State what a successful release actually guarantees on this storage.
+
+    A durable local write is not an upload. On a synchronized library the release
+    is published for this machine only until the client finishes transferring it,
+    and no supported interface reports when that happened.
+    """
+    hint = sync_artifacts.storage_hint(target)
+    if not hint["synchronized"]:
+        return {
+            "local": "durable",
+            "remote": "not-applicable",
+            "statement": "The release is written durably to local storage.",
+        }
+    return {
+        "local": "durable",
+        "remote": "unconfirmed",
+        "storage_hint": hint,
+        "statement": (
+            "The release is written durably to local storage. This wiki appears to live in a "
+            "synchronized folder, and no supported interface reports whether the client has "
+            "uploaded it yet, so do not tell others the release is available to them until the "
+            "client shows the folder as fully synchronized."
+        ),
+    }
 
 
 def main() -> int:
@@ -290,6 +325,9 @@ def main() -> int:
             "warnings": len(lint_report.get("warnings") or []),
         },
         "reviews": latest_quality_reviews(target / "meta/quality-reviews.jsonl"),
+        # Wiki-wide reviews say when someone last looked; the trust distribution
+        # says how much of the wiki that actually covered.
+        "trust": (lint_report.get("stats") or {}).get("trust", {}),
         "open_question_items": count_open_question_items(target / "meta/questions.md"),
     }
     atomic_write(
@@ -347,6 +385,9 @@ def main() -> int:
                 "manifest_written_last": True,
                 "lint_valid": bool(lint_result.get("valid")),
                 "stats": lint_result.get("stats", {}),
+                # fsync guarantees this disk, not the storage provider. Say which
+                # one was actually achieved instead of implying both.
+                "persistence": persistence_statement(target),
             },
             ensure_ascii=False,
             indent=2,

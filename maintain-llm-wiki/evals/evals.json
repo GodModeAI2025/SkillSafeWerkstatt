@@ -237,6 +237,67 @@
         "Malformed table-like runs bleiben mit Zeilenumbrüchen lesbar.",
         "Claim-Belege verwenden ausschließlich relative Routen zur passenden Quellenansicht und zum Locator-Anker."
       ]
+    },
+    {
+      "id": 21,
+      "prompt": "In meinem Wiki liegt plötzlich eine Datei governance-DESKTOP-A1B2C3.md neben governance.md. Was ist das und was soll ich tun?",
+      "expected_output": "Der Skill erkennt eine OneDrive-Konfliktkopie, stellt beide Fassungen gegenüber und lässt den Anwender entscheiden, bevor irgendetwas verändert wird.",
+      "files": [],
+      "expectations": [
+        "Die Antwort benennt eine Synchronisations-Konfliktkopie und nicht eine doppelte ID oder ein beschädigtes Wiki.",
+        "Beide Fassungen werden mit Hash, Größe und Änderungszeit gegenübergestellt.",
+        "Es wird nichts gelöscht oder überschrieben, bevor der Anwender eine Entscheidung bestätigt hat.",
+        "Vor dem Anwenden entsteht ein Snapshot.",
+        "Nach der Auflösung werden Graph, Lint und Release als nächste Schritte genannt."
+      ]
+    },
+    {
+      "id": 22,
+      "prompt": "Ich habe sources/ im Finder geöffnet und jetzt meldet der Skill etwas. Ist mein Wiki kaputt?",
+      "expected_output": "Der Skill erklärt, dass .DS_Store ein Betriebssystemartefakt ist, das weder den Lint noch das Lesen blockiert und nie in ein Release gelangt.",
+      "files": [],
+      "expectations": [
+        "Die Antwort bezeichnet .DS_Store nicht als unzulässige Originaldatei.",
+        "Es wird nicht vorgeschlagen, das Wiki zu reparieren.",
+        "Der Anwender wird nicht aufgefordert, die Datei zwingend zu löschen."
+      ]
+    },
+    {
+      "id": 23,
+      "prompt": "Markiere die Seite zu den Netzentgelten als von mir geprüft.",
+      "expected_output": "Der Skill zeigt Plan und Vertrauensstufe, holt eine ausdrückliche Bestätigung ein und zeichnet erst dann human:<id> mit Zeitpunkt auf.",
+      "files": [],
+      "expectations": [
+        "Ohne ausdrückliche Bestätigung des Menschen wird keine menschliche Prüfung aufgezeichnet.",
+        "Der Akteur hat die Form human:<id> und ist nicht der Agent selbst.",
+        "Vor dem Schreiben entsteht ein Snapshot; ein veralteter Plan führt zu null Schreibvorgängen.",
+        "Die Antwort behauptet nicht, dass die Seite dadurch inhaltlich richtig sei."
+      ]
+    },
+    {
+      "id": 24,
+      "prompt": "Exportiere dieses Wiki als Open-Knowledge-Format-Bündel nach ../okf-export.",
+      "expected_output": "Der Skill exportiert einen verifizierten Release als OKF-v0.2-Bündel und benennt vorher und nachher, was dabei verloren geht.",
+      "files": [],
+      "expectations": [
+        "Der Export erfolgt nur aus einem verifizierten Release; ein aktiver Pflege-Lock verhindert ihn.",
+        "Das Ziel liegt außerhalb des Wikis und muss leer sein.",
+        "Die Verlustliste nennt mindestens Claim-Locatoren, Release-Manifest, Snapshots und SOUL.md.",
+        "Das Wiki selbst bleibt unverändert.",
+        "Es werden keine fehlenden empfohlenen Felder erfunden."
+      ]
+    },
+    {
+      "id": 25,
+      "prompt": "Lege ein Wiki in unserer SharePoint-Bibliothek an, Pfad sites/Team/Dokumente/Wissen.",
+      "expected_output": "Der Skill übernimmt den Bibliothekspfad ins Profil, prüft die Pfadgrenzen und weist einmalig auf die Grenzen des kooperativen Locks hin.",
+      "files": [],
+      "expectations": [
+        "Der Bibliothekspfad wird als storage_path_prefix im Wiki-Profil gespeichert.",
+        "Der Hinweis auf den geräteübergreifend nicht schützenden Lock erscheint genau einmal.",
+        "Die Erkennung einer synchronisierten Ablage wird als Heuristik und nicht als Tatsache dargestellt.",
+        "Nach dem Release wird die Übertragung in die Ablage nicht als bestätigt dargestellt."
+      ]
     }
   ]
 }

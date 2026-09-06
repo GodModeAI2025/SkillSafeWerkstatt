@@ -93,6 +93,30 @@
         "Explizite replaces- und contradicts-Beziehungen sowie Status werden berücksichtigt.",
         "Historische oder widersprüchliche Belege werden nicht still entfernt."
       ]
+    },
+    {
+      "id": 9,
+      "prompt": "Beantworte meine Frage und sag mir dazu, ob die Seiten geprüft sind.",
+      "expected_output": "Eine belegte Antwort mit Qualitätszeile und der Vertrauensstufe der tragenden Seiten.",
+      "files": [],
+      "expectations": [
+        "Die Vertrauensstufe der tragenden Seiten wird genannt, wenn sie nicht human-reviewed ist.",
+        "Eine Vertrauensstufe wird nicht als Aussage über inhaltliche Richtigkeit dargestellt.",
+        "Der Lese-Skill behauptet nicht, selbst etwas geprüft zu haben.",
+        "Ein wiki-weites Review wird nicht als Prüfung der einzelnen Seite ausgegeben."
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Warum bekomme ich gerade keine Antwort aus dem Wiki?",
+      "expected_output": "Der Skill unterscheidet eine Speicherbedingung von einer Beschädigung und nennt die passende Abhilfe.",
+      "files": [],
+      "expectations": [
+        "sync_artifacts_present wird als intakter Release mit Konfliktkopie erklärt, nicht als beschädigtes Wiki.",
+        "sync_in_progress führt zur Empfehlung zu warten, nicht zu reparieren.",
+        "hydration_required nennt Dateianzahl und geschätztes Volumen und startet keinen Download ohne Entscheidung.",
+        "Es wird keine Sachantwort aus einem nicht verifizierten Stand erzeugt."
+      ]
     }
   ]
 }

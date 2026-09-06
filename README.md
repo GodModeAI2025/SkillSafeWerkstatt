@@ -5,6 +5,8 @@ Diese Distribution enthält zwei zusammengehörige Agent Skills für einen porta
 - [maintain-llm-wiki](maintain-llm-wiki/SKILL.md) erstellt, pflegt, prüft, veröffentlicht und exportiert ein Wiki.
 - [query-llm-wiki](query-llm-wiki/SKILL.md) liest ein veröffentlichtes Wiki, sucht darin und beantwortet Fragen mit nachvollziehbaren Belegen.
 
+Ein gepflegtes Wiki ist außerdem **exportierbar**: Jeder verifizierte Release lässt sich als Bündel im [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format) ausgeben — dem herstellerneutralen Standard von Google Cloud für Wissen als Markdown. Das Wissen bleibt damit nicht in diesem Werkzeug gefangen. Abschnitt 4.20 beschreibt den Export, seine Grenzen und was er bewusst nicht mitnimmt.
+
 Die installierbaren Pakete liegen als [maintain-llm-wiki.skill](maintain-llm-wiki.skill) und [query-llm-wiki.skill](query-llm-wiki.skill) vor. Die danebenliegenden Ordner enthalten dieselben Skills entpackt und sind für Prüfung, Weiterentwicklung oder lokale Installation gedacht.
 
 Beide Skills sind organisationsneutral, verwenden innerhalb erzeugter Artefakte ausschließlich portable relative Pfade und folgen mit `SKILL.md`, `scripts/`, `references/` und `assets/` dem von Claude Code verwendeten Agent-Skills-Aufbau. Sie funktionieren außerdem in Claude Cowork und Codex. Die deterministischen Helfer sind Bestandteil der Skills. Der Anwender formuliert seine Wünsche in natürlicher Sprache und muss weder Python noch einzelne Skripte selbst aufrufen.
@@ -17,6 +19,7 @@ Das System trennt konsequent zwischen vier Ebenen:
 2. **Quellen als treues Markdown:** Lesbarer Inhalt wird ohne Synthese in Markdown umgewandelt und unter `sources/` registriert. Dieses Markdown ist die nachweisbare Quellenebene im Wiki.
 3. **Kuratierte Wissensseiten:** Unter `wiki/` entsteht eine thematisch gepflegte, verlinkte und in der festgelegten Wiki-Sprache geschriebene Wissensschicht.
 4. **Abgeleitete Darstellung:** Unter `graph/` entsteht eine statische Website mit Graph, Clustern und HTML-Leseansichten. Diese Dateien können jederzeit aus dem Markdown neu erzeugt werden.
+5. **Ausgang in den Standard:** Aus einem verifizierten Release entsteht auf Wunsch ein OKF-v0.2-Bündel in einem beliebigen Zielverzeichnis. Es ist eine Kopie, keine zweite Wahrheit, und es beschreibt selbst, was es gegenüber dem Wiki verliert.
 
 ```text
 Ausgangsmaterial außerhalb des Wikis
@@ -63,6 +66,9 @@ Das Zielverzeichnis ist die kanonische Arbeitskopie. Ob es später lokal bleibt,
 | Fragen beantworten | Nur soweit für die Pflege erforderlich | Ja |
 | Metadatenfilter und Facetten | Für Auswahl und Pflege | Für Suche und Auswertung |
 | Eingefrorenen Wissens-Skill exportieren | Ja | Nein |
+| Seiten als geprüft aufzeichnen | Ja, mit Bestätigung | Nein, nur Stufe lesen und nennen |
+| Konfliktkopien auflösen | Ja, nach Vergleich und Bestätigung | Nein, nur melden |
+| OKF-Bündel exportieren | Ja, aus verifiziertem Release, mit Quellen | Nein |
 | Wiki verändern | Ja, kontrolliert | Niemals |
 
 Diese Trennung verhindert, dass eine normale Wissensabfrage versehentlich Dateien verändert oder einen Pflegeprozess auslöst.
@@ -402,13 +408,96 @@ Der Pflege-Skill kann einen verifizierten Release als eigenständigen Wissens-Sk
 
 Soll der Inhalt aktualisiert werden, wird das kanonische Wiki gepflegt und veröffentlicht. Danach wird ein neuer eingefrorener Skill-Abzug erstellt; der alte Export wird nicht direkt bearbeitet.
 
-### 4.17 Optionaler OKF-Bericht
+### 4.17 Vertrauensstufen pro Seite
 
-Auf Wunsch kann der Skill die Frontmatter-Kompatibilität zum Open Knowledge Format berichten. Geprüft werden ein nicht leeres `type` sowie empfohlene Felder wie `title`, `description`, `resource`, `tags` und `timestamp`.
+Ein Qualitätsreview hält fest, **wann** zuletzt jemand ins Wiki geschaut hat. Es kann nicht festhalten, **welche Seiten** dabei geprüft wurden. Deshalb tragen Seiten ihre Bestätigung selbst.
 
-Der Bericht verändert nichts. Er darf vorhandene Werte wie `updated` als mögliche Quelle für `timestamp` vorschlagen, erfindet aber keine Titel, Beschreibungen, Ressourcen oder Mappings. OKF bleibt eine optionale Interoperabilitätssicht und ersetzt nicht den nativen SkillSafeWerkstatt-Vertrag.
+Vier optionale Frontmatter-Felder halten sie:
 
-### 4.18 Selbstbeschreibender Aktionskatalog
+```yaml
+generated_by: "agent/claude-opus-5"
+generated_at: "2026-09-06T09:00:00Z"
+verified_by: "human:mzi"
+verified_at: "2026-09-06T10:00:00Z"
+```
+
+Ein Akteur ist `agent/<name>`, `human:<id>` oder `process:<id>`. Die Vertrauensstufe wird daraus **abgeleitet** und nie gespeichert:
+
+| Bestätigung | Stufe |
+|---|---|
+| keine | `unverified` |
+| nicht-menschlicher Akteur | `machine-confirmed` |
+| menschlicher Akteur | `human-reviewed` |
+
+Nicht auswertbares Frontmatter zählt als keine Bestätigung. Eine fehlerhafte Angabe kann eine Stufe also niemals anheben.
+
+Das Aufzeichnen läuft als hash-gebundene Plan/Apply-Transaktion mit automatischem Snapshot und null Schreibvorgängen bei veraltetem Plan. Ein `human:`-Akteur verlangt zusätzlich eine ausdrückliche Bestätigung: **Ein Agent kann seine eigene Arbeit nicht als von einem Menschen gelesen markieren.** Ein Index trägt keine Aussagen und kann nicht bestätigt werden.
+
+Eine Vertrauensstufe sagt, wer wann geprüft hat. Sie sagt **nicht**, dass eine Seite richtig, vollständig oder aktuell ist, und sie ersetzt keine Belege. Eine gut belegte, ungeprüfte Seite kann die bessere Antwort tragen als eine geprüfte mit schwachen Quellen. Die Verteilung steht im veröffentlichten Qualitätsstatus, sodass der Lese-Skill sagen kann, wie viel eines Wikis eine Prüfung tatsächlich abgedeckt hat.
+
+### 4.18 Synchronisierte Ablagen und Konfliktkopien
+
+Ein OneDrive- oder SharePoint-Client ist ein **Schreiber auf dem Wiki-Verzeichnis**, nicht nur ein Transportweg. Er legt eigenständig Dateien an und verzögert Schreibvorgänge unbestimmt. Der Skill kennt drei Klassen:
+
+- **Konfliktkopie:** Der Client führt niemals zusammen. Haben zwei Geräte dieselbe Datei geändert, bleiben beide erhalten und eine wird nach dem Gerät umbenannt. Das Lesen stoppt, denn die Kopie kann Arbeit enthalten, die sonst niemand hat. Die Auflösung läuft über Plan/Apply: Der Plan stellt beide Seiten mit Hash, Größe und Änderungszeit gegenüber, eine inhaltsgleiche Kopie wird zum Entfernen empfohlen, eine abweichende bleibt Entscheidung des Anwenders. Vor dem Anwenden entsteht ein Snapshot. **Ohne Bestätigung wird nie gelöscht.**
+- **Betriebssystemartefakt** wie `.DS_Store`, `Thumbs.db`, `desktop.ini` oder `~$`-Dateien: trägt keinen Inhalt. Es wird gemeldet und ansonsten ignoriert — es blockiert keinen Leser, lässt keinen Lint scheitern und gelangt nie in ein Release-Manifest. Ein Blick in `sources/` im Finder darf ein Wiki nicht stilllegen.
+- **Gesperrter Name oder Zeichen:** Namen wie `.lock`, `CON`, `AUX`, `NUL`, `COM0`–`COM9`, `LPT0`–`LPT9`, `desktop.ini`, alles mit `~$` am Anfang oder `_vti_` an beliebiger Stelle, die Zeichen `" * : < > ? / \ |`, führende und schließende Leerzeichen sowie ein schließender Punkt. Das sind Lint-Fehler, weil solche Dateien die Ablage stillschweigend nie erreichen.
+
+Zusätzlich geprüft werden Pfade, die sich nur in der Groß-/Kleinschreibung unterscheiden — SharePoint kann beide nicht gleichzeitig halten. Trägt `schema/WIKI_PROFILE.md` einen `storage_path_prefix`, wird außerdem die 400-Zeichen-Grenze als Fehler und die Windows-Grenze von 260 Zeichen als Warnung geprüft.
+
+Die Erkennung synchronisierter Ablagen ist eine **Heuristik** auf sichtbaren Pfadnamen und den Umgebungsvariablen des Clients. Es gibt keine unterstützte Schnittstelle, um den Zustand eines Sync-Clients abzufragen. Der Skill stellt sie deshalb nie als Tatsache dar.
+
+### 4.19 Ehrliche Persistenzmeldung
+
+`fsync` macht einen Schreibvorgang auf **dieser Platte** dauerhaft — nicht hochgeladen. Auf einer offenbar synchronisierten Ablage meldet ein erfolgreicher Release seinen entfernten Zustand als `unconfirmed` und weist darauf hin, anderen die Verfügbarkeit erst zuzusagen, wenn der Client den Ordner als vollständig synchronisiert zeigt.
+
+### 4.20 Open Knowledge Format v0.2: der Weg nach draußen
+
+Der OKF-Export ist ein **eigenständiges Ziel** dieser Distribution, keine Kompatibilitätsnotiz. Ein Wissensraum, aus dem man sein Wissen nicht wieder herausbekommt, ist eine Falle — auch dann, wenn er intern noch so sauber gebaut ist. Deshalb kann jeder verifizierte Release als Bündel im Open Knowledge Format v0.2 ausgegeben werden, dem herstellerneutralen Markdown-Standard von Google Cloud.
+
+**Was ein Bündel enthält.**
+
+```text
+<ziel>/
+|-- index.md        Wurzelindex; trägt laut Spezifikation nur okf_version
+|-- log.md          reserviertes Änderungsjournal aus meta/changes.md
+|-- README.md       was dieses Bündel ist und was es nicht ist
+|-- overview.md     Wissensseiten als OKF-Konzepte
+|-- concepts/
+|-- entities/
+|-- topics/
+|-- comparisons/
+`-- sources/        registrierte Extraktionen als type: Source
+```
+
+Das Bündel ist **standardmäßig selbsttragend**: Die registrierten Quellenextraktionen wandern mit. Ein Bündel, dessen Konzepte auf Quellen verweisen, die es nicht enthält, hat seine Belegkette in dem Moment verloren, in dem es den Rechner verlässt. Wer bewusst nur die Konzepte will, kann die Quellen abwählen.
+
+**Was abgebildet wird.**
+
+| SkillSafeWerkstatt | OKF v0.2 | Anmerkung |
+|---|---|---|
+| `type`, `title`, `description`, `tags` | gleichnamig | direkt |
+| `status: active` | `status: stable` | Abbildung |
+| `status: superseded` | `status: deprecated` | Abbildung |
+| `status: disputed` | `status: draft` | **verlustbehaftet**, wird im Bündel protokolliert |
+| Quelle mit `status: partial` | `status: draft` | **verlustbehaftet**, wird protokolliert |
+| `generated_by` + `generated_at` | `generated: { by, at }` | flach gespeichert, beim Export verschachtelt |
+| `verified_by` + `verified_at` | `verified: { by, at }` | ebenso |
+| registrierte Quellen | `sources: [{id, title, resource}]` | angereichert aus dem Quellenregister |
+| Wikilinks | bündelrelative Markdown-Links | umgeschrieben |
+| Claim-Text | gewöhnlicher Fließtext | Aussage bleibt, Marker fällt weg |
+
+**Was nicht mitkommt.** Der Export ist konstruktionsbedingt ärmer als das Wiki, und das Bündel sagt das selbst in seiner `README.md`: Claim-Blöcke mit ihren `source_id@locator`-Belegen, das Release-Manifest und seine Hash-Grenze, Snapshots, `SOUL.md`, kontrollierte Begriffswelten, Cluster und Graph sowie die strenge Frontmatter-Teilmenge. Ein OKF-Konsument muss laut Spezifikation unbekannte Schlüssel und gebrochene Querverweise akzeptieren — das ist bewusst permissiver als dieses Wiki.
+
+**Wie der Export sich selbst prüft.** Nach dem Schreiben validiert der Export das erzeugte Bündel gegen die Konformitätsregeln: Wurzelindex mit `okf_version` und sonst nichts, jede nicht reservierte Markdown-Datei mit lesbarem Frontmatter und nicht leerem `type`. Scheitert diese Prüfung, wird das Bündel entfernt und kein Erfolg gemeldet.
+
+Bemerkenswert dabei: Die Prüfung kann **nicht** mit dem Frontmatter-Parser des Wikis erfolgen. Der lehnt verschachtelte Strukturen bewusst ab — genau die, die OKF für `generated`, `verified` und `sources` verlangt. Der Export bringt deshalb einen eigenen Leser für die OKF-Teilmenge mit. Das ist keine Doppelung, sondern die ehrliche Konsequenz aus zwei unterschiedlich strengen Formaten.
+
+**Was nie erfunden wird.** Fehlt ein empfohlenes Feld im Wiki, bleibt es im Bündel leer und wird in der `README.md` als nicht füllbar aufgeführt. Für eine kuratierte Wissensseite existiert etwa keine `resource`-URI; der Export konstruiert dafür keine.
+
+**Der Bericht.** Unabhängig vom Export bewertet ein reiner Bericht die Kompatibilität: Pflichtfeld `type`, empfohlene `title`, `description`, `resource` und `tags` sowie die v0.2-Ergänzungen `status`, `stale_after`, `generated` und `verified`. Er verändert nichts und schlägt nur vor.
+
+### 4.21 Selbstbeschreibender Aktionskatalog
 
 Der Skill kann seine vollständige Funktionsoberfläche maschinenlesbar beschreiben. Der Katalog weist pro Aktion unter anderem aus:
 
@@ -444,6 +533,11 @@ Mögliche Zustände sind:
 - `wiki_busy`: Eine Pflege besitzt den Lock; es wird kein möglicher Mischstand gelesen.
 - `snapshot_changed`: Der Stand hat sich während der Anfrage geändert; der Entwurf wird verworfen.
 - `invalid_wiki`: Release oder Dateien sind nicht verifizierbar; daraus wird keine Sachantwort erzeugt.
+- `sync_artifacts_present`: Der Sync-Client hat eine Konfliktkopie neben einer veröffentlichten Datei behalten. Der Release selbst ist intakt, aber zwei Geräte halten verschiedene Inhalte. Der Pflege-Skill löst das auf.
+- `sync_in_progress`: Das Manifest ist neuer als die Dateien, die es beschreibt. Das ist eine laufende Übertragung, keine Beschädigung — Warten hilft, Reparieren nicht.
+- `hydration_required`: Veröffentlichte Dateien haben keinen lokalen Inhalt, weil die Ablage sie in der Cloud hält. Sie zu prüfen würde das Wiki herunterladen und schlägt offline fehl. Der Skill meldet Anzahl und geschätztes Volumen und fragt, statt den Download zu starten.
+
+Diese Trennung ist der Kern: Eine Speicherbedingung, die Warten oder ein Pflegelauf behebt, wird nicht als beschädigtes Wiki gemeldet — und umgekehrt.
 
 ### 5.2 Qualitätsstatus
 
@@ -456,6 +550,8 @@ Nach erfolgreicher Integritätsprüfung bewertet der Skill getrennt:
 - Alter des veröffentlichten oder eingefrorenen Stands.
 
 `current`, `due-soon`, `overdue`, `attention-needed` und `unknown` sind Hinweise. Sie machen einen technisch gültigen Release nicht automatisch unbrauchbar. Jede Antwort endet mit einer kurzen Qualitätszeile, beispielsweise `Wiki-Qualität: aktuell` oder `Wiki-Qualität: Prüfung überfällig; Pflege-Skill empfohlen.`
+
+Zusätzlich nennt der Lese-Skill die **Vertrauensstufe der tragenden Seiten**, sobald sie nicht `human-reviewed` ist. Ein wiki-weites Review sagt, wann jemand geschaut hat; die Stufe sagt, ob diese konkrete Seite dabei war. Der Skill weist außerdem darauf hin, wenn keine einzige Seite eine menschliche Prüfung trägt.
 
 Der Lese-Skill führt niemals selbst ein Review, Cleaning oder eine Korrektur aus.
 
@@ -596,6 +692,8 @@ Jeder Pflege-, Validierungs- oder Release-Lauf besitzt während seiner gesamten 
 
 Existiert bereits ein Lock, startet kein zweiter konformer Pflegeprozess. Der Skill nimmt nicht allein aufgrund des Alters an, dass ein Lock verwaist ist. Ein erzwungenes Übernehmen ist nur nach ausdrücklicher Anwenderbestätigung und mit dokumentiertem Grund zulässig.
 
+Ein Lock, den ein **anderes Gerät** geschrieben hat, wird als solcher ausgewiesen. Auf einer synchronisierten Ablage kann eine Freigabe verspätet ankommen, sodass ein sichtbarer Lock andernorts längst nicht mehr existiert. Der Skill sagt das ausdrücklich — und ebenso, dass Alter allein nie beweist, dass ein Lock verwaist ist. Beim Erwerb auf einer offenbar synchronisierten Ablage weist er einmalig darauf hin, dass der Lock geräteübergreifend nicht schützt.
+
 Der Lese-Skill erwirbt keinen Writer-Lock. Er verweigert das Lesen, solange ein Pflege-Lock existiert.
 
 Wichtig bei OneDrive oder SharePoint: Der Dateilock ist ein kooperativer Lock auf dem sichtbaren Dateisystem. Synchronisationsclients sind kein verteilter Lock-Dienst. Zwei zeitweise offline arbeitende Geräte können theoretisch unabhängig lokale Lock-Dateien erzeugen. Für strikt gleichzeitige Pflege auf mehreren Rechnern wäre eine zentrale Koordination erforderlich. Für einen einzelnen Pflegeprozess auf einer synchronisierten Arbeitskopie ist keine zusätzliche Serverkomponente notwendig.
@@ -644,6 +742,19 @@ Der konkrete Aufruf der Helfer ist Aufgabe des ausführenden Agenten. Unter Clau
 
 Ein Wiki kann in einem lokal synchronisierten SharePoint-/OneDrive-Ordner liegen. Lesen und Schreiben auf Dateiebene folgen dann den Berechtigungen und der Synchronisation dieser Ablage. Die Skills implementieren keine eigene Benutzer- oder Rechteverwaltung.
 
+Der Sync-Client ist dabei ein **zweiter Schreiber** auf demselben Verzeichnis. Die Skills behandeln das ausdrücklich statt es zu ignorieren — Einzelheiten in den Abschnitten 4.18 und 4.19. Kurz:
+
+| Situation | Verhalten |
+|---|---|
+| Konfliktkopie im Wiki | Lesen stoppt, Release bleibt intakt, Auflösung über Plan/Apply mit Snapshot |
+| `.DS_Store`, `Thumbs.db`, `desktop.ini`, `~$…` | wird gemeldet und ignoriert; blockiert nichts und gelangt nie ins Manifest |
+| Manifest schon da, Inhalte noch nicht | `sync_in_progress`; Warten statt Reparieren |
+| Dateien nur in der Cloud | `hydration_required`; Volumen wird gemeldet, Download nur nach Entscheidung |
+| Name oder Pfad, den die Ablage ablehnt | Lint-Fehler, bevor die Datei entsteht |
+| Lock von einem anderen Gerät | wird als solcher ausgewiesen; Alter beweist nichts |
+| Release auf synchronisierter Ablage | lokal dauerhaft, Übertragung ausdrücklich unbestätigt |
+| Sperrverletzung durch Client oder Virenscanner | begrenzter Wiederholungsversuch, danach klare Ursache |
+
 Empfohlen ist:
 
 - Pflege nur durch klar koordinierte Prozesse;
@@ -670,6 +781,8 @@ Beispiele für den Pflege-Skill:
 - „Stelle diese beiden Dateien aus Snapshot X wieder her.“
 - „Ändere die gepflegte Wiki-Sprache vollständig auf Englisch.“
 - „Erzeuge aus dem aktuellen Release einen unveränderlichen Wissens-Skill.“
+- „Exportiere das Wiki als Open-Knowledge-Format-Bündel, damit ein anderes Team damit arbeiten kann.“
+- „Wie kompatibel ist mein Wiki zum Open Knowledge Format, und was ginge beim Export verloren?“
 
 Beispiele für den Lese-Skill:
 
@@ -701,7 +814,10 @@ Beispiele für den Lese-Skill:
 | Release | Version, Protokoll, Qualität und Manifest veröffentlichen | Strikter Lint, Manifest zuletzt |
 | Release verifizieren | Hash-Grenze prüfen | Read-only |
 | Wissens-Skill exportieren | Unveränderlichen Release-Abzug erzeugen | Doppelte Manifestprüfung |
-| OKF berichten | Optionale Kompatibilität bewerten | Read-only, keine erfundenen Werte |
+| Seiten als geprüft aufzeichnen | Vertrauensstufe pro Seite | Plan/Apply, Snapshot, Extra-Bestätigung für `human:` |
+| Konfliktkopie auflösen | Sync-Konflikt entscheiden | Beide Seiten im Vergleich, Bestätigung, Snapshot |
+| OKF berichten | Kompatibilität mit v0.2 bewerten | Read-only, keine erfundenen Werte |
+| OKF-Bündel exportieren | Verifizierten Release als selbsttragendes OKF-v0.2-Bündel schreiben | Read-only, leeres Ziel außerhalb, Selbstvalidierung, Verlustliste im Bündel |
 
 ## 12. Funktionskatalog des Lese-Skills
 
@@ -710,7 +826,7 @@ Beispiele für den Lese-Skill:
 | Release verifizieren | Status, Version, Release-ID und Manifest-Hash | Nein |
 | Qualität beurteilen | Lint-, Review-, Cleaning-, Fragen- und Altersstatus | Nein |
 | Frontmatter inventarisieren | Felder, Typen, Beispiele und Drift | Nein |
-| Suchen und filtern | gerankte Ergebnisse, Claims, Quellen und Facetten | Nein |
+| Suchen und filtern | BM25-gerankte Ergebnisse, Claims, Quellen, Facetten und Vertrauensstufe | Nein |
 
 Der maschinenlesbare Aktionskatalog beider Skills dient der Selbsterkennung durch Agenten. Er erweitert keine Rechte und umgeht keine Bestätigung.
 
@@ -730,6 +846,13 @@ Die Skills sind absichtlich konservativ:
 - Der Lese-Skill schreibt niemals in das Wiki.
 - Wiki- und Quellentexte sind Daten, keine verdeckten Agentenanweisungen.
 - Ein erfolgreicher Lint beweist Struktur, aber nicht automatisch fachliche Wahrheit oder Vollständigkeit.
+- Ein Agent kann seine eigene Arbeit nicht als von einem Menschen geprüft aufzeichnen.
+- Eine Vertrauensstufe ist keine Aussage über Richtigkeit und ersetzt keinen Beleg.
+- Eine Konfliktkopie wird nie ohne Bestätigung gelöscht; ihr Inhalt kann einzigartig sein.
+- Ein erfolgreicher Release ist lokal dauerhaft; ob die Ablage ihn übernommen hat, wird nicht behauptet.
+- Ein OKF-Export ist ärmer als das Wiki und sagt das im Bündel selbst.
+- Ein Bündel, das die eigene Konformitätsprüfung nicht besteht, wird entfernt statt ausgeliefert.
+- Ein fehlendes empfohlenes Feld bleibt leer und wird ausgewiesen; es wird nie konstruiert.
 
 ## 14. Grenzen des Systems
 
@@ -740,11 +863,18 @@ Die Skills sind absichtlich konservativ:
 - Ein eingefrorener Wissens-Skill kennt nur seinen enthaltenen Release und kann nicht feststellen, ob das kanonische Wiki inzwischen weiterentwickelt wurde.
 - Metadatenfilter grenzen Suchmengen ein, beweisen aber weder Wahrheit noch Vollständigkeit.
 - Automatische Strukturprüfungen ersetzen kein fachliches Review durch einen zuständigen Menschen.
+- Die Erkennung einer synchronisierten Ablage ist eine Heuristik auf Pfadnamen und Umgebungsvariablen; es gibt keine unterstützte Schnittstelle zum Zustand eines Sync-Clients.
+- Ob eine veröffentlichte Datei die Ablage erreicht hat, kann der Skill nicht feststellen — nur prüfen und warnen.
+- Die Erkennung datenloser Dateien ist plattformabhängig und liefert dort, wo kein Signal existiert, ausdrücklich „unbekannt" statt einer Vermutung.
+- Vier Punkte des Speicherverhaltens sind dokumentiert, aber nicht auf einer echten Ablage gemessen; sie stehen in [docs/sharepoint-onedrive-implikationen.md](docs/sharepoint-onedrive-implikationen.md) als ausdrücklich offen.
 
 ## 15. Dateien dieser Distribution
 
 ```text
 README.md
+docs/                          Analysen und Umsetzungspläne
+tests/                         Testsuite; python3 tests/run_tests.py
+tools/package_skills.py        baut die .skill-Pakete reproduzierbar
 maintain-llm-wiki.skill
 maintain-llm-wiki/
 |-- SKILL.md
@@ -760,6 +890,8 @@ query-llm-wiki/
 `-- scripts/
 ```
 
+Die Testsuite läuft ohne Fremdbibliotheken mit `python3 tests/run_tests.py` und treibt die echten gebündelten Helfer über einen vollständigen Lebenszyklus. `tools/package_skills.py` baut beide `.skill`-Pakete reproduzierbar und schließt `evals/` aus; `--check` prüft, ob die eingecheckten Pakete aktuell sind.
+
 Die Dateien unter `scripts/` sind interne, deterministische Skill-Ressourcen. `references/` enthält die ausführlichen Verträge und Arbeitsregeln. `evals/evals.json` beschreibt repräsentative Prüfszenarien für die Weiterentwicklung und bleibt außerhalb des installierbaren Archivs. Die beiden `.skill`-Dateien sind die installierbaren ZIP-basierten Pakete mit jeweils genau einem Skill-Ordner als Archivwurzel.
 
 ## 16. Weiterentwicklung
@@ -769,6 +901,7 @@ Die beiden Rollen sollen auch bei späteren Erweiterungen getrennt bleiben:
 - neue Pflege-, Migrations- oder Reparaturfähigkeiten gehören in `maintain-llm-wiki`;
 - neue Such-, Filter-, Darstellungs- oder Quellenverfolgungsfähigkeiten ohne Schreibzugriff gehören in `query-llm-wiki`;
 - ein zusätzlich exportierter Wissens-Skill ist ein unveränderlicher Abzug eines konkreten Wikis, keine dritte allgemeine Pflegekomponente;
+- der OKF-Export bleibt ein eigenständiges Ziel: Wissen muss dieses Werkzeug wieder verlassen können. Neue Wiki-Fähigkeiten sind daraufhin zu prüfen, ob sie sich abbilden lassen — und wenn nicht, gehört das in die Verlustliste des Bündels statt stillschweigend zu verschwinden;
 - Änderungen an gemeinsamen Verträgen wie Frontmatter, Release oder Filtern müssen in beiden Skills kompatibel umgesetzt und gemeinsam getestet werden.
 
 So bleibt das System einfach verständlich: **ein Skill pflegt und veröffentlicht, ein Skill liest und belegt.**

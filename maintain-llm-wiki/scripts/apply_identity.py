@@ -7,6 +7,8 @@ import argparse
 import json
 import os
 from pathlib import Path
+
+import portable_io
 from uuid import uuid4
 
 from identity_contract import IdentityError, load_plan
@@ -23,7 +25,7 @@ def atomic_write(path: Path, text: str) -> None:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(str(temporary), str(path))
+        portable_io.replace_with_retry(temporary, path)
     finally:
         if temporary.exists():
             temporary.unlink()
