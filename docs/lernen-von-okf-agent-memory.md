@@ -290,18 +290,26 @@ Agent füllt Parameterwerte, nie die Berechnung.
 sinnvoller Seitentyp. Für die aktuelle Ausbaustufe ist es **nicht vorrangig**. Aufnehmen als
 bewusst zurückgestellte Option, nicht in die Umsetzung.
 
-### Befund 7 — Kein MCP-Zugang
+### Befund 7 — Kein MCP-Zugang *(verworfen)*
 
-**Beobachtung.** README §9 stellt zutreffend fest, dass für reinen Dateizugriff kein MCP-Server
-nötig ist.
+**Beobachtung.** README §9 stellte fest, dass für reinen Dateizugriff kein MCP-Server nötig ist,
+hielt MCP aber als spätere Integrationsschicht offen.
 
-**Die Abwägung.** Das Argument ist für den *Dateizugriff* richtig und für die *Reichweite* falsch.
-Ohne MCP ist das Wiki nur für Hosts nutzbar, die Agent Skills laden. Mit einem read-only
-MCP-Server über einen verifizierten Release wäre es für jeden MCP-fähigen Agenten nutzbar — bei
-unverändertem Sicherheitsmodell, weil der Server nur lesen kann.
+**Die ursprüngliche Überlegung.** Ohne MCP ist das Wiki nur für Hosts nutzbar, die Agent Skills
+laden. Ein read-only MCP-Server über einen verifizierten Release hätte es für jeden MCP-fähigen
+Agenten geöffnet, bei unverändertem Sicherheitsmodell.
 
-**Empfehlung.** Aufnehmen als eigenständige Ausbaustufe nach den Befunden 1 bis 4. Nicht vorziehen:
-Der Nutzen ist Reichweite, nicht Qualität, und die Qualitätslücken sind zuerst zu schließen.
+**Entscheidung: verworfen.** Die Distribution bleibt **skill-only** — keine Serverkomponente,
+auch nicht optional, auch nicht später.
+
+Die Begründung ist stärker als die Reichweite: Ein Wiki ist ein Verzeichnis aus Markdown-Dateien.
+Wer es lesen kann, kann es nutzen. Eine Serverkomponente fügt eine Betriebs-, Update- und
+Angriffsfläche hinzu, die das Dateiformat nicht braucht, und weicht die Zusicherung auf, dass ein
+Wiki auch ohne laufende Software vollständig lesbar bleibt. Die Beschränkung auf Claude Code,
+Claude Cowork und Codex wird bewusst in Kauf genommen: Tiefe vor Breite.
+
+Das ist damit auch eine Regel für künftige Erweiterungen, nicht nur eine Absage an diesen einen
+Punkt. Siehe README §16.
 
 ### Befund 8 — Kein Adoptionspfad für bestehende Verzeichnisse
 
@@ -334,6 +342,10 @@ SkillSafeWerkstatt schädlich:
 - **Go-Binärdatei.** Reine Python-Standardbibliothek ist für `.skill`-Pakete und plattformübergreifende
   Skill-Hosts die richtige Wahl. Eine kompilierte Binärdatei je Plattform würde die Portabilität
   zerstören, die das Projekt ausdrücklich anstrebt.
+- **Der MCP-Server.** Er ist für ein Agenten-Gedächtnis richtig, das in fremden Werkzeugen leben
+  soll. Diese Distribution bleibt skill-only: Ein Verzeichnis aus Markdown braucht keine
+  Serverkomponente, und eine solche würde Betriebs-, Update- und Angriffsfläche hinzufügen, die das
+  Format gerade vermeidet.
 - **Verlust der Rollentrennung.** Ein Werkzeug, das liest und schreibt, kann versehentlich schreiben.
   Zwei Skills können das nicht.
 
@@ -523,12 +535,7 @@ unmarkiertes unbelegtes Wissen — genau das, was der Vertrag verhindern soll.
 **4b — Read-Before-Write-Regel.** Im Pflegevertrag verankern: Nach umfangreicher Arbeit die
 Reflexionsfragen stellen, bevor der Lock freigegeben wird. Reine Vertragsergänzung, kein Code.
 
-**4c — Read-only-MCP-Server.** Über einen verifizierten Release. Werkzeuge: `verify`, `search`,
-`show`, `inventory`, `quality`. Keine Schreiboperation. Damit wird das Wiki für jeden MCP-fähigen
-Agenten nutzbar, nicht nur für Skill-Hosts. Das Sicherheitsmodell bleibt unverändert, weil der
-Server nur lesen kann.
-
-**4d — Adoptionsbericht.** Bestehendes Markdown-Verzeichnis analysieren und im Plan/Apply-Muster
+**4c — Adoptionsbericht.** Bestehendes Markdown-Verzeichnis analysieren und im Plan/Apply-Muster
 zeigen, was übernommen werden könnte. Übernahme bleibt bestätigt und hash-gebunden.
 
 **Bewusst zurückgestellt.** Attested Computation (Befund 6) — sinnvoll für Wikis mit Rechenlogik,
@@ -564,8 +571,8 @@ Diese Punkte sind nicht aus dem Code ableitbar und gehören dir:
 4. **Wie streng wird Stufe 4a?** Ein Wiki, das Beobachtungen aufnimmt, ist nützlicher, aber weniger
    streng belegt als eines, das nur Dokumente kuratiert. Das ist eine Produktentscheidung, keine
    technische.
-5. **Ist MCP die richtige Reichweitenwette?** Alternative wäre, die Skill-Hosts als Zielgruppe zu
-   akzeptieren und die Tiefe weiter auszubauen statt die Breite.
+5. ~~**Ist MCP die richtige Reichweitenwette?**~~ **Entschieden: nein.** Die Distribution bleibt
+   skill-only, ohne Serverkomponente. Siehe Befund 7 und README §16.
 
 ---
 
@@ -580,7 +587,7 @@ Dieser Plan ist umgesetzt, mit einer bewusst offenen Ausnahme. Die Testsuite lä
 | **2a — Verzeichnis-Indizes** | umgesetzt, siehe Nachtrag | `navigation.py`, `tests/test_navigation.py` (21 Tests) |
 | **2b — BM25 statt Heuristik** | umgesetzt | `bm25.py`, `tests/test_ranking.py` (14 Tests) |
 | **3 — OKF v0.2 Bericht und Export** | umgesetzt und ausgebaut | `okf_contract.py`, `report_okf.py`, `export_okf_bundle.py`, `tests/test_okf.py` (42 Tests) |
-| **4 — Reichweite** | offen, wie geplant nachgelagert | — |
+| **4 — Reichweite** | teilweise verworfen: MCP entfällt (skill-only); 4a/4b/4c offen | — |
 
 ### Was beim Umsetzen anders entschieden wurde
 

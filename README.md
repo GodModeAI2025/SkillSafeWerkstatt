@@ -778,7 +778,13 @@ Empfohlen ist:
 - SharePoint-Berechtigungen passend zur Rolle vergeben;
 - `meta/manifest.json` und die Markdown-Inhalte gemeinsam synchronisieren lassen.
 
-Ein MCP-Server ist für den reinen Dateizugriff nicht erforderlich. MCP kann als zusätzliche Integrationsschicht sinnvoll sein, wenn ein Agent auf nicht lokal synchronisierte SharePoint-Inhalte zugreifen oder kontrollierte externe Aktionen ausführen soll. Die Wiki-Struktur selbst bleibt davon unabhängig.
+### Skill-only: keine Serverkomponente
+
+Diese Distribution besteht aus **Agent Skills und sonst nichts**. Kein MCP-Server, kein Dienst, kein Hintergrundprozess — auch nicht optional, auch nicht später.
+
+Das ist eine bewusste Produktentscheidung, keine offene Lücke. Ein Wiki ist ein Verzeichnis aus Markdown-Dateien; wer es lesen kann, kann es nutzen. Eine Serverkomponente würde dem Ganzen eine Betriebs-, Update- und Angriffsfläche hinzufügen, die das Dateiformat gerade nicht braucht — und sie würde die Zusicherung aufweichen, dass ein Wiki auch ohne laufende Software vollständig lesbar bleibt.
+
+Praktisch heißt das: Für den Dateizugriff ist ohnehin kein Server nötig. Die Reichweite bleibt damit auf Hosts beschränkt, die Agent Skills laden — Claude Code, Claude Cowork und Codex. Diese Beschränkung wird in Kauf genommen; Tiefe geht hier vor Breite.
 
 ## 10. Natürlichsprachliche Verwendung
 
@@ -866,6 +872,7 @@ Die Skills sind absichtlich konservativ:
 - Eine Konfliktkopie wird nie ohne Bestätigung gelöscht; ihr Inhalt kann einzigartig sein.
 - Ein erfolgreicher Release ist lokal dauerhaft; ob die Ablage ihn übernommen hat, wird nicht behauptet.
 - Ein OKF-Export ist ärmer als das Wiki und sagt das im Bündel selbst.
+- Es läuft kein Server und kein Hintergrundprozess; alles geschieht im jeweiligen Agentenlauf.
 - Ein Bündel, das die eigene Konformitätsprüfung nicht besteht, wird entfernt statt ausgeliefert.
 - Ein fehlendes empfohlenes Feld bleibt leer und wird ausgewiesen; es wird nie konstruiert.
 
@@ -916,6 +923,7 @@ Die beiden Rollen sollen auch bei späteren Erweiterungen getrennt bleiben:
 - neue Pflege-, Migrations- oder Reparaturfähigkeiten gehören in `maintain-llm-wiki`;
 - neue Such-, Filter-, Darstellungs- oder Quellenverfolgungsfähigkeiten ohne Schreibzugriff gehören in `query-llm-wiki`;
 - ein zusätzlich exportierter Wissens-Skill ist ein unveränderlicher Abzug eines konkreten Wikis, keine dritte allgemeine Pflegekomponente;
+- **Skill-only bleibt bindend.** Keine Erweiterung führt einen Server, Dienst, Hintergrundprozess oder MCP-Endpunkt ein. Wenn eine Fähigkeit ohne solche Komponente nicht geht, gehört sie nicht in diese Distribution;
 - der OKF-Export bleibt ein eigenständiges Ziel: Wissen muss dieses Werkzeug wieder verlassen können. Neue Wiki-Fähigkeiten sind daraufhin zu prüfen, ob sie sich abbilden lassen — und wenn nicht, gehört das in die Verlustliste des Bündels statt stillschweigend zu verschwinden;
 - Änderungen an gemeinsamen Verträgen wie Frontmatter, Release oder Filtern müssen in beiden Skills kompatibel umgesetzt und gemeinsam getestet werden.
 
