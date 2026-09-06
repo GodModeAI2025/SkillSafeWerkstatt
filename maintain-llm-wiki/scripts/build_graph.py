@@ -10,9 +10,10 @@ import os
 import posixpath
 import re
 import tempfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
+import navigation
 import portable_io
 from typing import Any, Optional
 from urllib.parse import quote
@@ -378,6 +379,10 @@ def main() -> int:
         raise SystemExit("Bundled graph template not found")
     if not page_template.is_file():
         raise SystemExit("Bundled page template not found")
+
+    # Refresh the generated directory indexes first, so they become graph nodes
+    # like any other page rather than appearing only on the next run.
+    navigation.write_indexes(target, date.today().isoformat())
 
     markdown_files = sorted(
         path

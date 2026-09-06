@@ -126,7 +126,8 @@ class LargeWiki(unittest.TestCase):
             build_large_wiki(wiki)
             report = json.loads(wiki.lint().stdout)
             self.assertTrue(report["valid"], report["errors"])
-            self.assertEqual(report["stats"]["wiki_pages"], len(TOPICS) + 2)
+            # index, overview, the topics, and the generated concepts/ index.
+            self.assertEqual(report["stats"]["wiki_pages"], len(TOPICS) + 3)
             self.assertEqual(report["stats"]["claims"], len(TOPICS))
             self.assertEqual(wiki.release("large-1").returncode, 0)
             self.assertEqual(wiki.verify()["state"], "ready")

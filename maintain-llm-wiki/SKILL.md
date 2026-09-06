@@ -123,6 +123,12 @@ Treat a OneDrive or SharePoint folder as a second writer on the wiki, never as a
 - After a release on an apparently synchronized folder, repeat the reported persistence statement. The release is durable locally; whether the client has uploaded it is unknown, so never tell the user that colleagues can already see it.
 - When acquiring the lock reports a storage advisory, pass it on once. Do not maintain the same wiki from two machines at the same time, and never force-override a lock held by another machine on age alone.
 
+## Navigation indexes
+
+Each populated subdirectory of `wiki/` carries a generated `index.md`. Never hand-write or hand-edit one: `scripts/build_graph.py` produces them, and an edit is overwritten on the next build. When the linter reports a stale, missing, or orphaned directory index, rebuild the graph rather than repairing the file.
+
+A page counts as listed when the index responsible for it lists it, so a root index may link to directory indexes instead of to every page. Prefer that shape for a growing wiki and say why when you change it: the root then stops growing with the wiki. A root that still lists everything remains valid; do not migrate one without asking.
+
 ## Trust tiers
 
 Record who produced and who confirmed individual pages, so a reader can tell a reviewed page from an unreviewed one. Include `generated_by` and `generated_at` on pages you author, using your own agent identifier in the form `agent/<name>`.

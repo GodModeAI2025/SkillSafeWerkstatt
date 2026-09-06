@@ -76,6 +76,20 @@ Persistence is reported honestly. `fsync` makes a write durable on this disk, no
 
 The maintenance lock remains cooperative and single-filesystem. Two devices reconciled later can each hold a local lock, so the lock cannot exclude cross-device maintenance. Acquiring or inspecting a lock on a synchronized folder states this, and a lock written by another machine is disclosed as such: a release can arrive late, and age alone never proves a lock is stale.
 
+## Navigation indexes
+
+A single root index must list every page, so the cost of orienting in a wiki rises with its size, paid before a single page is read. Each populated subdirectory of `wiki/` therefore carries a generated `index.md` listing its own pages.
+
+These are generated, never hand-maintained. `scripts/build_graph.py` refreshes them, a hand edit does not survive the next build, and the linter reports a stale, missing, or orphaned index the same way it reports a stale graph. They are ordinary pages of `type: index`, which the page contract already exempts from sources, clusters, and claims, and they carry `generated_by` so their origin is visible in the file itself.
+
+Placing generated files inside the curated `wiki/` namespace is a deliberate exception, and the reasoning belongs with the rule. `wiki/index.md` already lives there and is already navigation rather than knowledge, so a branch index extends an existing category instead of creating a new one. Generating them under `graph/` instead would not reduce what the reading skill loads as Markdown, which was the entire purpose.
+
+Listing is staged accordingly: a page counts as listed when the index responsible for it lists it. A page in a subdirectory belongs to that directory's index; a page directly under `wiki/` belongs to the root. A root index that still lists every page stays valid, so nothing about an existing wiki breaks.
+
+An index names only what differs from the norm. A description is carried for every page, capped so a long abstract cannot bloat the index; status appears only when the page is not `active`, and the trust tier only when a confirmation exists. Repeating `active` and `unverified` on every line would spend tokens to say nothing and would bury the one page that is superseded or actually reviewed.
+
+The saving is conditional and should not be oversold. For a handful of pages in one group, a branch index costs more than a flat root, because it carries a description per page. Two properties do hold: a root that links to branches does not grow when pages are added, and a branch index is far cheaper than opening the pages it describes.
+
 ## Trust tiers
 
 A quality review records when someone last examined the wiki. It cannot record which pages that covered, so pages carry their own confirmation using the Open Knowledge Format actor convention.

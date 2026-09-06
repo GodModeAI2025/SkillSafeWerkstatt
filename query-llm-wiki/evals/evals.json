@@ -117,6 +117,18 @@
         "hydration_required nennt Dateianzahl und geschätztes Volumen und startet keinen Download ohne Entscheidung.",
         "Es wird keine Sachantwort aus einem nicht verifizierten Stand erzeugt."
       ]
+    },
+    {
+      "id": 11,
+      "prompt": "Was steht im Wiki zu den Netzentgelten?",
+      "expected_output": "Eine belegte Antwort, die über Wurzelindex und passenden Zweigindex zur Seite findet, ohne alle Gruppen zu laden.",
+      "files": [],
+      "expectations": [
+        "Der Lese-Skill liest den Wurzelindex und danach nur die Zweigindizes, die die Antwort tragen können.",
+        "Es wird nicht ersatzweise das gesamte wiki/-Verzeichnis durchlaufen.",
+        "Die Beschreibungen im Zweigindex werden zur Auswahl genutzt, statt mehrere Seiten probeweise zu öffnen.",
+        "Ein Zweigindex wird nicht als inhaltlicher Beleg zitiert."
+      ]
     }
   ]
 }

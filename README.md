@@ -5,7 +5,7 @@ Diese Distribution enthält zwei zusammengehörige Agent Skills für einen porta
 - [maintain-llm-wiki](maintain-llm-wiki/SKILL.md) erstellt, pflegt, prüft, veröffentlicht und exportiert ein Wiki.
 - [query-llm-wiki](query-llm-wiki/SKILL.md) liest ein veröffentlichtes Wiki, sucht darin und beantwortet Fragen mit nachvollziehbaren Belegen.
 
-Ein gepflegtes Wiki ist außerdem **exportierbar**: Jeder verifizierte Release lässt sich als Bündel im [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format) ausgeben — dem herstellerneutralen Standard von Google Cloud für Wissen als Markdown. Das Wissen bleibt damit nicht in diesem Werkzeug gefangen. Abschnitt 4.20 beschreibt den Export, seine Grenzen und was er bewusst nicht mitnimmt.
+Ein gepflegtes Wiki ist außerdem **exportierbar**: Jeder verifizierte Release lässt sich als Bündel im [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format) ausgeben — dem herstellerneutralen Standard von Google Cloud für Wissen als Markdown. Das Wissen bleibt damit nicht in diesem Werkzeug gefangen. Abschnitt 4.21 beschreibt den Export, seine Grenzen und was er bewusst nicht mitnimmt.
 
 Die installierbaren Pakete liegen als [maintain-llm-wiki.skill](maintain-llm-wiki.skill) und [query-llm-wiki.skill](query-llm-wiki.skill) vor. Die danebenliegenden Ordner enthalten dieselben Skills entpackt und sind für Prüfung, Weiterentwicklung oder lokale Installation gedacht.
 
@@ -91,9 +91,10 @@ Diese Trennung verhindert, dass eine normale Wissensabfrage versehentlich Dateie
 |-- sources/
 |   `-- src-<hash>-<slug>.md   treue Markdown-Quellen
 |-- wiki/
-|   |-- index.md               vollständiger Wiki-Einstieg
+|   |-- index.md               Wiki-Einstieg
 |   |-- overview.md
 |   |-- concepts/
+|   |   `-- index.md           erzeugte Gruppenübersicht
 |   |-- entities/
 |   |-- topics/
 |   `-- comparisons/
@@ -408,7 +409,21 @@ Der Pflege-Skill kann einen verifizierten Release als eigenständigen Wissens-Sk
 
 Soll der Inhalt aktualisiert werden, wird das kanonische Wiki gepflegt und veröffentlicht. Danach wird ein neuer eingefrorener Skill-Abzug erstellt; der alte Export wird nicht direkt bearbeitet.
 
-### 4.17 Vertrauensstufen pro Seite
+### 4.17 Gestufte Orientierung
+
+Ein einziger Wurzelindex muss jede Seite auflisten. Die Kosten, sich in einem Wiki zu orientieren, wachsen damit mit seiner Größe — und zwar **bevor** eine einzige Seite gelesen wurde. Jedes befüllte Unterverzeichnis unter `wiki/` trägt deshalb eine erzeugte `index.md` mit den Seiten seiner Gruppe.
+
+Der Lese-Skill liest gestuft: Wurzelindex → passender Zweigindex → Seiten. Eine Seite gilt als aufgeführt, wenn der für sie zuständige Index sie nennt. Ein Wurzelindex, der weiterhin alles auflistet, bleibt gültig — bestehende Wikis brechen nicht.
+
+**Diese Dateien werden erzeugt, nicht gepflegt.** Der Graphlauf schreibt sie, eine Handänderung überlebt den nächsten Lauf nicht, und der Linter meldet einen veralteten, fehlenden oder verwaisten Index genauso wie einen veralteten Graphen.
+
+Das war eine bewusste Ausnahme: Es sind die ersten erzeugten Dateien in der kuratierten Schicht `wiki/`. Zwei Gründe geben den Ausschlag. `wiki/index.md` liegt bereits dort und ist bereits Navigation statt Wissen — ein Zweigindex erweitert also eine vorhandene Kategorie, statt eine neue zu schaffen. Und unter `graph/` erzeugt würden die Indizes nicht reduzieren, was der Lese-Skill als Markdown lädt; genau das war der Zweck.
+
+Ein Index nennt nur, **was vom Normalfall abweicht**. Eine Beschreibung trägt jede Seite, gekappt auf 100 Zeichen. Der Status erscheint nur, wenn die Seite nicht `active` ist, die Vertrauensstufe nur, wenn eine Bestätigung vorliegt. `active` und `unverified` auf jeder Zeile zu wiederholen würde Tokens kosten, um nichts zu sagen — und die eine abgelöste oder tatsächlich geprüfte Seite unsichtbar machen.
+
+**Der Gewinn ist bedingt, und das gehört gesagt.** Bei einer Handvoll Seiten in einer Gruppe kostet ein Zweigindex mehr als ein flacher Wurzelindex, weil er je Seite eine Beschreibung trägt. Zwei Eigenschaften gelten aber immer: Ein Wurzelindex, der auf Zweige verweist, wächst nicht mit der Seitenzahl. Und ein Zweigindex ist deutlich billiger als die Seiten, die er beschreibt — gemessen unter der Hälfte. Beides ist als Test festgehalten.
+
+### 4.18 Vertrauensstufen pro Seite
 
 Ein Qualitätsreview hält fest, **wann** zuletzt jemand ins Wiki geschaut hat. Es kann nicht festhalten, **welche Seiten** dabei geprüft wurden. Deshalb tragen Seiten ihre Bestätigung selbst.
 
@@ -435,7 +450,7 @@ Das Aufzeichnen läuft als hash-gebundene Plan/Apply-Transaktion mit automatisch
 
 Eine Vertrauensstufe sagt, wer wann geprüft hat. Sie sagt **nicht**, dass eine Seite richtig, vollständig oder aktuell ist, und sie ersetzt keine Belege. Eine gut belegte, ungeprüfte Seite kann die bessere Antwort tragen als eine geprüfte mit schwachen Quellen. Die Verteilung steht im veröffentlichten Qualitätsstatus, sodass der Lese-Skill sagen kann, wie viel eines Wikis eine Prüfung tatsächlich abgedeckt hat.
 
-### 4.18 Synchronisierte Ablagen und Konfliktkopien
+### 4.19 Synchronisierte Ablagen und Konfliktkopien
 
 Ein OneDrive- oder SharePoint-Client ist ein **Schreiber auf dem Wiki-Verzeichnis**, nicht nur ein Transportweg. Er legt eigenständig Dateien an und verzögert Schreibvorgänge unbestimmt. Der Skill kennt drei Klassen:
 
@@ -447,11 +462,11 @@ Zusätzlich geprüft werden Pfade, die sich nur in der Groß-/Kleinschreibung un
 
 Die Erkennung synchronisierter Ablagen ist eine **Heuristik** auf sichtbaren Pfadnamen und den Umgebungsvariablen des Clients. Es gibt keine unterstützte Schnittstelle, um den Zustand eines Sync-Clients abzufragen. Der Skill stellt sie deshalb nie als Tatsache dar.
 
-### 4.19 Ehrliche Persistenzmeldung
+### 4.20 Ehrliche Persistenzmeldung
 
 `fsync` macht einen Schreibvorgang auf **dieser Platte** dauerhaft — nicht hochgeladen. Auf einer offenbar synchronisierten Ablage meldet ein erfolgreicher Release seinen entfernten Zustand als `unconfirmed` und weist darauf hin, anderen die Verfügbarkeit erst zuzusagen, wenn der Client den Ordner als vollständig synchronisiert zeigt.
 
-### 4.20 Open Knowledge Format v0.2: der Weg nach draußen
+### 4.21 Open Knowledge Format v0.2: der Weg nach draußen
 
 Der OKF-Export ist ein **eigenständiges Ziel** dieser Distribution, keine Kompatibilitätsnotiz. Ein Wissensraum, aus dem man sein Wissen nicht wieder herausbekommt, ist eine Falle — auch dann, wenn er intern noch so sauber gebaut ist. Deshalb kann jeder verifizierte Release als Bündel im Open Knowledge Format v0.2 ausgegeben werden, dem herstellerneutralen Markdown-Standard von Google Cloud.
 
@@ -497,7 +512,7 @@ Bemerkenswert dabei: Die Prüfung kann **nicht** mit dem Frontmatter-Parser des 
 
 **Der Bericht.** Unabhängig vom Export bewertet ein reiner Bericht die Kompatibilität: Pflichtfeld `type`, empfohlene `title`, `description`, `resource` und `tags` sowie die v0.2-Ergänzungen `status`, `stale_after`, `generated` und `verified`. Er verändert nichts und schlägt nur vor.
 
-### 4.21 Selbstbeschreibender Aktionskatalog
+### 4.22 Selbstbeschreibender Aktionskatalog
 
 Der Skill kann seine vollständige Funktionsoberfläche maschinenlesbar beschreiben. Der Katalog weist pro Aktion unter anderem aus:
 
@@ -742,7 +757,7 @@ Der konkrete Aufruf der Helfer ist Aufgabe des ausführenden Agenten. Unter Clau
 
 Ein Wiki kann in einem lokal synchronisierten SharePoint-/OneDrive-Ordner liegen. Lesen und Schreiben auf Dateiebene folgen dann den Berechtigungen und der Synchronisation dieser Ablage. Die Skills implementieren keine eigene Benutzer- oder Rechteverwaltung.
 
-Der Sync-Client ist dabei ein **zweiter Schreiber** auf demselben Verzeichnis. Die Skills behandeln das ausdrücklich statt es zu ignorieren — Einzelheiten in den Abschnitten 4.18 und 4.19. Kurz:
+Der Sync-Client ist dabei ein **zweiter Schreiber** auf demselben Verzeichnis. Die Skills behandeln das ausdrücklich statt es zu ignorieren — Einzelheiten in den Abschnitten 4.19 und 4.20. Kurz:
 
 | Situation | Verhalten |
 |---|---|
@@ -809,7 +824,7 @@ Beispiele für den Lese-Skill:
 | Seite verschieben | Pfad ändern und interne Links nachführen | Vorschau-Hash, Bestätigung, Snapshot |
 | Sprachmigration planen | Vollständige Auswirkung ermitteln | Keine Teilmigration |
 | Lint | Struktur und Verträge prüfen | Nur sichere deterministische Reparaturen |
-| Graph bauen | Graphdaten und HTML-Leseansichten erzeugen | Nur abgeleitete Dateien |
+| Graph bauen | Graphdaten, HTML-Leseansichten und Gruppenübersichten erzeugen | Nur abgeleitete Dateien |
 | Review aufzeichnen | Tatsächliche Qualitäts-/Cleaning-Prüfung dokumentieren | Kein erfundener Zeitstempel |
 | Release | Version, Protokoll, Qualität und Manifest veröffentlichen | Strikter Lint, Manifest zuletzt |
 | Release verifizieren | Hash-Grenze prüfen | Read-only |
