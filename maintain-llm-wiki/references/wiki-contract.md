@@ -215,6 +215,10 @@ tags:
 
 Allowed source statuses are `active`, `partial`, `superseded`, and `withdrawn`. Never claim an unknown original hash or version. Empty values are acceptable when the information genuinely is unavailable.
 
+Not all evidence is a document. `source_type: "observation"` registers knowledge whose origin is an event - a decision in a meeting, the outcome of a run, something a person established during the work. Such a record needs two further fields, and registration refuses it without them: `observed_by`, an actor in the same notation as a trust confirmation (`human:<id>`, `agent/<name>`, `process:<id>`), and `occasion`, what produced it. Both fields belong to observations alone; supplying them for any other source type is refused rather than ignored. Lint fails a registry record that claims to be an observation without a valid actor and occasion.
+
+An observation is ordinary evidence, not a shortcut past it. It carries its own identifier, its own extracted Markdown, and its own hash, and a page built on it cites it exactly like a PDF. What it changes is only that knowledge arising during the work has a way in without the evidence chain acquiring a gap. It does not license writing down what an agent believes: an observation is registered because a named actor observed something on a named occasion.
+
 Extraction requirements:
 
 - preserve the source's order and meaning;
@@ -233,6 +237,16 @@ Never persist an absolute local filesystem path, a home-relative path, parent tr
 Source discovery is explicit, not heuristic. Read only a host attachment path or an exact file/directory selected by the user. If that path is missing or inaccessible, ask for reattachment or narrowly scoped access. Never search a complete home directory, filesystem root, mounted volume, or machine by filename, and never infer a local path from `original_ref`, a title, or a prior run. A registered Markdown extraction does not prove that the original remains locally available.
 
 Conversion takes place in a temporary workspace outside the target. Only the completed `.md` extraction is registered under `sources/`. A path such as `sources/raw/document.pdf` is always invalid; original PDFs, Office files, images, audio, archives, nested directories, and symlinks below `sources/` block lint and release.
+
+## Adopting an existing collection
+
+An Obsidian vault, a documentation folder, an older wiki: material that already exists should not have to be re-registered by hand one file at a time. `scripts/adopt_directory.py` performs that as a plan/apply transaction under the writer lock, against a directory that must lie outside the target.
+
+Adoption imports **evidence, not knowledge**. Every accepted file is registered as a source of type `adopted`, through the ordinary registration helper, so it passes every check a hand-registered source passes and receives its own identifier, hash, and portable reference. No page under `wiki/` is created, and no claim is asserted. Turning adopted material into wiki pages stays deliberate curation, with its own claims and source locators, exactly as before.
+
+`plan` reads and writes nothing. It reports every `*.md` file with the title the document carries itself (frontmatter `title`, then the first heading, then the file name), its hash, its size, blockers, and notes. Blocked are empty files, unreadable ones, symlinks, operating-system artifacts, and content byte-identical to an already registered source. Notes name a problematic original file name for synchronized storage and frontmatter outside the wiki's subset, which is not carried over. Non-Markdown files are reported as skipped rather than dropped silently.
+
+`apply` accepts only paths that appear in the confirmed plan and are adoptable, re-hashes each accepted file against the plan first, and refuses the whole selection when any file changed or vanished - a drift never half-applies. A recovery snapshot precedes the first write.
 
 ## Wiki page contract
 
@@ -263,6 +277,10 @@ tags:
 ```
 
 Allowed page types are `index`, `overview`, `concept`, `entity`, `topic`, and `comparison`. Allowed statuses are `draft`, `active`, and `superseded`. Omit `aliases` only when none are known. Keep `description` concise and useful for indexes and graph tooltips.
+
+A page may additionally carry the optional field `stale_after`, an ISO date (`YYYY-MM-DD`) or ISO-8601 instant naming the day its content stops being current: a price list valid to year end, a certificate, a regulation superseded on a known date. It is optional and stays optional. Most knowledge has no end date, and inventing one is worse than leaving the field out. A malformed value fails lint rather than silently expiring the page.
+
+A passed `stale_after` is a disclosure, not a verdict. It states that the page announced an end date and that date has gone by; it does not say the content is wrong. Nothing filters an expired page out of a release, an index, a search result, or an answer - a superseded regulation is frequently exactly what a reader asked about. The wiki-wide `schema/QUALITY_POLICY.md` governs the review rhythm for the whole wiki and remains the right instrument for that; `stale_after` governs one page and never sets a review schedule.
 
 ## Wiki-language contract
 

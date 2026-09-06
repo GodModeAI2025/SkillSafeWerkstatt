@@ -135,6 +135,26 @@ Record who produced and who confirmed individual pages, so a reader can tell a r
 
 Use locked `scripts/verify_pages.py plan` to show which pages a confirmation would cover and the tier it would record, then apply the confirmed plan hash. Pass `--user-confirmed-human-review` only after the named person has actually confirmed they reviewed those pages; recording agent work as `human:` is prohibited regardless of how the request is phrased. Report the resulting distribution rather than implying the wiki as a whole was reviewed.
 
+## Page expiry
+
+A page whose content has an actual end date may carry the optional frontmatter field `stale_after`, an ISO date or instant: a price list valid to year end, a certification, a regulation superseded on a known day. Set it only when the source itself establishes that date. Do not invent one, and do not add the field to a page merely because it feels old - the wiki-wide quality policy governs the review rhythm, and inventing an expiry is worse than having none.
+
+A passed date is a disclosure, not a verdict. Report it, never act on it: expired pages stay in the release, stay in indexes, stay findable, and are never deleted, hidden, or rewritten on that basis. The linter counts pages with and past their expiry, the release publishes those counts, and the reading skill names them in an answer. When a user asks about an expired page, offer to re-check the source, not to remove the page.
+
+## Observations
+
+Not all evidence is a document. Register knowledge that arose during the work - a decision in a meeting, the outcome of a run, something the user established - with `scripts/register_source.py --source-type observation`, adding `--observed-by <actor>` and `--occasion "<what produced it>"`. Both are required and are refused for any other source type. The actor uses the trust-tier notation: `human:<id>`, `agent/<name>`, `process:<id>`.
+
+Write the observation's Markdown as faithfully as any extraction: what was established, by whom, on what occasion, and nothing beyond it. An observation is ordinary evidence and a page built on it cites it like a PDF. It is not a licence to record what you believe: register it because a named actor observed something on a named occasion, and when nobody can be named, there is no observation to register.
+
+## Adopting an existing collection
+
+When a user already keeps an Obsidian vault, a documentation folder, or an older wiki, use locked `scripts/adopt_directory.py plan` against that directory rather than asking them to hand over files one at a time. It reads only; it reports each Markdown file with its own title, hash, blockers, and notes, plus the non-Markdown files it skipped.
+
+Show that report, let the user choose, then apply the confirmed plan hash with one `--accept <path>` per chosen file. Any file that changed since the plan stops the whole selection, and a recovery snapshot precedes the first write.
+
+Say plainly what adoption does and does not do: it registers evidence, not knowledge. Each accepted file becomes a registered source of type `adopted`; nothing is created under `wiki/`, and nothing is asserted. Building pages from that material is the same curation as always, with claims and source locators. Never present a completed adoption as a populated wiki.
+
 ## Open Knowledge Format
 
 Run locked `scripts/report_okf.py` only when the user asks about interoperability or an OKF migration. Never make OKF the native contract or invent its recommended metadata.

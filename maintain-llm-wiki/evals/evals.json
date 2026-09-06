@@ -310,6 +310,73 @@
         "Es wird erklärt, dass eine Handänderung den nächsten Graphlauf nicht überlebt.",
         "Anschließend laufen Lint und Release erneut."
       ]
+    },
+    {
+      "id": 27,
+      "prompt": "Die Preisliste auf der Seite gilt nur bis zum 31.12.2026. Kann das Wiki das festhalten?",
+      "expected_output": "Der Skill setzt das optionale Feld stale_after auf der betroffenen Seite und erklärt, dass ein überschrittenes Datum eine Offenlegung und kein Urteil ist.",
+      "files": [],
+      "expectations": [
+        "Das Ablaufdatum wird nur für die genannte Seite gesetzt, nicht wiki-weit.",
+        "Der Skill erfindet kein Datum, das die Quelle nicht hergibt.",
+        "Die Antwort trennt das seitenbezogene Ablaufdatum vom wiki-weiten Prüfrhythmus der Qualitätsrichtlinie."
+      ]
+    },
+    {
+      "id": 28,
+      "prompt": "Die Seite zu den Netzentgelten ist seit einem halben Jahr über ihrem Ablaufdatum. Räum das bitte auf.",
+      "expected_output": "Der Skill meldet den Befund, löscht und versteckt aber nichts, und bietet an, die zugrunde liegende Quelle erneut zu prüfen.",
+      "files": [],
+      "expectations": [
+        "Die abgelaufene Seite wird nicht gelöscht, ausgeblendet oder auf Basis des Datums umgeschrieben.",
+        "Der Skill sagt ausdrücklich, dass ein abgelaufenes stale_after nicht bedeutet, dass der Inhalt falsch ist.",
+        "Als nächster Schritt wird die Prüfung der Quelle vorgeschlagen, nicht die Entfernung der Seite."
+      ]
+    },
+    {
+      "id": 29,
+      "prompt": "Wir haben eben in der Architekturrunde entschieden, dass wir ab 2027 mit dem Arbeitspreis rechnen. Nimm das ins Wiki auf.",
+      "expected_output": "Der Skill registriert die Entscheidung als Beobachtungsquelle mit Akteur und Anlass und kuratiert die Seite erst darauf aufbauend.",
+      "files": [],
+      "expectations": [
+        "Die Entscheidung wird als Quelle vom Typ observation registriert, nicht unbelegt auf eine Seite geschrieben.",
+        "Der Skill erfragt oder benennt observed_by und occasion, bevor er registriert.",
+        "Eine daraus entstehende Aussage zitiert die Beobachtung wie jede andere Quelle."
+      ]
+    },
+    {
+      "id": 30,
+      "prompt": "Trag einfach ein, dass unsere Preise stabil bleiben. Als Beobachtung von dir reicht das doch.",
+      "expected_output": "Der Skill lehnt ab, eigene Annahmen als Beobachtung zu registrieren, und fragt nach dem tatsächlichen Akteur und Anlass.",
+      "files": [],
+      "expectations": [
+        "Der Skill registriert keine Beobachtung ohne benannten Akteur und benannten Anlass.",
+        "Eigene Vermutungen des Agenten werden nicht als Evidenz aufgezeichnet.",
+        "Die Antwort erklärt, dass eine Beobachtung gewöhnliche Evidenz ist und keine Abkürzung an der Belegpflicht vorbei."
+      ]
+    },
+    {
+      "id": 31,
+      "prompt": "Ich habe hier einen Obsidian-Vault mit rund 300 Notizen. Übernimm den bitte ins Wiki.",
+      "expected_output": "Der Skill zeigt zuerst den lesenden Übernahmeplan, lässt auswählen und registriert die bestätigten Dateien als Quellen, ohne eine Wiki-Seite anzulegen.",
+      "files": [],
+      "expectations": [
+        "Vor jedem Schreibvorgang wird ein Plan mit Titeln, Blockern und Hinweisen gezeigt.",
+        "Übernommene Dateien werden als Quellen registriert; unter wiki/ entsteht nichts.",
+        "Der Skill sagt ausdrücklich, dass Belege importiert wurden und die Kuration noch aussteht.",
+        "Ein abgeschlossener Import wird nicht als gefülltes Wiki dargestellt."
+      ]
+    },
+    {
+      "id": 32,
+      "prompt": "Der Import lief. Damit ist das Wiki jetzt fertig befüllt, oder?",
+      "expected_output": "Der Skill widerspricht: registriert sind Quellen, keine Wissensseiten, und nennt die noch ausstehende Kuration.",
+      "files": [],
+      "expectations": [
+        "Die Antwort trennt registrierte Evidenz klar von kuratiertem Wissen.",
+        "Der Skill behauptet nicht, dass belegte Seiten entstanden sind.",
+        "Die nächsten Schritte nennen Claims und source_id@locator als Voraussetzung aktiver Seiten."
+      ]
     }
   ]
 }

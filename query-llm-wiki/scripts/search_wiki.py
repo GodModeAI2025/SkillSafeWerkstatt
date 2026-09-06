@@ -10,6 +10,7 @@ import unicodedata
 from pathlib import Path
 
 import bm25
+import freshness
 import trust_contract
 from typing import Any, Iterable, Optional
 
@@ -336,6 +337,8 @@ def main() -> int:
                 "tags": as_list(data.get("tags")),
                 "score": round(score, 2),
                 "trust_tier": trust_contract.trust_tier(data),
+                "stale_after": str(data.get(freshness.STALE_AFTER) or ""),
+                "past_expiry": freshness.is_stale(data),
                 "snippet": best_snippet(searchable_body, query_token_set),
                 "claims": relevant_claims(
                     page_claims,

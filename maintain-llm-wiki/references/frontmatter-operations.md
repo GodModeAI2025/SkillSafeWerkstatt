@@ -76,6 +76,8 @@ Wikilink cleanup resolves only a complete vault-relative target or an unambiguou
 
 Never normalize stable IDs, claim text, source titles, source locators, `original_ref`, hashes, or protected human content merely for visual consistency.
 
+`stale_after` is a statement about content, not metadata hygiene. A bulk `set` that gives many pages the same expiry asserts something about each of them that the sources may not support, so plan it only when the user names a date that genuinely applies to the whole selection, and show which pages it would touch. A bulk `delete` of the field is equally a claim - that those pages no longer have an end date - and needs the same confirmation. Neither operation may be applied as cleanup.
+
 ## Plan and apply
 
 Create the plan while holding the writer lock:

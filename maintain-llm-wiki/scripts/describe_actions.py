@@ -96,6 +96,34 @@ CATALOG = {
             ],
             writes=False,
         ),
+        action(
+            "adopt-directory-plan",
+            "adopt_directory.py plan",
+            "Report which files of an existing Markdown collection could be registered as "
+            "sources, with blockers and storage notes, without changing anything.",
+            [
+                {"name": "source_dir", "type": "runtime path", "required": True},
+                {"name": "content_language", "type": "BCP-47 string", "required": False},
+                {"name": "output", "type": "temporary plan path", "required": False},
+            ],
+            writes=False,
+            preview=True,
+        ),
+        action(
+            "adopt-directory-apply",
+            "adopt_directory.py apply",
+            "Register exactly the confirmed files of a hash-bound adoption plan as sources "
+            "after an automatic snapshot; creates no wiki page.",
+            [
+                {"name": "source_dir", "type": "runtime path", "required": True},
+                {"name": "plan_file", "type": "string", "required": True},
+                {"name": "expect_plan_sha256", "type": "sha256", "required": True},
+                {"name": "accept", "type": "string[]", "required": True},
+            ],
+            writes=True,
+            snapshot=True,
+            confirmation=True,
+        ),
         action("report-okf", "report_okf.py", "Report optional OKF required/recommended field compatibility without mutation.", [{"name": "include_sources", "type": "boolean", "required": False}], writes=False),
     ],
 }

@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import portable_io
+import trust_contract
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -35,6 +36,12 @@ def slugify(value: str) -> str:
 
 def yaml_string(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
+
+
+#: A source whose origin is an event rather than a document. The wiki still
+#: records who observed it and on what occasion, so a page built on it is as
+#: traceable as one built on a PDF - only the origin differs.
+OBSERVATION_TYPE = "observation"
 
 
 def portable_reference(value: str) -> bool:
@@ -88,6 +95,19 @@ def main() -> int:
     parser.add_argument("--original-version", default="")
     parser.add_argument("--source-type", default="unknown")
     parser.add_argument(
+        "--observed-by",
+        default="",
+        help=(
+            "Actor for an observation source (human:<id>, agent/<name>, process:<id>). "
+            "Required with --source-type observation."
+        ),
+    )
+    parser.add_argument(
+        "--occasion",
+        default="",
+        help="What produced an observation: the meeting, decision, or run it came from",
+    )
+    parser.add_argument(
         "--content-language",
         default="und",
         help="BCP-47-style language code of the extracted source; use und when unknown",
@@ -104,6 +124,24 @@ def main() -> int:
 
     target = Path(args.target).expanduser().resolve()
     require_lock(target, args.lock_token)
+    # An observation has no document behind it. It is still a registered source:
+    # the event is the origin, and it is recorded with an actor and an occasion so
+    # the evidence chain stays intact instead of acquiring a gap.
+    if args.source_type == OBSERVATION_TYPE:
+        if not trust_contract.valid_actor(args.observed_by):
+            raise SystemExit(
+                "an observation source needs --observed-by as human:<id>, agent/<name>, "
+                "or process:<id>; an observation nobody is named for is not evidence"
+            )
+        if not args.occasion.strip():
+            raise SystemExit(
+                "an observation source needs --occasion: what produced it, such as the "
+                "meeting, decision, or run"
+            )
+    elif args.observed_by or args.occasion:
+        raise SystemExit(
+            "--observed-by and --occasion belong to --source-type observation only"
+        )
     if not portable_reference(args.original_ref):
         raise SystemExit(
             "original-ref must be a portable relative or logical reference, URL, or remote item ID; "
@@ -178,6 +216,14 @@ def main() -> int:
             f"title: {yaml_string(args.title)}",
             f"date: {yaml_string(timestamp[:10])}",
             f"original_ref: {yaml_string(args.original_ref)}",
+            *(
+                [
+                    f"observed_by: {yaml_string(args.observed_by)}",
+                    f"occasion: {yaml_string(args.occasion.strip())}",
+                ]
+                if args.source_type == OBSERVATION_TYPE
+                else []
+            ),
             f"original_version: {yaml_string(args.original_version)}",
             f"original_sha256: {yaml_string(original_hash)}",
             f"extracted_sha256: {yaml_string(extracted_hash)}",
@@ -204,6 +250,11 @@ def main() -> int:
         "title": args.title,
         "path": destination.relative_to(target).as_posix(),
         "original_ref": args.original_ref,
+        **(
+            {"observed_by": args.observed_by, "occasion": args.occasion.strip()}
+            if args.source_type == OBSERVATION_TYPE
+            else {}
+        ),
         "original_version": args.original_version,
         "original_sha256": original_hash,
         "extracted_sha256": extracted_hash,

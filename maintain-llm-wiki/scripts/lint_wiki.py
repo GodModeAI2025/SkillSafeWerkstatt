@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 
 from design_contract import CLUSTER_COLORS
 
+import freshness
 import navigation
 import sync_artifacts
 import trust_contract
@@ -621,6 +622,17 @@ def main() -> int:
             str(record.get("content_language") or ""),
         ):
             errors.append(f"Registry source {source_id} has an invalid or missing content_language")
+        # An observation has no document to fall back on, so the actor and the
+        # occasion are the whole of its provenance and may not be missing.
+        if record.get("source_type") == "observation":
+            if not trust_contract.valid_actor(record.get("observed_by")):
+                errors.append(
+                    f"Registry source {source_id} is an observation without a valid observed_by"
+                )
+            if not str(record.get("occasion") or "").strip():
+                errors.append(
+                    f"Registry source {source_id} is an observation without an occasion"
+                )
 
     # A conflict copy carries the frontmatter of the page it was copied from, so
     # parsing it as a page would report a duplicate id and hide the real cause.
@@ -644,6 +656,7 @@ def main() -> int:
                 errors.append(f"{path}: missing page field {key}")
         # Trust metadata is optional, but must be well formed when present.
         errors.extend(trust_contract.validate(data, str(path)))
+        errors.extend(freshness.validate(data, str(path)))
         if data.get("type") != "index" and not data.get(trust_contract.GENERATED_BY):
             warnings.append(
                 f"{path}: no {trust_contract.GENERATED_BY}; the page cannot say who produced it"
@@ -888,6 +901,9 @@ def main() -> int:
             "claims": len(all_claims),
             "wiki_language": wiki_language,
             "identity": identity_status,
+            "freshness": freshness.summary(
+                [page_data[path] for path in wiki_files if page_data.get(path)]
+            ),
             "trust": trust_contract.summary(
                 trust_contract.distribution(
                     [page_data[path] for path in wiki_files if page_data.get(path)]

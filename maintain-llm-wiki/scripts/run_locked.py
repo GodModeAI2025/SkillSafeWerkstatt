@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 HELPERS = {
+    "adopt_directory.py",
     "apply_identity.py",
     "build_graph.py",
     "claim_id.py",

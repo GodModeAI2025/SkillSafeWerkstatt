@@ -257,6 +257,23 @@ def assess_quality(target: Path, expected_manifest_sha256: str = "", now: Option
             }
         )
 
+    # A page may declare its own end date. Report how many have passed it; never
+    # let that hide the page, because a superseded rule is often the question.
+    fresh = status.get("freshness") if isinstance(status.get("freshness"), dict) else {}
+    expired = safe_int(fresh.get("expired"))
+    if expired:
+        advisories.append(
+            {
+                "severity": "notice",
+                "code": "pages_past_their_expiry",
+                "message": f"{expired} page(s) declared an end date that has passed.",
+                "recommended_action": (
+                    "Name it when such a page carries the answer. It is a disclosure, not a "
+                    "verdict: the content may still be correct, and nothing filters it out."
+                ),
+            }
+        )
+
     review_states = {quality_review.get("state"), cleaning_review.get("state")}
     overall = "current"
     if "warning" in severity_states or review_states & {"overdue", "attention-needed", "unknown"}:
@@ -276,6 +293,7 @@ def assess_quality(target: Path, expected_manifest_sha256: str = "", now: Option
             "open_question_items": safe_int(status.get("open_question_items")),
             "identity": identity,
             "trust": trust,
+            "freshness": fresh,
             "advisories": advisories,
         },
     }

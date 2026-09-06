@@ -69,6 +69,9 @@ Das Zielverzeichnis ist die kanonische Arbeitskopie. Ob es später lokal bleibt,
 | Seiten als geprüft aufzeichnen | Ja, mit Bestätigung | Nein, nur Stufe lesen und nennen |
 | Konfliktkopien auflösen | Ja, nach Vergleich und Bestätigung | Nein, nur melden |
 | OKF-Bündel exportieren | Ja, aus verifiziertem Release, mit Quellen | Nein |
+| Beobachtungen als Quelle registrieren | Ja, mit Akteur und Anlass | Nein |
+| Bestehende Markdown-Sammlung übernehmen | Ja, als Quellen, über Plan/Apply | Nein |
+| Ablaufdatum einer Seite | Setzen und melden | Nur nennen, nie filtern |
 | Wiki verändern | Ja, kontrolliert | Niemals |
 
 Diese Trennung verhindert, dass eine normale Wissensabfrage versehentlich Dateien verändert oder einen Pflegeprozess auslöst.
@@ -512,7 +515,48 @@ Bemerkenswert dabei: Die Prüfung kann **nicht** mit dem Frontmatter-Parser des 
 
 **Der Bericht.** Unabhängig vom Export bewertet ein reiner Bericht die Kompatibilität: Pflichtfeld `type`, empfohlene `title`, `description`, `resource` und `tags` sowie die v0.2-Ergänzungen `status`, `stale_after`, `generated` und `verified`. Er verändert nichts und schlägt nur vor.
 
-### 4.22 Selbstbeschreibender Aktionskatalog
+### 4.22 Ablaufdatum pro Seite
+
+Das Wiki regelt Frische bisher **wiki-weit**: Wie oft jemand hinschauen soll, wie oft aufgeräumt wird. Das ist das richtige Instrument für einen Prüfrhythmus und das falsche für eine Seite, deren Inhalt ein echtes Enddatum hat — eine Preisliste bis Jahresende, ein Zertifikat, eine Regelung, die an einem bekannten Tag abgelöst wird.
+
+Dafür gibt es das optionale Feld `stale_after`, ein ISO-Datum oder ein ISO-8601-Zeitpunkt, übernommen aus OKF v0.2. Es ist optional und bleibt es: Das meiste Wissen hat kein Ablaufdatum, und eines zu erfinden wäre schlechter, als keines zu haben. Ein unlesbarer Wert lässt den Linter fehlschlagen, statt die Seite still ablaufen zu lassen.
+
+Entscheidend ist, was ein überschrittenes Datum **nicht** ist:
+
+> Ein abgelaufenes `stale_after` ist eine **Offenlegung, kein Urteil**. Es sagt, dass die Seite ein Enddatum genannt hat und dieses vorbei ist. Es sagt nicht, dass der Inhalt falsch ist.
+
+Deshalb filtert nichts eine abgelaufene Seite heraus — nicht der Release, nicht der Index, nicht die Suche, nicht die Antwort. Eine abgelöste Regelung ist häufig genau das, wonach jemand gefragt hat. Der Linter zählt Seiten mit und über ihrem Ablaufdatum, der Release veröffentlicht diese Zahlen im Qualitätsstatus, die Suche markiert betroffene Treffer, und der Lese-Skill benennt es in der Antwort. Gelöscht, versteckt oder umgeschrieben wird deswegen nie etwas.
+
+### 4.23 Beobachtungen als Quellen
+
+Nicht jeder Beleg ist ein Dokument. Eine Entscheidung in einer Besprechung, das Ergebnis eines Laufs, etwas, das der Anwender während der Arbeit festgestellt hat: Solches Wissen entsteht ohne PDF, und ohne einen Weg hinein bekommt die Belegkette an genau dieser Stelle eine Lücke — oder das Wissen landet unbelegt auf einer Seite.
+
+`--source-type observation` registriert es als vollwertige Quelle. Zwei zusätzliche Felder sind dabei **Pflicht**, und die Registrierung verweigert ohne sie:
+
+| Feld | Bedeutung | Notation |
+|---|---|---|
+| `observed_by` | Wer hat es beobachtet | `human:<id>`, `agent/<name>`, `process:<id>` |
+| `occasion` | Was es hervorgebracht hat | Freitext, z. B. „Architekturrunde 2026-09-06" |
+
+Beide Felder gehören ausschließlich zu Beobachtungen; wer sie an einer anderen Quellenart mitgibt, bekommt einen Fehler statt stiller Ignoranz. Der Linter prüft die Registrierung gegen dieselbe Regel.
+
+Eine Beobachtung ist damit **gewöhnliche Evidenz, keine Abkürzung an ihr vorbei**. Sie trägt eine eigene ID, ein eigenes Markdown-Extrakt und einen eigenen Hash, und eine Seite zitiert sie wie ein PDF. Was sie nicht ist: eine Erlaubnis, aufzuschreiben, was ein Agent glaubt. Sie wird registriert, weil ein benannter Akteur bei einem benannten Anlass etwas festgestellt hat. Lässt sich niemand benennen, gibt es keine Beobachtung zu registrieren.
+
+### 4.24 Übernahme einer bestehenden Sammlung
+
+Wer bereits einen Obsidian-Vault, einen Dokumentationsordner oder ein älteres Wiki pflegt, soll dieses Material nicht Datei für Datei von Hand nachtragen müssen. `adopt_directory.py` übernimmt es als Plan/Apply-Transaktion aus einem Verzeichnis, das außerhalb des Wikis liegen muss.
+
+Der heikle Punkt daran ist offensichtlich: Ein Massenimport ist genau die Form von Fehler, gegen die dieses Wiki gebaut ist — Inhalt unter `wiki/`, hinter dem nichts steht. Die Übernahme löst das, indem sie **Belege importiert, kein Wissen**:
+
+- Jede angenommene Datei wird als Quelle vom Typ `adopted` registriert — durch denselben Registrierungs-Helfer wie jede handgepflegte Quelle, mit eigener ID, eigenem Hash und portabler Referenz.
+- Unter `wiki/` entsteht dabei **nichts**. Keine Seite, keine Behauptung.
+- Daraus Seiten zu machen, bleibt Kuration wie bisher: mit Claims, mit `source_id@locator`.
+
+Der Plan liest nur. Er nennt zu jeder `*.md`-Datei den Titel, den das Dokument selbst trägt (Frontmatter, dann erste Überschrift, dann Dateiname), Hash, Größe, Blocker und Hinweise. Blockiert sind leere und unlesbare Dateien, Symlinks, Betriebssystem-Artefakte sowie Inhalte, die byte-identisch bereits registriert sind. Hinweise nennen einen für OneDrive oder SharePoint problematischen Originalnamen und Frontmatter außerhalb der Teilmenge des Wikis, das nicht übernommen wird. Nicht-Markdown-Dateien werden als übersprungen ausgewiesen, statt stillschweigend zu verschwinden.
+
+Das Anwenden nimmt nur Pfade an, die im bestätigten Plan stehen und übernehmbar sind, prüft vor dem ersten Schreiben jeden Hash erneut und verweigert bei Abweichung die **gesamte** Auswahl — eine Drift wendet nie zur Hälfte an. Ein Snapshot geht dem ersten Schreibvorgang voraus.
+
+### 4.25 Selbstbeschreibender Aktionskatalog
 
 Der Skill kann seine vollständige Funktionsoberfläche maschinenlesbar beschreiben. Der Katalog weist pro Aktion unter anderem aus:
 
@@ -839,6 +883,9 @@ Beispiele für den Lese-Skill:
 | Konfliktkopie auflösen | Sync-Konflikt entscheiden | Beide Seiten im Vergleich, Bestätigung, Snapshot |
 | OKF berichten | Kompatibilität mit v0.2 bewerten | Read-only, keine erfundenen Werte |
 | OKF-Bündel exportieren | Verifizierten Release als selbsttragendes OKF-v0.2-Bündel schreiben | Read-only, leeres Ziel außerhalb, Selbstvalidierung, Verlustliste im Bündel |
+| Beobachtung registrieren | Ereigniswissen als Quelle aufnehmen | Akteur und Anlass sind Pflicht, sonst Ablehnung |
+| Sammlung übernehmen (Plan) | Bestehende Markdown-Sammlung berichten | Read-only, Titel aus dem Dokument, Blocker und Hinweise |
+| Sammlung übernehmen (Apply) | Bestätigte Dateien als Quellen registrieren | Hash-Bindung, Snapshot, keine Seite unter `wiki/` |
 
 ## 12. Funktionskatalog des Lese-Skills
 
@@ -847,7 +894,7 @@ Beispiele für den Lese-Skill:
 | Release verifizieren | Status, Version, Release-ID und Manifest-Hash | Nein |
 | Qualität beurteilen | Lint-, Review-, Cleaning-, Fragen- und Altersstatus | Nein |
 | Frontmatter inventarisieren | Felder, Typen, Beispiele und Drift | Nein |
-| Suchen und filtern | BM25-gerankte Ergebnisse, Claims, Quellen, Facetten und Vertrauensstufe | Nein |
+| Suchen und filtern | BM25-gerankte Ergebnisse, Claims, Quellen, Facetten, Vertrauensstufe und überschrittenes Ablaufdatum | Nein |
 
 Der maschinenlesbare Aktionskatalog beider Skills dient der Selbsterkennung durch Agenten. Er erweitert keine Rechte und umgeht keine Bestätigung.
 
