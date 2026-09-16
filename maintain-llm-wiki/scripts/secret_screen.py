@@ -29,12 +29,39 @@ PATTERNS: tuple[tuple[str, "re.Pattern[str]"], ...] = (
     ("private-key", re.compile(r"-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----")),
     ("aws-access-key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
     ("github-token", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,})")),
-    ("api-key", re.compile(r"\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{32,}")),
+    ("api-key", re.compile(r"(?<![\w-])sk-(?:ant-|proj-)?[A-Za-z0-9_-]{32,}")),
     ("slack-token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{20,}")),
     ("google-api-key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b")),
     ("json-web-token", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
     ("url-credentials", re.compile(r"\b[a-z][a-z0-9+.-]*://[^/\s:@<>\"'`]+:[^/\s:@<>\"'`]+@")),
 )
+
+#: Documentation shows credentials as patterns: ghp_xxxx..., sk-proj-XXXX..., the
+#: AWS documentation key ending in EXAMPLE, the jwt.io sample token, or
+#: postgres://user:password@host. A source that explains authentication is not
+#: a leak, and blocking it would push people to edit faithful extractions.
+EXAMPLE_SIGNATURES = {"SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"}
+URL_PASSWORD_PLACEHOLDERS = {
+    "pass", "passwd", "password", "passwort", "pw", "pwd", "secret", "geheim",
+    "token", "changeme",
+}
+
+
+def is_placeholder(kind: str, match: str) -> bool:
+    """Whether a credential-shaped match is recognizably a documentation placeholder."""
+    if kind == "url-credentials":
+        password = match.rsplit("@", 1)[0].split("://", 1)[1].split(":", 1)[1]
+        return (
+            password.lower() in URL_PASSWORD_PLACEHOLDERS
+            or password[:1] in {"$", "{", "%", "*"}
+            or len(set(password.lower())) == 1
+        )
+    if "example" in match.lower() or match.rsplit(".", 1)[-1] in EXAMPLE_SIGNATURES:
+        return True
+    # The longest body segment made of at most two characters: xxxx, XXXX, 0000.
+    body = max(re.split(r"[_.-]", match[4:]), key=len)
+    return len(body) >= 12 and len(set(body.lower())) <= 2
+
 
 #: Text formats a wiki holds. Everything else is refused elsewhere or derived.
 SCANNED_SUFFIXES = {".md", ".json", ".jsonl"}
@@ -45,7 +72,7 @@ def scan_text(text: str) -> list[tuple[int, str]]:
     findings: list[tuple[int, str]] = []
     for number, line in enumerate(text.splitlines(), 1):
         for kind, pattern in PATTERNS:
-            if pattern.search(line):
+            if any(not is_placeholder(kind, m.group(0)) for m in pattern.finditer(line)):
                 findings.append((number, kind))
                 break
     return findings

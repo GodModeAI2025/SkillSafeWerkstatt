@@ -45,6 +45,21 @@ class Screen(unittest.TestCase):
         )
         self.assertEqual(secret_screen.scan_text(text), [])
 
+    def test_documentation_placeholders_are_not_findings(self) -> None:
+        text = (
+            "postgres://user:password@localhost/db\n"
+            "https://bot:${TOKEN}@ci.example.org\n"
+            "AKIA" + "IOSFODNN7EXAMPLE\n"
+            "gh" + "p_" + "x" * 36 + "\n"
+            "sk-" + "proj-" + "X" * 40 + "\n"
+            "task-sk-" + "abcdefghijklmnopqrstuvwxyz0123456789\n"
+        )
+        self.assertEqual(secret_screen.scan_text(text), [])
+        self.assertEqual(
+            secret_screen.scan_text(f"postgres://user:password@localhost/db {URL}\n"),
+            [(1, "url-credentials")],
+        )
+
     def test_a_report_line_never_repeats_the_value(self) -> None:
         lines = secret_screen.describe("wiki/overview.md", secret_screen.scan_text(URL))
         self.assertEqual(len(lines), 1)
