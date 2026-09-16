@@ -9,6 +9,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+import secret_screen
+
 
 PAGE_MARKER = re.compile(r"<!--\s*(?:page|slide)\s*:\s*[^>]+-->", re.IGNORECASE)
 SUSPICIOUS_HEADING = re.compile(r"^#{1,6}\s+#+(?:\s+#+)*\s*$")
@@ -30,6 +32,8 @@ def assess(path: Path, source_type: str = "unknown") -> dict[str, Any]:
         errors.append("extraction contains control characters")
     if "\ufffd" in text:
         errors.append("extraction contains Unicode replacement characters")
+    # A faithful extraction is still not allowed to carry a live credential in.
+    errors.extend(secret_screen.describe("extraction line", secret_screen.scan_text(text)))
     lines = text.splitlines()
     longest = max((len(line) for line in lines), default=0)
     extreme_lines = [index for index, line in enumerate(lines, 1) if len(line) > 20000]
