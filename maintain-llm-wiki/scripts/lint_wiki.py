@@ -19,6 +19,7 @@ from design_contract import CLUSTER_COLORS
 
 import freshness
 import navigation
+import secret_screen
 import sync_artifacts
 import trust_contract
 
@@ -881,6 +882,21 @@ def main() -> int:
                 errors.append(f"graph/graph.json contains unresolved links: {graph.get('unresolved')}")
         except (json.JSONDecodeError, AttributeError) as exc:
             errors.append(f"graph/graph.json is invalid: {exc}")
+
+    # Snapshots under meta/history keep what they captured, and the graph is
+    # regenerated from the Markdown, so both follow once the source is clean.
+    for path in sorted(target.rglob("*")):
+        relative = path.relative_to(target).as_posix()
+        if (
+            path.suffix not in secret_screen.SCANNED_SUFFIXES
+            or not path.is_file()
+            or path.is_symlink()
+            or relative.startswith(("meta/history/", "graph/"))
+            or relative == "meta/lint-report.json"
+            or relative in storage_findings["excluded"]
+        ):
+            continue
+        errors.extend(secret_screen.describe(relative, secret_screen.scan_file(path)))
 
     target_prefix = str(target)
     portable_errors = [message.replace(target_prefix, ".").replace("\\", "/") for message in errors]

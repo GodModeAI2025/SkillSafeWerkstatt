@@ -228,7 +228,7 @@ Extraction requirements:
 - do not add interpretation, synthesis, recommendations, or facts from other sources.
 - preserve the source's language and record it in `content_language`; use `und` only when it cannot be determined reliably.
 
-Before registration, the extraction preflight rejects invalid UTF-8, replacement or control characters, empty content, unclosed fences, and extreme flattened lines. It flags suspicious headings, unusually long lines, missing page or slide markers, and malformed table-like runs for review. Warning-bearing material is `partial` by default. Source Markdown and its `meta/sources.jsonl` record form one registration invariant: failure to publish either part rolls the new source file back.
+Before registration, the extraction preflight rejects invalid UTF-8, replacement or control characters, empty content, unclosed fences, and extreme flattened lines. It flags suspicious headings, unusually long lines, missing page or slide markers, and malformed table-like runs for review. Warning-bearing material is `partial` by default. The preflight also rejects credential-shaped content: private key blocks, fixed-shape access tokens, JSON Web Tokens, and URLs carrying a user name and password. Faithfulness does not extend to a live credential. Stop, tell the user which line and kind were found, and continue only with an extraction in which the credential is replaced by an explicit marker such as `[credential removed]`; recommend rotating it, because it has already left its original place. Recognizable documentation placeholders such as `ghp_xxxx…`, keys containing `EXAMPLE`, the jwt.io sample token, or `user:password@` and `${TOKEN}` in URLs are not findings. Lint applies the same screen to existing wikis, so an already registered source that carries a credential blocks release until the user approves a redacted re-registration. Findings name the line and kind, never the value. Source Markdown and its `meta/sources.jsonl` record form one registration invariant: failure to publish either part rolls the new source file back.
 
 `meta/sources.jsonl` contains one JSON object per registered source version. A byte-identical source is a duplicate and should not be ingested twice.
 
@@ -424,6 +424,7 @@ Before completion:
 - source Markdown retains its recorded original `content_language` while synthesis uses the wiki language;
 - source IDs are registered and unique;
 - registered source references contain no absolute local filesystem paths;
+- no Markdown or JSON file outside `meta/history/` and `graph/` contains a credential-shaped value, and no report repeats one;
 - `sources/` is flat and contains only registered Markdown extractions, with no `raw/` directory, binary originals, nested directories, or symlinks;
 - every active non-index page cites at least one registered source;
 - every active non-index page contains at least one valid claim block;

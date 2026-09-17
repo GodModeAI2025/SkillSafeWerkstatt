@@ -146,7 +146,7 @@ Die Initialisierung baut das vollständige Wiki zunächst außerhalb des Zielver
 1. Das Ausgangsmaterial wird in einem temporären Arbeitsbereich gelesen.
 2. Der Inhalt wird möglichst treu in Markdown umgewandelt.
 3. Sprache, Überschriften, Listen, Tabellen, Zitate, Kennungen sowie Seiten-, Folien-, Abschnitts- oder Zeitmarken bleiben erhalten, soweit sie auslesbar sind.
-4. Eine Vorprüfung erkennt leere oder beschädigte Extrakte, extreme Fließzeilen, ungeschlossene Codeblöcke sowie auffällige Überschriften, Tabellen und fehlende Seitenmarken.
+4. Eine Vorprüfung erkennt leere oder beschädigte Extrakte, extreme Fließzeilen, ungeschlossene Codeblöcke sowie auffällige Überschriften, Tabellen und fehlende Seitenmarken. Zugangsdaten wie private Schlüssel, Token oder URLs mit Passwort weist sie zurück; der Lint prüft dasselbe für das gesamte Wiki. Gemeldet werden Datei, Zeile und Art, nie der Wert selbst.
 5. Die Markdown-Fassung wird mit einer stabilen `source_id` unter `sources/` registriert; Quelle und Registereintrag werden gemeinsam veröffentlicht oder gemeinsam verworfen.
 6. Wenn Originalbytes verfügbar sind, kann ihr Hash ermittelt werden; ein lokaler absoluter Dateipfad wird trotzdem nicht im Wiki gespeichert.
 7. Erst danach wird der Inhalt in die gepflegte Wissensschicht eingeordnet und synthetisiert.
