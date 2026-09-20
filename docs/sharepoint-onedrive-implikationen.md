@@ -286,9 +286,11 @@ Faktenwissen, das heute an keiner Stelle im Vertrag steht:
 1. Der Sync-Client ist ein **Schreiber auf dem Wiki-Verzeichnis**, nicht nur ein Transportweg.
 2. Konflikte werden **nie gemergt**; es entstehen zusätzliche Dateien im selben Verzeichnis, benannt
    nach dem Gerät.
-3. `.lock`, `CON`, `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `LPT0`–`LPT9`, `desktop.ini`, Namen mit `~$`
+3. `.lock`, `CON`, `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `LPT0`–`LPT9`, Namen mit `~$`
    am Anfang und `_vti_` an beliebiger Stelle sind gesperrt; ebenso `" * : < > ? / \ |`, führende
-   und schließende Leerzeichen sowie ein schließender Punkt.
+   und schließende Leerzeichen sowie ein schließender Punkt. `desktop.ini` zählt nicht hierher,
+   sondern zu den Betriebssystemartefakten (Punkt 6): Die Ablage verweigert den Namen zwar, aber
+   die Datei trägt nichts, was verloren gehen könnte.
 4. Der vollständige dekodierte Pfad ist auf **400 Zeichen** begrenzt; unter Windows greift zusätzlich
    **260 Zeichen** ohne aktivierte Langpfadunterstützung.
 5. Files On-Demand hydriert **transparent beim Lesen**; die zugrundeliegenden Reparse-Points sind
