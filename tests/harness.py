@@ -208,6 +208,8 @@ def build_wiki(
         MAINTAIN / "plan_identity.py",
         "--input",
         str(identity_input),
+        "--wiki-language",
+        language,
         "--output",
         str(identity_plan),
     )
