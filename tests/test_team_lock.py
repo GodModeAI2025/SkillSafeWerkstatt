@@ -473,5 +473,255 @@ class LegacySingleSlot(unittest.TestCase):
             self.assertEqual(vault.status()["lock"]["maintainer_id"], ALICE)
 
 
+class EvictionIsFinal(unittest.TestCase):
+    """An eviction must outlive the claim that performed it.
+
+    Recording "I superseded you" only inside the evicting claim makes the
+    eviction as short-lived as that claim: releasing it, or letting it expire,
+    handed the wiki straight back to the run that had just been stopped -
+    together with a token that still worked.
+    """
+
+    def test_a_forced_out_claim_does_not_come_back_when_the_forcer_releases(self) -> None:
+        with TeamVault() as vault:
+            vault.acquire(ALICE)
+            forced = payload(vault.acquire(BOB, "--force", "--reason", "alice is offline"))
+            self.assertTrue(forced["acquired"])
+            self.assertEqual(
+                [entry["maintainer_id"] for entry in forced["overridden_lock"]["evicted_claims"]],
+                [ALICE],
+            )
+            self.assertFalse(vault.claim_of(ALICE).exists())
+
+            released = payload(
+                lock_tool("release", "--target", str(vault.path),
+                          "--token-file", str(vault.token(BOB)))
+            )
+            self.assertTrue(released["released"])
+            self.assertNotIn("lock_directory_remains", released)
+            # The evicted token is dead and the wiki is free, not held by the
+            # maintainer who was told to stop.
+            self.assertEqual(vault.status()["state"], "free")
+            self.assertFalse((vault.path / LOCK).exists())
+            refusal = lock_tool("verify", "--target", str(vault.path),
+                                "--token-file", str(vault.token(ALICE)), check=False)
+            self.assertNotEqual(refusal.returncode, 0)
+
+    def test_a_forced_out_run_is_still_told_precisely_what_happened(self) -> None:
+        with TeamVault() as vault:
+            vault.acquire(ALICE)
+            vault.acquire(BOB, "--force", "--reason", "alice is offline")
+            refusal = payload(
+                lock_tool("verify", "--target", str(vault.path),
+                          "--token-file", str(vault.token(ALICE)), check=False)
+            )
+            self.assertEqual(refusal["state"], "superseded")
+            self.assertEqual([h["maintainer_id"] for h in refusal["taken_over_by"]], [BOB])
+
+    def test_a_handed_over_claim_does_not_come_back_either(self) -> None:
+        with TeamVault() as vault:
+            vault.acquire(ALICE)
+            vault.age(vault.claim_of(ALICE), 4 * 3600 + 2 * 3600)
+            vault.acquire(BOB, "--take-over", "--reason", "abandoned", "--settle-seconds", "60",
+                          check=False)
+            declaration = vault.claim_of(BOB)
+            vault.rewrite(declaration, takeover={
+                **json.loads(declaration.read_text(encoding="utf-8"))["takeover"],
+                "effective_at": "2000-01-01T00:00:00Z",
+            })
+            taken = payload(
+                vault.acquire(BOB, "--take-over", "--reason", "abandoned",
+                              "--settle-seconds", "60")
+            )
+            self.assertTrue(taken["acquired"])
+            self.assertFalse(vault.claim_of(ALICE).exists())
+            lock_tool("release", "--target", str(vault.path),
+                      "--token-file", str(vault.token(BOB)))
+            self.assertEqual(vault.status()["state"], "free")
+
+
+class SimultaneousAcquisition(unittest.TestCase):
+    def test_two_processes_racing_never_both_report_success(self) -> None:
+        """Two maintainers acquiring in the same moment both used to be told
+        "acquired", and only the first helper call found the contention - by
+        which time the wiki was stuck until two people ran withdraw. Nothing has
+        been written to the wiki yet at that point, so a claim that turns out
+        not to be alone is simply taken back, and the collision costs a retry
+        instead of two manual repairs."""
+        for attempt in range(6):
+            with TeamVault() as vault:
+                processes = [
+                    subprocess.Popen(
+                        [sys.executable, str(MAINTAIN / "wiki_lock.py"), "acquire",
+                         "--target", str(vault.path),
+                         "--owner", f"test/{who}",
+                         "--maintainer", who,
+                         "--token-file", str(vault.token(who))],
+                        cwd=str(MAINTAIN), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        text=True,
+                    )
+                    for who in (ALICE, BOB)
+                ]
+                results = [process.communicate() for process in processes]
+                winners = [
+                    who
+                    for who, process in zip((ALICE, BOB), processes)
+                    if process.returncode == 0
+                ]
+                self.assertLessEqual(len(winners), 1, results)
+                # Whatever the interleaving was, the wiki is never left in the
+                # stop state that only a human could clear.
+                self.assertNotEqual(vault.status()["state"], "contended", results)
+                for who in (ALICE, BOB):
+                    if who not in winners:
+                        self.assertFalse(vault.claim_of(who).exists(), results)
+                        self.assertFalse(vault.token(who).exists(), results)
+
+    def test_the_wiki_is_left_acquirable_again_afterwards(self) -> None:
+        with TeamVault() as vault:
+            vault.acquire(ALICE)
+            lock_tool("release", "--target", str(vault.path),
+                      "--token-file", str(vault.token(ALICE)))
+            vault.token(ALICE).unlink(missing_ok=True)
+            self.assertTrue(payload(vault.acquire(ALICE))["acquired"])
+
+
+class ReadersAreNeverLeftBlockedSilently(unittest.TestCase):
+    def test_a_release_that_cannot_clear_the_directory_says_so(self) -> None:
+        """A crashed atomic write leaves a temporary file in the lock directory.
+        Readers judge by the directory alone, so releasing without a word would
+        take the wiki offline for the whole team with nothing to go on."""
+        with TeamVault() as vault:
+            vault.acquire(ALICE)
+            (vault.path / LOCK / ".claim-alice.json.abcdef.tmp").write_text("{", encoding="utf-8")
+            released = payload(
+                lock_tool("release", "--target", str(vault.path),
+                          "--token-file", str(vault.token(ALICE)))
+            )
+            self.assertTrue(released["released"])
+            self.assertTrue(released["lock_directory_remains"])
+            self.assertIn("wiki_busy", released["reader_warning"])
+
+    def test_status_names_the_directory_that_keeps_readers_out(self) -> None:
+        with TeamVault() as vault:
+            (vault.path / LOCK).mkdir()
+            (vault.path / LOCK / "left-behind.txt").write_text("x", encoding="utf-8")
+            status = vault.status()
+            self.assertEqual(status["state"], "free")
+            self.assertTrue(status["readers_blocked"])
+
+
+class LockConflictCopyDirectory(unittest.TestCase):
+    """The lock is created and removed over and over; that is precisely the
+    pattern from which a synchronization client makes a *folder* conflict copy.
+    A copy that only files were scanned for hid a whole second set of claims."""
+
+    def conflicted(self, vault: "TeamVault") -> Path:
+        copy = vault.path / ".llmwiki-DESKTOP-B7K2Q9.lock"
+        copy.mkdir()
+        (copy / f"{wiki_lock.CLAIM_PREFIX}bob{wiki_lock.CLAIM_SUFFIX}").write_text(
+            json.dumps({
+                "format": wiki_lock.CLAIM_FORMAT,
+                "format_version": 2,
+                "claim_id": "from-the-other-device",
+                "maintainer_id": BOB,
+                "owner": "test/bob",
+                "acquired_at": wiki_lock.utc_now(),
+                "heartbeat_at": wiki_lock.utc_now(),
+                "lease_seconds": 3600,
+                "host": "LAPTOP-BOB",
+                "token_sha256": wiki_lock.token_hash("lk_bob"),
+            }),
+            encoding="utf-8",
+        )
+        return copy
+
+    def test_a_conflicted_lock_directory_is_reported_and_blocks_every_writer(self) -> None:
+        with TeamVault() as vault:
+            vault.acquire(ALICE)
+            copy = self.conflicted(vault)
+            status = vault.status()
+            self.assertEqual(status["state"], "contended")
+            problem = next(entry for entry in status["problems"] if entry["path"] == copy.name)
+            self.assertTrue(problem["directory"])
+            self.assertEqual(problem["contains"], [f"{wiki_lock.CLAIM_PREFIX}bob{wiki_lock.CLAIM_SUFFIX}"])
+            refusal = payload(
+                lock_tool("verify", "--target", str(vault.path),
+                          "--token-file", str(vault.token(ALICE)), check=False)
+            )
+            self.assertEqual(refusal["state"], "contended")
+
+    def test_force_clears_it_and_reports_every_claim_it_contained(self) -> None:
+        with TeamVault() as vault:
+            vault.acquire(ALICE)
+            copy = self.conflicted(vault)
+            acquired = payload(
+                vault.acquire(BOB, "--force", "--reason", "agreed with the team")
+            )
+            self.assertTrue(acquired["acquired"])
+            cleared = next(
+                entry for entry in acquired["cleared_conflict_copies"]
+                if entry["path"] == copy.name
+            )
+            self.assertTrue(cleared["directory"])
+            self.assertEqual(cleared["contained"][0]["content"]["maintainer_id"], BOB)
+            self.assertNotIn("token_sha256", json.dumps(cleared))
+            self.assertFalse(copy.exists())
+            self.assertEqual(vault.status()["state"], "held")
+
+
+class ClocksThatDisagree(unittest.TestCase):
+    def test_a_maintainer_whose_clock_runs_behind_still_cancels_a_takeover(self) -> None:
+        """A host running hours behind writes heartbeats that keep looking old
+        here, so "expired" alone would evict somebody who is plainly working.
+        Movement of the recorded stamp cannot be faked away by a wrong clock."""
+        with TeamVault() as vault:
+            vault.acquire(ALICE)
+            vault.age(vault.claim_of(ALICE), 3 * 3600)
+            declared = payload(
+                vault.acquire(BOB, "--take-over", "--reason", "looks abandoned",
+                              "--settle-seconds", "60", check=False)
+            )
+            self.assertEqual(declared["state"], "takeover_declared")
+
+            # Alice works on: her heartbeat advances, but her clock keeps it in
+            # the past, so she still looks expired to Bob's machine.
+            lock_tool("heartbeat", "--target", str(vault.path),
+                      "--token-file", str(vault.token(ALICE)))
+            vault.age(vault.claim_of(ALICE), 3 * 3600 - 5)
+
+            declaration = vault.claim_of(BOB)
+            vault.rewrite(declaration, takeover={
+                **json.loads(declaration.read_text(encoding="utf-8"))["takeover"],
+                "effective_at": "2000-01-01T00:00:00Z",
+            })
+            refusal = payload(
+                vault.acquire(BOB, "--take-over", "--reason", "looks abandoned",
+                              "--settle-seconds", "60", check=False)
+            )
+            self.assertEqual(refusal["state"], "takeover_void")
+            self.assertEqual([c["maintainer_id"] for c in refusal["returned"]], [ALICE])
+            self.assertTrue(payload(
+                lock_tool("verify", "--target", str(vault.path),
+                          "--token-file", str(vault.token(ALICE)))
+            )["owned"])
+
+    def test_the_maintainer_a_takeover_targets_is_told_by_the_call_they_run(self) -> None:
+        with TeamVault() as vault:
+            vault.acquire(ALICE)
+            vault.age(vault.claim_of(ALICE), 3 * 3600)
+            vault.acquire(BOB, "--take-over", "--reason", "looks abandoned",
+                          "--settle-seconds", "60", check=False)
+            beat = payload(
+                lock_tool("heartbeat", "--target", str(vault.path),
+                          "--token-file", str(vault.token(ALICE)))
+            )
+            self.assertEqual(
+                [c["maintainer_id"] for c in beat["takeover_declared_against_this_claim"]],
+                [BOB],
+            )
+            self.assertIn("declared a takeover", beat["takeover_notice"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -401,6 +401,18 @@
         "Meldet sich die Kollegin zurück, verfällt die Erklärung automatisch.",
         "--force wird nicht als Abkürzung um das Wartefenster herum benutzt."
       ]
+    },
+    {
+      "id": 35,
+      "prompt": "Beim Erwerb kommt 'state: contended' mit einer Konfliktkopie von .llmwiki.lock zurück, und mein Kollege sagt, er habe gar nichts offen. Mach das Wiki wieder nutzbar.",
+      "expected_output": "Der Skill schreibt nichts, erklärt den contended-Zustand und die gemeldete Konfliktkopie, holt für das Entfernen eine ausdrückliche Bestätigung ein und gibt danach Pfad, Prüfsumme und Inhalt der entfernten Kopie weiter.",
+      "files": [],
+      "expectations": [
+        "Kein Helferaufruf wird gestartet, solange der Lock contended ist.",
+        "Die Konfliktkopie wird benannt, auch wenn sie ein Verzeichnis ist, samt der Claims darin.",
+        "Das Entfernen geschieht nur über den bestätigten Override, nicht durch stilles Löschen einer Datei.",
+        "Der Inhalt der entfernten Kopie wird berichtet, damit der Beleg nicht verloren geht."
+      ]
     }
   ]
 }

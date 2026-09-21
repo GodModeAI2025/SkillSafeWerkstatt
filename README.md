@@ -764,6 +764,8 @@ Die Entscheidung fällt deterministisch über die sichtbaren Claims und im Zweif
 - **Zwei wirksame Claims** — niemand schreibt. Auf einer synchronisierten Ablage sehen „Ich bin der einzige Claim" und „Der andere Claim ist noch nicht angekommen" identisch aus. Das Wiki bleibt stehen, statt zwei Kuratoren im Glauben zu lassen, sie seien allein.
 - **Konfliktkopie eines Claims, unlesbarer Claim, Zeitstempel aus der Zukunft** — niemand schreibt, weil der Beleg selbst beschädigt ist.
 
+Erwerben zwei Maintainer im selben Augenblick, liest der Erwerb den Lock zurück, bevor er Erfolg meldet, und nimmt den eigenen, frisch geschriebenen Claim wieder zurück, wenn er nicht allein ist. Zu diesem Zeitpunkt wurde noch nichts geschrieben, also kostet die Kollision einen erneuten Versuch statt zweier Aufräumbefehle — und ein gemeldetes „erworben" wird nie nachträglich vom ersten Helferaufruf widerrufen.
+
 Der Stoppzustand heißt `contended`, nennt die beteiligten Maintainer und verlangt eine Entscheidung zwischen Menschen: Alle außer einem führen auf dem **eigenen** Rechner `wiki_lock.py withdraw --reason …` aus. Dieser Befehl entfernt nur Claims, die dieser Rechner geschrieben hat — und dazu die Konfliktkopien des eigenen Claims. Er ist damit auch die Antwort auf einen abgestürzten Lauf, dessen Runtime-Token verloren ist: kein Override nötig.
 
 ### 7.3 Leihdauer und Übergabe
@@ -775,9 +777,11 @@ Ein abgelaufener Claim hält das Wiki weiterhin. Er wird lediglich übergabefäh
 1. `acquire --take-over --reason …` schreibt eine **tokenlose Erklärung** in das Wiki. Sie sperrt nichts, ist aber für die andere Person sichtbar und nennt den Zeitpunkt, ab dem sie wirkt.
 2. Derselbe Aufruf nach Ablauf des Wartefensters vollzieht die Übernahme und setzt den alten Claim ausdrücklich außer Kraft.
 
-Meldet sich die andere Person in der Zwischenzeit zurück — ein einziger Heartbeat genügt —, verfällt die Erklärung automatisch. Ein außer Kraft gesetzter Lauf erfährt das beim nächsten Helferaufruf (`state: superseded`) und hält an, bevor er schreibt.
+Meldet sich die andere Person in der Zwischenzeit zurück — ein einziger Heartbeat genügt —, verfällt die Erklärung automatisch. Die Erklärung hält dafür fest, wie lebendig der benannte Claim beim Erklären aussah; jede Bewegung dieses Zeitstempels macht sie zunichte. Das gilt auch dann, wenn die Uhr des anderen Rechners nachgeht und seine Heartbeats deshalb dauerhaft alt aussehen. Und die betroffene Person erfährt von der Erklärung durch den Aufruf, den sie ohnehin ausführt (`takeover_notice`), nicht erst durch ein `status`, an das sie denken müsste.
 
-Der Notfall-Override bleibt daneben bestehen: `acquire --force --reason …` setzt jeden Claim sofort außer Kraft, aber nur nach ausdrücklicher Anwenderbestätigung und mit dokumentiertem Grund. Er beendet keinen bereits laufenden fremden Prozess; darauf weist der Skill vor der Bestätigung hin. Er ist zugleich der einzige Weg, eine Konfliktkopie des Locks selbst zu entfernen — sonst bliebe das Wiki ausweglos in `contended`. Was dabei entfernt wurde, meldet der Erwerb mit Pfad, Prüfsumme und öffentlichem Inhalt, damit der Beleg in den Änderungsbericht wandert statt verloren zu gehen.
+Ein außer Kraft gesetzter Lauf erfährt das beim nächsten Helferaufruf (`state: superseded`) und hält an, bevor er schreibt. Vollzogene Übergabe und bestätigter Override **entfernen** den ersetzten Claim: Stünde die Verdrängung nur im neuen Claim, hielte sie exakt so lange wie dieser — seine Freigabe gäbe das Wiki an den gerade gestoppten Lauf zurück, mitsamt einem noch gültigen Token.
+
+Der Notfall-Override bleibt daneben bestehen: `acquire --force --reason …` setzt jeden Claim sofort außer Kraft, aber nur nach ausdrücklicher Anwenderbestätigung und mit dokumentiertem Grund. Er beendet keinen bereits laufenden fremden Prozess; darauf weist der Skill vor der Bestätigung hin. Er ist zugleich der einzige Weg, eine Konfliktkopie des Locks selbst zu entfernen — sonst bliebe das Wiki ausweglos in `contended`. Eine solche Konfliktkopie kann auch ein **Verzeichnis** sein: Das Lock-Verzeichnis wird laufend angelegt und wieder entfernt, und genau daraus macht ein Synchronisationsclient eine Ordnerkopie. Das Wurzelverzeichnis wird deshalb auf beide Formen geprüft, und eine kopierte Ordnerfassung wird mit den Claims gemeldet, die sie enthält. Was dabei entfernt wurde, meldet der Erwerb mit Pfad, Prüfsumme und öffentlichem Inhalt, damit der Beleg in den Änderungsbericht wandert statt verloren zu gehen.
 
 ### 7.4 Bestehende Ein-Personen-Wikis
 
@@ -787,7 +791,7 @@ Ein Wiki, das noch den alten Einzeldatei-Lock im Format 1 trägt, läuft **ohne 
 
 Ein Lock, den ein **anderes Gerät** geschrieben hat, wird als solcher ausgewiesen. Auf einer synchronisierten Ablage kann eine Freigabe verspätet ankommen, sodass ein sichtbarer Claim andernorts längst nicht mehr existiert. Der Skill sagt das ausdrücklich — und ebenso, dass Alter allein nie beweist, dass ein Claim verwaist ist. Beim Erwerb auf einer offenbar synchronisierten Ablage weist er einmalig darauf hin, dass der Lock geräteübergreifend nicht erzwingt.
 
-Der Lese-Skill erwirbt keinen Writer-Lock. Er verweigert das Lesen, solange das Claim-Verzeichnis existiert; der letzte ausscheidende Claim entfernt es samt der Betriebssystem-Artefakte, die ein Dateibrowser darin hinterlassen hat, damit kein Leser dauerhaft `wiki_busy` sieht.
+Der Lese-Skill erwirbt keinen Writer-Lock. Er verweigert das Lesen, solange das Claim-Verzeichnis existiert; der letzte ausscheidende Claim entfernt es samt der Betriebssystem-Artefakte, die ein Dateibrowser darin hinterlassen hat, damit kein Leser dauerhaft `wiki_busy` sieht. Bleibt etwas übrig, das der Helfer nicht löschen darf — etwa die temporäre Datei eines abgestürzten Schreibvorgangs —, meldet die Freigabe das ausdrücklich (`lock_directory_remains`) und `status` weist dasselbe Verzeichnis als leserblockierend aus, statt ohne Hinweis `free` zu melden.
 
 Wichtig bei OneDrive oder SharePoint: Das Claim-Modell beseitigt den verlorenen Schreibvorgang und die stille Verdrängung, die der gemeinsame Einzelplatz verursacht hat. Es macht aus dem Synchronisationsclient aber keinen verteilten Lock-Dienst. Zwei zeitweise offline arbeitende Geräte sehen jeweils nur den eigenen Claim und halten sich bis zum Abgleich für allein. Für strikt gleichzeitige Pflege auf mehreren Rechnern wäre eine zentrale Koordination erforderlich.
 
@@ -965,6 +969,8 @@ Die Skills sind absichtlich konservativ:
 - Links außerhalb des Wiki-Verzeichnisses können bei einer Seitenverschiebung nicht automatisch aktualisiert werden.
 - Ein Dateilock verhindert keine unkoordinierte Änderung durch Programme, die den Vertrag ignorieren.
 - Das Claim-Modell verhindert die stille Verdrängung eines Maintainers, ersetzt aber keine geräteübergreifende Exklusivität: Bis zwei Geräte abgeglichen sind, sieht jedes nur den eigenen Claim.
+- Geprüft wird der Besitz beim Start jedes gelockten Helferaufrufs. Trifft ein fremder Claim ein, während ein Helfer bereits läuft, hält erst der **nächste** Aufruf an — ein einzelner Helferlauf ist die Granularität, unterhalb derer der Lock nicht schützt.
+- Eine Uhr, die **vorgeht**, wird erkannt und blockiert (`clock_skew`). Eine Uhr, die **nachgeht**, wird nicht erkannt: Ihre Claims sehen dauerhaft abgelaufen aus. Sie bleiben dennoch geschützt, solange dort gearbeitet wird — jede Bewegung des Heartbeats macht eine Übernahmeerklärung zunichte —, aber ein Claim von einem nachgehenden Rechner, an dem gerade **niemand** arbeitet, wird früher übergabefähig als beabsichtigt.
 - OneDrive- und SharePoint-Synchronisation ersetzen keine globale Transaktions- oder Lock-Datenbank.
 - Ein eingefrorener Wissens-Skill kennt nur seinen enthaltenen Release und kann nicht feststellen, ob das kanonische Wiki inzwischen weiterentwickelt wurde.
 - Metadatenfilter grenzen Suchmengen ein, beweisen aber weder Wahrheit noch Vollständigkeit.

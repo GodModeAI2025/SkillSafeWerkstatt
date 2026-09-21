@@ -43,7 +43,7 @@ The command writes one claim file into `<wiki>/.llmwiki.lock/`, writes the priva
 <python> <skill-root>/scripts/wiki_lock.py heartbeat --target <wiki> --token-file <private-runtime-file>
 ```
 
-If acquisition reports `state: held`, stop before starting any wiki process and report the maintainer, owner, operation, and acquisition time. Do not infer that a claim is stale, do not reuse another run's token, and do not delete or replace another maintainer's claim file.
+If acquisition reports `state: held`, stop before starting any wiki process and report the maintainer, owner, operation, and acquisition time. Do not infer that a claim is stale, do not reuse another run's token, and do not delete or replace another maintainer's claim file. If it reports `state: contended` with a `retracted_claim`, two maintainers acquired in the same moment; this run's claim was taken back again and nothing was written, so agree who continues and acquire once more.
 
 If any command reports `state: contended`, stop and change nothing. Two maintainers hold effective claims, a synchronization client made a conflict copy of a claim, or a claim is unreadable or timestamped in the future. Show the reported problems and holders, and tell the user that the team must agree who continues and that everybody else runs `wiki_lock.py withdraw --target <wiki> --reason <reason>` on their own machine. Never resolve contention by forcing or by deleting a file yourself.
 
@@ -55,7 +55,7 @@ If a run on this machine was abandoned and its runtime token is gone, withdraw t
 
 For a standalone request that only initializes and publishes an empty wiki foundation, use `scripts/initialize_wiki.py` instead of acquiring the claim separately. That deterministic wrapper acquires the claim internally, invokes initialization, builds the graph, lints, publishes version `0.1.0`, and releases it on success or failure. Its top-level invocation contains no lock token. Do not call it while already holding a claim or for an existing initialized wiki.
 
-When a teammate's claim is reported as `expired: true`, the supported way to continue is the recorded two-step handover, not an override. Run it once to declare the takeover, tell the user when it becomes effective and that the other maintainer can cancel it simply by working again, and run the identical command a second time after that moment:
+When a teammate's claim is reported as `expired: true`, the supported way to continue is the recorded two-step handover, not an override. Run it once to declare the takeover, tell the user when it becomes effective and that the other maintainer can cancel it simply by working again — any movement of that claim voids the declaration, and the other maintainer is told about it by the locked call they run anyway — and run the identical command a second time after that moment:
 
 ```text
 <python> <skill-root>/scripts/wiki_lock.py acquire --target <wiki> --owner <agent-or-run-id> --operation <short-description> --token-file <private-runtime-file> --take-over --reason <reason>
@@ -75,7 +75,7 @@ Keep the claim while waiting for an in-scope user decision. Release it on succes
 <python> <skill-root>/scripts/wiki_lock.py release --target <wiki> --token-file <private-runtime-file> --remove-token-file
 ```
 
-If a helper reports `state: superseded`, another maintainer completed a handover or an approved override. Stop writing immediately, report what this run had already changed, and re-acquire before continuing. If release reports a token mismatch, do not remove the current claim. Tell the user when a paused run intentionally keeps its claim and confirm successful release in the completion report.
+If a helper reports `state: superseded`, another maintainer completed a handover or an approved override. Stop writing immediately, report what this run had already changed, and re-acquire before continuing. A completed handover and an approved override both remove the claim they replace, so the evicted run stays evicted even after the new holder releases. If release reports a token mismatch, do not remove the current claim. If release reports `lock_directory_remains`, say so: no claim is held any more, but readers keep reporting `wiki_busy` until whatever is left inside `.llmwiki.lock` has been inspected and removed. Tell the user when a paused run intentionally keeps its claim and confirm successful release in the completion report.
 
 ## Required inputs
 

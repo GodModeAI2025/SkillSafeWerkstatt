@@ -39,6 +39,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import socket
 from datetime import datetime, timezone
 from pathlib import Path
@@ -339,28 +340,39 @@ def read_state(target: Path) -> LockState:
     unreadable: list[dict[str, Any]] = []
     conflict_copies: list[dict[str, Any]] = []
 
-    # A conflict copy of the whole format-1 lock sits next to it in the wiki
-    # root, where nothing else ever looks. It is the visible proof that two
-    # machines held the single slot at the same time.
+    # A conflict copy of the whole lock sits next to it in the wiki root, where
+    # nothing else ever looks. It is the visible proof that two machines held
+    # the lock at the same time. Directories are scanned as well as files: the
+    # lock is a directory now, it is created and removed repeatedly, and that is
+    # exactly the pattern from which a synchronization client makes a *folder*
+    # conflict copy - whose claims would otherwise be invisible to everybody.
     try:
-        neighbours = sorted(path for path in target.iterdir() if path.is_file())
+        neighbours = sorted(target.iterdir())
     except OSError:
         neighbours = []
     for path in neighbours:
         artifact = sync_artifacts.classify(path.name)
         if artifact is not None and artifact.kind == sync_artifacts.CONFLICT_COPY:
             if artifact.original == LOCK_NAME:
-                conflict_copies.append(
-                    {
-                        "problem": "conflict_copy",
-                        "path": path.name,
-                        "reason": (
-                            "A synchronization client kept a second copy of the single-slot "
-                            "lock, so two machines held it at once. Compare both records and "
-                            "remove the copy after agreeing with the team."
-                        ),
-                    }
-                )
+                directory = path.is_dir()
+                entry: dict[str, Any] = {
+                    "problem": "conflict_copy",
+                    "path": path.name,
+                    "reason": (
+                        "A synchronization client kept a second copy of the lock, so two "
+                        "machines held it at once. Compare both records and remove the copy "
+                        "after agreeing with the team."
+                    ),
+                }
+                if directory:
+                    entry["directory"] = True
+                    try:
+                        entry["contains"] = sorted(
+                            item.name for item in path.iterdir() if item.is_file()
+                        )
+                    except OSError:
+                        entry["contains"] = []
+                conflict_copies.append(entry)
 
     root = lock_path(target)
     legacy: Optional[Claim] = None
@@ -551,6 +563,42 @@ def discard_empty_lock(target: Path) -> dict[str, Any]:
     return {"removed": True}
 
 
+def evict_claims(victims: list["Claim"]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Remove the claims an approved eviction replaces, and say whose they were.
+
+    Marking a claim superseded inside the *evicting* claim is not enough: that
+    record dies with the evicting claim, so a release or an expiry would hand
+    the wiki straight back to the run that was just evicted, together with its
+    still-valid token. The evicted file therefore goes, which is the only form
+    of "it is over" that survives the evictor. Its token digest travels into the
+    new claim so the evicted run can still be told precisely what happened
+    instead of only that someone else holds the lock now.
+    """
+    evicted: list[dict[str, Any]] = []
+    digests: list[str] = []
+    for victim in victims:
+        record: dict[str, Any] = {
+            "claim_id": victim.claim_id,
+            "maintainer_id": victim.maintainer_id,
+            "owner": str(victim.record.get("owner") or ""),
+            "host": victim.host,
+            "claim_file": victim.path.name,
+            "removed": False,
+        }
+        digest = victim.record.get("token_sha256")
+        if isinstance(digest, str) and digest:
+            digests.append(digest)
+        try:
+            victim.path.unlink()
+            record["removed"] = True
+        except FileNotFoundError:
+            record["removed"] = True
+        except OSError as exc:
+            record["reason"] = str(exc)
+        evicted.append(record)
+    return evicted, sorted(set(digests))
+
+
 def clear_conflict_copies(target: Path, state: "LockState") -> list[dict[str, Any]]:
     """Remove the lock's conflict copies, preserving what they contained.
 
@@ -563,25 +611,54 @@ def clear_conflict_copies(target: Path, state: "LockState") -> list[dict[str, An
     cleared: list[dict[str, Any]] = []
     for entry in state.conflict_copies:
         path = target / entry["path"]
+        if path.is_dir():
+            # A folder conflict copy carries a whole second set of claims. Each
+            # one is reported before the copy goes, so the proof that another
+            # machine held the lock survives in the maintainer's report.
+            contained: list[dict[str, Any]] = []
+            try:
+                members = sorted(item for item in path.iterdir() if item.is_file())
+            except OSError:
+                continue
+            for member in members:
+                try:
+                    content = member.read_bytes()
+                except OSError:
+                    continue
+                contained.append(_removed_record(f"{entry['path']}/{member.name}", content))
+            try:
+                shutil.rmtree(path)
+            except OSError:
+                continue
+            cleared.append({"path": entry["path"], "directory": True, "contained": contained})
+            continue
         try:
             content = path.read_bytes()
         except OSError:
             continue
-        removed: dict[str, Any] = {
-            "path": entry["path"],
-            "sha256": hashlib.sha256(content).hexdigest(),
-            "bytes": len(content),
-        }
-        try:
-            removed["content"] = public_lock(json.loads(content.decode("utf-8")))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            removed["content"] = None
+        removed = _removed_record(entry["path"], content)
         try:
             path.unlink()
         except OSError:
             continue
         cleared.append(removed)
     return cleared
+
+
+def _removed_record(relative: str, content: bytes) -> dict[str, Any]:
+    """Describe one removed file so its evidence outlives the file itself."""
+    removed: dict[str, Any] = {
+        "path": relative,
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "bytes": len(content),
+    }
+    try:
+        parsed = json.loads(content.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        removed["content"] = None
+    else:
+        removed["content"] = public_lock(parsed) if isinstance(parsed, dict) else None
+    return removed
 
 
 def copy_lock(target: Path, destination: Path) -> None:
@@ -668,6 +745,29 @@ def require_lock(target: Path, token: str) -> dict[str, Any]:
     mine = _matching_claim(state, token)
     if mine is None:
         holders = state.effective()
+        # An evicted claim is deleted, so its token no longer matches any file.
+        # The evicting claim carries its digest, which turns the bare "someone
+        # else holds it" into the precise reason this run must stop.
+        digest = token_hash(token)
+        evictors = [
+            claim
+            for claim in holders
+            if isinstance(claim.record.get("superseded_tokens"), list)
+            and digest in claim.record["superseded_tokens"]
+        ]
+        if evictors:
+            raise refuse(
+                {
+                    "acquired": False,
+                    "state": "superseded",
+                    "error": "this claim was handed over to another maintainer",
+                    "taken_over_by": [claim.describe(state.now) for claim in evictors],
+                    "resolution": (
+                        "Stop writing. Verify what the other maintainer changed, then acquire "
+                        "the lock again before continuing."
+                    ),
+                }
+            )
         if not holders:
             raise SystemExit("Wiki lock is missing")
         # The historical wording is kept: it is what an interrupted run reports.
@@ -701,6 +801,21 @@ def require_lock(target: Path, token: str) -> dict[str, Any]:
     refreshed = _refresh_heartbeat(mine)
     record = dict(mine.record)
     record["heartbeat_refreshed"] = refreshed
+    # The settle window is only a chance to object if the person it is aimed at
+    # is told. They are told here, in the call they run anyway, not only in a
+    # 'status' they would have to think of running.
+    against_me = [
+        claim.describe(state.now)
+        for claim in state.pending_takeovers()
+        if mine.claim_id in claim.supersedes
+    ]
+    if against_me:
+        record["takeover_declared_against_this_claim"] = against_me
+        record["takeover_notice"] = (
+            "Another maintainer has declared a takeover of this claim. This heartbeat "
+            "cancels it as long as it has not taken effect yet; if the wiki is genuinely "
+            "yours, keep working, and otherwise release it."
+        )
     return record
 
 
@@ -756,9 +871,18 @@ def acquire_lock(
     superseded: list[dict[str, Any]] = []
 
     cleared: list[dict[str, Any]] = []
+    evicted: list[dict[str, Any]] = []
+    evicted_digests: list[str] = []
     if force:
         superseded = [claim.describe(state.now) for claim in effective]
         cleared = clear_conflict_copies(target, state)
+        evicted, evicted_digests = evict_claims(
+            [
+                claim
+                for claim in effective
+                if not claim.legacy and claim.maintainer_id != maintainer_id
+            ]
+        )
         if state.legacy is not None:
             # Format 1 occupies the path the claim directory needs.
             try:
@@ -793,14 +917,56 @@ def acquire_lock(
         record["supersedes"] = sorted(
             {claim.claim_id for claim in effective if claim.claim_id and claim.maintainer_id != maintainer_id}
         )
+        if evicted:
+            record["evicted_claims"] = evicted
+        if evicted_digests:
+            record["superseded_tokens"] = evicted_digests
     path = claim_path(target, maintainer_id)
     _write_claim(path, record, replace=path.exists())
+    if not force:
+        _confirm_sole_claim(target, maintainer_id, record["claim_id"], path)
     previous: Optional[dict[str, Any]] = None
-    if superseded or cleared:
+    if superseded or cleared or evicted:
         previous = {"superseded": superseded}
         if cleared:
             previous["cleared_conflict_copies"] = cleared
+        if evicted:
+            previous["evicted_claims"] = evicted
     return record, token, previous
+
+
+def _confirm_sole_claim(target: Path, maintainer_id: str, claim_id: str, path: Path) -> None:
+    """Read the lock back and retract this claim unless it is the only one.
+
+    Reporting "acquired" and finding out at the first helper call that somebody
+    else acquired in the same moment is the one contention this helper can still
+    clean up by itself: nothing has been written to the wiki yet, so withdrawing
+    is free. Everyone who sees the collision steps back and retries, which never
+    produces two writers and never needs a winner rule that two devices could
+    answer differently. A claim that arrives later over the synchronization
+    client is not caught here - that one is caught before the first write.
+    """
+    state = read_state(target)
+    effective = state.effective()
+    if not state.problems() and len(effective) == 1 and effective[0].claim_id == claim_id:
+        return
+    try:
+        path.unlink()
+    except OSError:
+        pass
+    discard_empty_lock(target)
+    raise refuse(
+        _contention_report(
+            state,
+            error="another maintainer claimed the wiki at the same moment",
+            retracted_claim=path.name,
+            resolution=(
+                "Nothing was written and this claim has been withdrawn again. Agree who "
+                "continues and acquire once more; if a claim from another machine is left "
+                "over, its owner clears it with 'wiki_lock.py withdraw'."
+            ),
+        )
+    )
 
 
 def _new_claim_record(
@@ -834,6 +1000,20 @@ def _new_claim_record(
     return record
 
 
+def _has_moved(claim: "Claim", declaration: dict[str, Any]) -> bool:
+    """True when a claim has been touched since a takeover was declared on it.
+
+    The comparison is against the stamp the declaration recorded, never against
+    this machine's clock, so a maintainer whose host runs minutes or hours
+    behind still cancels a takeover simply by working.
+    """
+    seen = declaration.get("supersedes_seen")
+    if not isinstance(seen, dict) or claim.claim_id not in seen:
+        return False
+    current = str(claim.record.get("heartbeat_at") or claim.record.get("acquired_at") or "")
+    return current != str(seen.get(claim.claim_id) or "")
+
+
 def _take_over(
     target: Path,
     state: LockState,
@@ -859,7 +1039,12 @@ def _take_over(
     if mine is not None and mine.pending:
         declared = set(mine.supersedes)
         effective_at = mine.takeover_effective_at() or 0.0
-        if live or not declared.issubset({claim.claim_id for claim in holders}):
+        # A machine whose clock runs behind writes heartbeats that still look
+        # old here, so "expired" alone would evict a maintainer who is plainly
+        # working. What cannot lie is movement: the recorded stamp changes
+        # whenever its owner heartbeats, no matter what their clock says.
+        returned = [claim for claim in holders if _has_moved(claim, mine.record)]
+        if live or returned or not declared.issubset({claim.claim_id for claim in holders}):
             try:
                 mine.path.unlink()
             except OSError:
@@ -873,6 +1058,7 @@ def _take_over(
                         "The other maintainer is active again, or the claim this takeover named "
                         "is gone. The declaration was withdrawn; acquire normally."
                     ),
+                    "returned": [claim.describe(state.now) for claim in returned],
                     "holders": [claim.describe(state.now) for claim in holders],
                 }
             )
@@ -897,8 +1083,15 @@ def _take_over(
         record["acquired_at"] = mine.record.get("acquired_at", record["acquired_at"])
         record["supersedes"] = sorted(declared)
         record["takeover_reason"] = reason.strip()
+        superseded = [claim.describe(state.now) for claim in holders]
+        evicted, digests = evict_claims([claim for claim in holders if not claim.legacy])
+        if evicted:
+            record["evicted_claims"] = evicted
+        if digests:
+            record["superseded_tokens"] = digests
         replace_atomically(mine.path, record)
-        return record, token, {"superseded": [claim.describe(state.now) for claim in holders]}
+        _confirm_sole_claim(target, maintainer_id, record["claim_id"], mine.path)
+        return record, token, {"superseded": superseded, "evicted_claims": evicted}
 
     if not holders:
         raise refuse(
@@ -924,6 +1117,13 @@ def _take_over(
     declaration = _new_claim_record(maintainer_id, owner, operation, lease_seconds)
     declaration.pop("token_sha256", None)
     declaration["supersedes"] = sorted({claim.claim_id for claim in holders if claim.claim_id})
+    # Remember how alive each named claim looked, so a heartbeat during the
+    # settle window is visible as movement even from a clock that disagrees.
+    declaration["supersedes_seen"] = {
+        claim.claim_id: str(claim.record.get("heartbeat_at") or claim.record.get("acquired_at") or "")
+        for claim in holders
+        if claim.claim_id
+    }
     declaration["takeover"] = {
         "declared_at": declaration["acquired_at"],
         "settle_seconds": settle_seconds,
@@ -968,8 +1168,21 @@ def release_owned_lock(target: Path, token: str) -> dict[str, Any]:
         mine.path.unlink()
     except FileNotFoundError:
         pass
-    discard_empty_lock(target)
-    return public_lock(mine.record)
+    released = public_lock(mine.record)
+    discarded = discard_empty_lock(target)
+    if not discarded.get("removed"):
+        # Readers judge maintenance by the mere presence of the directory, so a
+        # directory that survives its last claim takes the wiki offline for the
+        # whole team. Saying "released" and leaving that behind unsaid is the
+        # one outcome this helper must never produce.
+        released["lock_directory_remains"] = True
+        released["reader_warning"] = discarded.get(
+            "reason",
+            "The lock directory could not be removed, so readers keep reporting wiki_busy.",
+        )
+        if discarded.get("claims"):
+            released["remaining_claims"] = discarded["claims"]
+    return released
 
 
 def describe_foreign_host(record: dict[str, Any]) -> dict[str, Any]:
@@ -1074,6 +1287,15 @@ def status(args: argparse.Namespace) -> int:
         result["invalid_lock"] = "; ".join(entry["reason"] for entry in state.unreadable)
     if condition == "free":
         result["locked"] = False
+        # "free" describes the claims. A reader looks at the directory itself,
+        # so an empty directory nobody could remove still keeps the whole team
+        # on wiki_busy - a state worth naming rather than leaving to be found.
+        if lock_path(target).exists():
+            result["readers_blocked"] = True
+            result["reader_warning"] = (
+                f"No maintainer holds a claim, but {LOCK_NAME} still exists, so every reader "
+                "reports wiki_busy. Inspect what it still contains and remove it."
+            )
     hint = sync_artifacts.storage_hint(target)
     if hint["synchronized"]:
         result["storage_advisory"] = hint
@@ -1091,20 +1313,20 @@ def release(args: argparse.Namespace) -> int:
             Path(token_file).expanduser().resolve().unlink()
         except FileNotFoundError:
             pass
-    print(
-        json.dumps(
-            {
-                "released": True,
-                "lock_file": LOCK_NAME,
-                "lock_id": record.get("claim_id", record.get("lock_id", "")),
-                "claim_id": record.get("claim_id", ""),
-                "maintainer_id": record.get("maintainer_id", ""),
-                "owner": record.get("owner", ""),
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
+    result: dict[str, Any] = {
+        "released": True,
+        "lock_file": LOCK_NAME,
+        "lock_id": record.get("claim_id", record.get("lock_id", "")),
+        "claim_id": record.get("claim_id", ""),
+        "maintainer_id": record.get("maintainer_id", ""),
+        "owner": record.get("owner", ""),
+    }
+    if record.get("lock_directory_remains"):
+        result["lock_directory_remains"] = True
+        result["reader_warning"] = record.get("reader_warning", "")
+        if record.get("remaining_claims"):
+            result["remaining_claims"] = record["remaining_claims"]
+    print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -1128,18 +1350,18 @@ def verify(args: argparse.Namespace) -> int:
 def heartbeat(args: argparse.Namespace) -> int:
     target = Path(args.target).expanduser().resolve()
     record = require_lock(target, token_from_args(args))
-    print(
-        json.dumps(
-            {
-                "owned": True,
-                "heartbeat_refreshed": bool(record.get("heartbeat_refreshed")),
-                "heartbeat_at": record.get("heartbeat_at", ""),
-                "lease_seconds": record.get("lease_seconds", 0),
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
+    result: dict[str, Any] = {
+        "owned": True,
+        "heartbeat_refreshed": bool(record.get("heartbeat_refreshed")),
+        "heartbeat_at": record.get("heartbeat_at", ""),
+        "lease_seconds": record.get("lease_seconds", 0),
+    }
+    if record.get("takeover_declared_against_this_claim"):
+        result["takeover_declared_against_this_claim"] = record[
+            "takeover_declared_against_this_claim"
+        ]
+        result["takeover_notice"] = record.get("takeover_notice", "")
+    print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 
