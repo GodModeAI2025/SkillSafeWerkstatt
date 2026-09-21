@@ -49,7 +49,7 @@ def portable_relative(value: object) -> bool:
         return False
     posix = PurePosixPath(value)
     windows = PureWindowsPath(value)
-    return not posix.is_absolute() and not windows.is_absolute() and not windows.drive and ".." not in posix.parts and "\\" not in value and posix.as_posix() == value and not value.startswith("meta/history/") and value != ".llmwiki.lock"
+    return not posix.is_absolute() and not windows.is_absolute() and not windows.drive and ".." not in posix.parts and "\\" not in value and posix.as_posix() == value and not value.startswith("meta/history/") and value != ".llmwiki.lock" and not value.startswith(".llmwiki.lock/")
 
 
 def snapshot_directory(target: Path, snapshot_id: str) -> Path:

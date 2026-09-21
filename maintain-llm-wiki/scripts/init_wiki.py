@@ -228,11 +228,12 @@ checked.
 
 ## Invariants
 
-- Acquire and own the root `.llmwiki.lock` before inspecting, processing, or
-  changing this wiki. Every bundled writer must receive the current private
-  lock token.
-- If another lock exists, stop. Never infer staleness or force an override
-  without explicit user approval and a recorded reason.
+- Claim the wiki in the root `.llmwiki.lock` directory before inspecting,
+  processing, or changing it. Every bundled writer must receive the current
+  private lock token.
+- If another maintainer holds an effective claim, stop. Age alone never proves
+  a claim is stale: hand over with the recorded two-step takeover, or force an
+  override only with explicit user approval and a recorded reason.
 - Release only the lock owned by the current run; keep it while an in-scope
   curation decision is pending.
 - Keep source extraction in `sources/` separate from synthesis in `wiki/`.

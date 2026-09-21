@@ -16,7 +16,7 @@ import portable_io
 from typing import Any
 from uuid import uuid4
 
-from wiki_lock import acquire_lock, release_owned_lock
+from wiki_lock import LOCK_NAME, acquire_lock, copy_lock, release_owned_lock
 
 
 class InitializationFailure(RuntimeError):
@@ -98,7 +98,13 @@ def publish_staged_wiki(staging: Path, target: Path) -> list[Path]:
                 continue
             destination.mkdir()
             created.append(destination)
-        for source in sorted(path for path in staging.rglob("*") if path.is_file() and path.name != ".llmwiki.lock"):
+        for source in sorted(
+            path
+            for path in staging.rglob("*")
+            # The lock is a directory of per-maintainer claims, so excluding its
+            # own name is not enough; nothing below it is wiki content either.
+            if path.is_file() and LOCK_NAME not in path.relative_to(staging).parts
+        ):
             relative = source.relative_to(staging)
             destination = target / relative
             if destination.exists():
@@ -166,14 +172,14 @@ def main() -> int:
                 stage,
                 "Target is already an initialized wiki; use the maintenance workflow.",
             )
-        unexpected = [path.name for path in target.iterdir() if path.name != ".llmwiki.lock"]
+        unexpected = [path.name for path in target.iterdir() if path.name != LOCK_NAME]
         if unexpected:
             raise InitializationFailure(stage, f"Target is not empty: {sorted(unexpected)}")
         scripts = Path(__file__).resolve().parent
         with tempfile.TemporaryDirectory(prefix="lmwiki-initialize-", dir=str(target.parent)) as temporary:
             staged_target = Path(temporary) / "wiki"
             staged_target.mkdir()
-            shutil.copyfile(target / ".llmwiki.lock", staged_target / ".llmwiki.lock")
+            copy_lock(target, staged_target)
             init_command = [
                 sys.executable,
                 str(scripts / "init_wiki.py"),

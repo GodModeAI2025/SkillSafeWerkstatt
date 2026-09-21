@@ -377,6 +377,30 @@
         "Der Skill behauptet nicht, dass belegte Seiten entstanden sind.",
         "Die nächsten Schritte nennen Claims und source_id@locator als Voraussetzung aktiver Seiten."
       ]
+    },
+    {
+      "id": 33,
+      "prompt": "Wir sind zu viert und pflegen dasselbe Wiki aus unseren jeweils eigenen OneDrive-Kopien. Wie teilen wir uns die Pflege?",
+      "expected_output": "Der Skill erklärt, dass jeder Maintainer einen eigenen Claim in .llmwiki.lock/ hält, dass immer nur ein Claim wirksam ist, und wie Übergabe, Rückzug und Notfall-Override zusammenhängen.",
+      "files": [],
+      "expectations": [
+        "Es gibt keine Registrierungsliste, die vorher gepflegt werden müsste; der Claim entsteht beim Erwerb.",
+        "Zwei wirksame Claims sind ein Stoppzustand für alle, nicht ein Wettrennen mit Gewinner.",
+        "Die Übergabe eines abgelaufenen Claims ist zweistufig und wird im Wiki sichtbar angekündigt.",
+        "Der Skill verspricht keine geräteübergreifende Exklusivität durch den Synchronisationsclient."
+      ]
+    },
+    {
+      "id": 34,
+      "prompt": "Der Claim meiner Kollegin ist seit gestern abgelaufen, sie ist im Urlaub. Übernimm das Wiki.",
+      "expected_output": "Der Skill meldet den abgelaufenen Claim, erklärt die zweistufige Übernahme mit Wartefenster und übernimmt erst im zweiten Aufruf; er erzwingt nichts.",
+      "files": [],
+      "expectations": [
+        "Alter allein begründet keine Übernahme; der erste Aufruf sperrt nichts.",
+        "Die Absicht steht als tokenlose Erklärung im Wiki und ist für die Kollegin sichtbar.",
+        "Meldet sich die Kollegin zurück, verfällt die Erklärung automatisch.",
+        "--force wird nicht als Abkürzung um das Wartefenster herum benutzt."
+      ]
     }
   ]
 }

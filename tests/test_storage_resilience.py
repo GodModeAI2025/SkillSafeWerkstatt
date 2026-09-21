@@ -104,11 +104,12 @@ class LockHonesty(unittest.TestCase):
                 "--owner", "test/holder",
             )
             try:
-                # Simulate the record a second device would have written.
-                lock_path = wiki.path / ".llmwiki.lock"
-                record = json.loads(lock_path.read_text(encoding="utf-8"))
+                # Simulate the claim a second device would have written.
+                claims = sorted((wiki.path / ".llmwiki.lock").glob("claim-*.json"))
+                self.assertEqual(len(claims), 1, claims)
+                record = json.loads(claims[0].read_text(encoding="utf-8"))
                 record["host"] = "OTHER-MACHINE"
-                lock_path.write_text(json.dumps(record), encoding="utf-8")
+                claims[0].write_text(json.dumps(record), encoding="utf-8")
 
                 status = json.loads(
                     wiki.maintain(
@@ -118,7 +119,12 @@ class LockHonesty(unittest.TestCase):
                 self.assertEqual(status["foreign_host"], "OTHER-MACHINE")
                 self.assertIn("age", status["note"], status["note"])
             finally:
-                (wiki.path / ".llmwiki.lock").unlink(missing_ok=True)
+                wiki.maintain(
+                    "wiki_lock.py", "release",
+                    "--target", str(wiki.path),
+                    "--token-file", str(token_file),
+                    check=False,
+                )
 
     def test_a_local_lock_is_not_flagged_as_foreign(self) -> None:
         with TempWiki() as wiki:
