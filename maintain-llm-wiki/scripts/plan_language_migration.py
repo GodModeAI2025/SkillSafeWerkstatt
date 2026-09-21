@@ -76,6 +76,7 @@ def main() -> int:
                     "Translate cluster labels and descriptions plus preferred concept terms and definitions",
                     "Retain stable IDs, source IDs, source locators, paths, and useful old-language aliases",
                     "Set every wiki page language field and WIKI_PROFILE to the target language",
+                    "Re-render SOUL.md and schema/CONTENT_POLICY.md with plan_identity.py for the target language, unchanged values, and apply the confirmed proposal with apply_identity.py --confirm-replace",
                     "Rebuild index, graph, reading views, and run strict lint",
                     "Publish one major release and verify its manifest before unlocking",
                 ],

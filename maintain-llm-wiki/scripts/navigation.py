@@ -37,11 +37,32 @@ WIKI_DIR = "wiki"
 #: Reserved name of an index within its directory.
 INDEX_NAME = "index.md"
 
-#: Written into every index so a maintainer knows not to edit it by hand.
-GENERATED_NOTICE = (
-    "Diese Übersicht wird bei jedem Graphlauf neu erzeugt. Änderungen hier gehen "
-    "verloren; pflege stattdessen die verlinkten Seiten."
-)
+#: Prose of a generated index, keyed by primary language. An index is a wiki
+#: page, so its prose follows the wiki language like every other maintained
+#: page. A code without a table here gets English prose; the `language` field
+#: still carries the exact profile code, because the linter compares it verbatim.
+FALLBACK_LANGUAGE = "en"
+INDEX_TEXTS: dict[str, dict[str, str]] = {
+    "de": {
+        "notice": (
+            "Diese Übersicht wird bei jedem Graphlauf neu erzeugt. Änderungen hier gehen "
+            "verloren; pflege stattdessen die verlinkten Seiten."
+        ),
+        "description": "Übersicht der Seiten unter {directory}.",
+        "empty": "Diese Gruppe enthält derzeit keine Seiten.",
+    },
+    "en": {
+        "notice": (
+            "This overview is regenerated on every graph build. Edits made here are "
+            "lost; maintain the linked pages instead."
+        ),
+        "description": "Overview of the pages under {directory}.",
+        "empty": "This group currently holds no pages.",
+    },
+}
+
+#: Profile file that records the maintained wiki language.
+PROFILE = "schema/WIKI_PROFILE.md"
 
 #: Fixed timestamp component, so regenerating an unchanged wiki changes nothing.
 STABLE_CREATED = "1970-01-01"
@@ -97,6 +118,24 @@ def _quote(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def wiki_language(target: Path) -> str:
+    """The exact language code every generated index must declare.
+
+    Writer and linter both derive the expected index from this, so it is read
+    from the profile rather than passed in, and both sides cannot drift apart.
+    A wiki without a readable profile is invalid anyway and the linter reports
+    that itself; the fallback only keeps generation deterministic until then.
+    """
+    data = _read(target / PROFILE, PROFILE)
+    value = (data or {}).get("wiki_language")
+    return value.strip() if isinstance(value, str) and value.strip() else FALLBACK_LANGUAGE
+
+
+def index_texts(language: str) -> dict[str, str]:
+    primary = language.split("-", 1)[0].casefold()
+    return INDEX_TEXTS.get(primary, INDEX_TEXTS[FALLBACK_LANGUAGE])
+
+
 def page_entries(directory: Path, target: Path) -> list[dict[str, str]]:
     """Describe every non-index page directly inside one directory."""
     entries: list[dict[str, str]] = []
@@ -119,8 +158,12 @@ def page_entries(directory: Path, target: Path) -> list[dict[str, str]]:
     return entries
 
 
-def render_index(relative: str, label: str, entries: list[dict[str, str]], updated: str) -> str:
+def render_index(
+    relative: str, label: str, entries: list[dict[str, str]], updated: str, language: str
+) -> str:
     """Render one directory index as an ordinary wiki page of type `index`."""
+    text = index_texts(language)
+    directory = relative.rsplit("/", 1)[0]
     lines = [
         "---",
         f"id: {_quote('wiki-index-' + label)}",
@@ -129,8 +172,8 @@ def render_index(relative: str, label: str, entries: list[dict[str, str]], updat
         'status: "active"',
         f"created: {_quote(STABLE_CREATED)}",
         f"updated: {_quote(updated)}",
-        f"description: {_quote('Übersicht der Seiten unter ' + relative.rsplit('/', 1)[0] + '.')}",
-        'language: "de"',
+        f"description: {_quote(text['description'].format(directory=directory))}",
+        f"language: {_quote(language)}",
         f"generated_by: {_quote(GENERATOR)}",
         "sources: []",
         "clusters: []",
@@ -141,14 +184,14 @@ def render_index(relative: str, label: str, entries: list[dict[str, str]], updat
         "",
         f"# {label.replace('-', ' ').capitalize()}",
         "",
-        GENERATED_NOTICE,
+        text["notice"],
         "",
     ]
     if entries:
         for entry in entries:
             lines.append(render_entry(entry))
     else:
-        lines.append("Diese Gruppe enthält derzeit keine Seiten.")
+        lines.append(text["empty"])
     return "\n".join(lines) + "\n"
 
 
@@ -162,12 +205,13 @@ def expected_indexes(target: Path, updated: str) -> dict[str, str]:
     expected: dict[str, str] = {}
     if not root.is_dir():
         return expected
+    language = wiki_language(target)
     for directory in sorted(path for path in root.iterdir() if path.is_dir()):
         entries = page_entries(directory, target)
         if not entries:
             continue
         relative = (directory / INDEX_NAME).relative_to(target).as_posix()
-        expected[relative] = render_index(relative, directory.name, entries, updated)
+        expected[relative] = render_index(relative, directory.name, entries, updated, language)
     return expected
 
 
