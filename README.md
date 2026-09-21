@@ -591,7 +591,7 @@ Mögliche Zustände sind:
 - `ready`: Der Release ist stabil und kann gelesen werden.
 - `wiki_busy`: Eine Pflege besitzt den Lock; es wird kein möglicher Mischstand gelesen.
 - `snapshot_changed`: Der Stand hat sich während der Anfrage geändert; der Entwurf wird verworfen.
-- `invalid_wiki`: Release oder Dateien sind nicht verifizierbar; daraus wird keine Sachantwort erzeugt.
+- `invalid_wiki`: Release oder Dateien sind nicht verifizierbar; daraus wird keine Sachantwort erzeugt. Hierher gehört auch eine Datei mit einem Namen, den die Ablage verweigert (etwa `wiki/.lock` oder `wiki/CON.md`): Sie liegt lokal vor, erreicht die Ablage aber nie — dieser Stand ist also nicht der, den ein anderes Gerät sieht. Die Meldung nennt Pfad und Grund.
 - `sync_artifacts_present`: Der Sync-Client hat eine Konfliktkopie neben einer veröffentlichten Datei behalten. Der Release selbst ist intakt, aber zwei Geräte halten verschiedene Inhalte. Der Pflege-Skill löst das auf.
 - `sync_in_progress`: Das Manifest ist neuer als die Dateien, die es beschreibt. Das ist eine laufende Übertragung, keine Beschädigung — Warten hilft, Reparieren nicht.
 - `hydration_required`: Veröffentlichte Dateien haben keinen lokalen Inhalt, weil die Ablage sie in der Cloud hält. Sie zu prüfen würde das Wiki herunterladen und schlägt offline fehl. Der Skill meldet Anzahl und geschätztes Volumen und fragt, statt den Download zu starten.

@@ -66,9 +66,12 @@ def controlled_paths(target: Path) -> set[str]:
             if not path.is_file() or path.name.endswith(".tmp"):
                 continue
             relative = path.relative_to(target).as_posix()
-            # A dot-prefixed name is skipped as before. Operating-system noise is
-            # kept here so it can be disclosed, and filtered out when judging.
-            if path.name.startswith(".") and not sync_artifacts.is_ignorable(relative):
+            # A dot-prefixed name the classifier has no opinion about is skipped
+            # as before. Everything it does have an opinion about is kept, so it
+            # can be disclosed and then judged by kind. Asking for "ignorable"
+            # instead dropped `.lock` — the one reserved name that starts with a
+            # dot — out of the verifier's sight entirely.
+            if path.name.startswith(".") and sync_artifacts.classify(relative) is None:
                 continue
             paths.add(relative)
     for name in META_FILES:
@@ -173,13 +176,27 @@ def verify_snapshot(
     unexpected = sorted(controlled_paths(target) - seen)
     # A synchronization client writes into this directory too. Separate the
     # files it created from genuine release damage before judging the wiki.
+    classified = sync_artifacts.classify_all(unexpected)
     artifacts = [
-        artifact
-        for artifact in sync_artifacts.classify_all(unexpected)
-        if artifact.kind in sync_artifacts.NON_CONTENT_KINDS
+        artifact for artifact in classified if artifact.kind in sync_artifacts.NON_CONTENT_KINDS
     ]
     artifact_paths = {artifact.path for artifact in artifacts}
-    genuinely_unexpected = [path for path in unexpected if path not in artifact_paths]
+    # A name the storage layer refuses is neither noise nor a normal stray file:
+    # the file exists here but would silently never reach the storage, so this
+    # copy of the wiki cannot be the one another device sees. It blocks, and it
+    # is named with its reason rather than folded into the generic message.
+    refused = [
+        artifact for artifact in classified if artifact.kind not in sync_artifacts.NON_CONTENT_KINDS
+    ]
+    refused_paths = {artifact.path for artifact in refused}
+    genuinely_unexpected = [
+        path for path in unexpected if path not in artifact_paths and path not in refused_paths
+    ]
+    if refused:
+        errors.append(
+            "Controlled files carry names the storage layer refuses: "
+            + "; ".join(f"{artifact.path} ({artifact.reason})" for artifact in refused)
+        )
     if genuinely_unexpected:
         errors.append(
             f"Controlled files exist outside the release manifest: {genuinely_unexpected}"
@@ -203,7 +220,12 @@ def verify_snapshot(
     if errors:
         # Content that lags behind a freshly arrived manifest is a transfer still
         # in flight, not damage. Waiting resolves it; repairing would not.
-        if content_drift and not genuinely_unexpected and transfer_pending(target, content_drift):
+        if (
+            content_drift
+            and not genuinely_unexpected
+            and not refused
+            and transfer_pending(target, content_drift)
+        ):
             return result(
                 "sync_in_progress",
                 manifest_sha256=first_hash,
@@ -214,7 +236,10 @@ def verify_snapshot(
                     "transfer is most likely still running; retry once it settles."
                 ),
             )
-        return result("invalid_wiki", manifest_sha256=first_hash, version=version, errors=errors)
+        report = result("invalid_wiki", manifest_sha256=first_hash, version=version, errors=errors)
+        if refused:
+            report["storage_refused"] = [artifact.as_dict() for artifact in refused]
+        return report
     # A conflict copy carries content that diverged across devices, so reading
     # must stop until a human decides. Operating-system noise carries nothing and
     # must never block a reader; it is reported and otherwise ignored.
