@@ -11,7 +11,7 @@ from pathlib import Path
 import portable_io
 from uuid import uuid4
 
-from identity_contract import IdentityError, load_plan
+from identity_contract import IdentityError, load_plan, profile_wiki_language, require_plan_language
 from snapshot_wiki import create_snapshot
 from wiki_lock import require_lock
 
@@ -43,6 +43,9 @@ def main() -> int:
     require_lock(target, args.lock_token)
     try:
         plan = load_plan(Path(args.plan_file), args.expect_proposal_sha256)
+        require_plan_language(
+            plan, profile_wiki_language(target), "the wiki language in schema/WIKI_PROFILE.md"
+        )
     except IdentityError as exc:
         raise SystemExit(str(exc)) from exc
     paths = (target / "SOUL.md", target / "schema/CONTENT_POLICY.md")

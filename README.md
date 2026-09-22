@@ -166,7 +166,8 @@ Die gepflegte Wiki-Sprache wird bei der Einrichtung ausdrücklich festgelegt und
 - Quellen bleiben in `sources/` in ihrer Originalsprache.
 - Wiki-Seiten, Zusammenfassungen, Claim-Texte, Clusterbeschreibungen und bevorzugte Begriffe werden in der festgelegten Wiki-Sprache gepflegt.
 - Anderssprachige Fachausdrücke können als Aliase in den Begriffswelten erhalten bleiben.
-- Eine spätere Sprachänderung ist möglich, gilt aber als vollständige Migration mit Auswirkungsplan, Bestätigung, Snapshot, vollständiger Übersetzung, neuem Graph, Prüfung und Major-Release.
+- Auch erzeugte Prosa folgt der Wiki-Sprache: die Überschriften und der Erklärtext von `SOUL.md` und `schema/CONTENT_POLICY.md` sowie die generierten Verzeichnisindizes. Deutsch und Englisch sind eingebaut, andere Sprachcodes bekommen ein englisches Gerüst um die unveränderten Feldwerte.
+- Eine spätere Sprachänderung ist möglich, gilt aber als vollständige Migration mit Auswirkungsplan, Bestätigung, Snapshot, vollständiger Übersetzung, neu gerenderten Identitätsdateien, neuem Graph, Prüfung und Major-Release.
 
 Eine teilweise übersetzte aktive Wissensschicht darf nicht veröffentlicht werden.
 
@@ -358,7 +359,7 @@ Review-Einträge werden nur dann geschrieben, wenn die betreffende Prüfung tats
 
 `schema/CONTENT_POLICY.md` bleibt davon getrennt. Sie legt fest, ob das Wiki primär einen aktuellen Stand, ein historisches Journal oder ein Hybridmodell führt und wie Ersetzung sowie belegte Konflikte behandelt werden. Entfernen bleibt immer Vorschau plus ausdrückliche Bestätigung und geschieht nie automatisch.
 
-Beide Dateien werden beim Einrichten aus einem hashgebundenen, bestätigten Vorschlag erzeugt. Spätere Änderungen verwenden denselben Vorschau-/Bestätigungsmechanismus und einen Snapshot. `SOUL.md` steuert keine Dateiberechtigungen, hebt keine Sicherheitsregeln auf und macht gewöhnliche Wiki- oder Quellentexte nicht zu Agentenanweisungen.
+Beide Dateien werden beim Einrichten aus einem hashgebundenen, bestätigten Vorschlag erzeugt. Der Vorschlag wird für die festgelegte Wiki-Sprache gerendert und trägt sie im Hash; ein Vorschlag für eine andere Sprache wird bei Einrichtung und Anwendung abgelehnt. Spätere Änderungen verwenden denselben Vorschau-/Bestätigungsmechanismus und einen Snapshot. `SOUL.md` steuert keine Dateiberechtigungen, hebt keine Sicherheitsregeln auf und macht gewöhnliche Wiki- oder Quellentexte nicht zu Agentenanweisungen.
 
 ### 4.14 Graph und statische Website
 
