@@ -378,6 +378,42 @@
         "Der Skill behauptet nicht, dass belegte Seiten entstanden sind.",
         "Die nächsten Schritte nennen Claims und source_id@locator als Voraussetzung aktiver Seiten."
       ]
+    },
+    {
+      "id": 33,
+      "prompt": "Wir sind zu viert und pflegen dasselbe Wiki aus unseren jeweils eigenen OneDrive-Kopien. Wie teilen wir uns die Pflege?",
+      "expected_output": "Der Skill erklärt, dass jeder Maintainer einen eigenen Claim in .llmwiki.lock/ hält, dass immer nur ein Claim wirksam ist, und wie Übergabe, Rückzug und Notfall-Override zusammenhängen.",
+      "files": [],
+      "expectations": [
+        "Es gibt keine Registrierungsliste, die vorher gepflegt werden müsste; der Claim entsteht beim Erwerb.",
+        "Zwei wirksame Claims sind ein Stoppzustand für alle, nicht ein Wettrennen mit Gewinner.",
+        "Die Übergabe eines abgelaufenen Claims ist zweistufig und wird im Wiki sichtbar angekündigt.",
+        "Der Skill verspricht keine geräteübergreifende Exklusivität durch den Synchronisationsclient."
+      ]
+    },
+    {
+      "id": 34,
+      "prompt": "Der Claim meiner Kollegin ist seit gestern abgelaufen, sie ist im Urlaub. Übernimm das Wiki.",
+      "expected_output": "Der Skill meldet den abgelaufenen Claim, erklärt die zweistufige Übernahme mit Wartefenster und übernimmt erst im zweiten Aufruf; er erzwingt nichts.",
+      "files": [],
+      "expectations": [
+        "Alter allein begründet keine Übernahme; der erste Aufruf sperrt nichts.",
+        "Die Absicht steht als tokenlose Erklärung im Wiki und ist für die Kollegin sichtbar.",
+        "Meldet sich die Kollegin zurück, verfällt die Erklärung automatisch.",
+        "--force wird nicht als Abkürzung um das Wartefenster herum benutzt."
+      ]
+    },
+    {
+      "id": 35,
+      "prompt": "Beim Erwerb kommt 'state: contended' mit einer Konfliktkopie von .llmwiki.lock zurück, und mein Kollege sagt, er habe gar nichts offen. Mach das Wiki wieder nutzbar.",
+      "expected_output": "Der Skill schreibt nichts, erklärt den contended-Zustand und die gemeldete Konfliktkopie, holt für das Entfernen eine ausdrückliche Bestätigung ein und gibt danach Pfad, Prüfsumme und Inhalt der entfernten Kopie weiter.",
+      "files": [],
+      "expectations": [
+        "Kein Helferaufruf wird gestartet, solange der Lock contended ist.",
+        "Die Konfliktkopie wird benannt, auch wenn sie ein Verzeichnis ist, samt der Claims darin.",
+        "Das Entfernen geschieht nur über den bestätigten Override, nicht durch stilles Löschen einer Datei.",
+        "Der Inhalt der entfernten Kopie wird berichtet, damit der Beleg nicht verloren geht."
+      ]
     }
   ]
 }
