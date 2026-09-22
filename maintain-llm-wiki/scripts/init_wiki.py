@@ -9,7 +9,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-from identity_contract import IdentityError, load_plan
+from identity_contract import IdentityError, load_plan, require_plan_language
 from wiki_lock import require_lock
 
 
@@ -100,6 +100,7 @@ def main() -> int:
             raise SystemExit(f"--{label} must be between 1 and 3650")
     try:
         identity_plan = load_plan(Path(args.identity_plan), args.expect_identity_sha256)
+        require_plan_language(identity_plan, wiki_language, "--wiki-language")
     except IdentityError as exc:
         raise SystemExit(str(exc)) from exc
     storage_path_prefix = (getattr(args, "storage_path_prefix", "") or "").strip().strip("/")
