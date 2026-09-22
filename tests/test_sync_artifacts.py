@@ -195,6 +195,82 @@ class ReservedNameTests(unittest.TestCase):
             )
 
 
+class ReservedDotfileVerification(unittest.TestCase):
+    """A reserved name the storage refuses must reach the verifier, dot or not.
+
+    `.lock` is the only reserved name that begins with a dot, and the verifier
+    used to drop every dot-prefixed file it could not call ignorable. A wiki
+    holding a file the storage will never accept therefore verified as `ready`.
+    """
+
+    def test_a_reserved_dotfile_no_longer_verifies_as_ready(self) -> None:
+        with TempWiki() as wiki:
+            self.assertEqual(wiki.verify()["state"], "ready")
+            (wiki.path / "wiki" / ".lock").write_text("", encoding="utf-8")
+
+            state = wiki.verify()
+            self.assertEqual(
+                state["state"],
+                "invalid_wiki",
+                f"a file the storage layer refuses must block a reader: {state}",
+            )
+            self.assertTrue(
+                any("wiki/.lock" in message for message in state.get("errors", [])),
+                f"the verifier must name the file it refuses over: {state}",
+            )
+
+    def test_the_finding_names_the_reason_not_only_the_path(self) -> None:
+        with TempWiki() as wiki:
+            (wiki.path / "wiki" / ".lock").write_text("", encoding="utf-8")
+            state = wiki.verify()
+            refused = state.get("storage_refused", [])
+            self.assertEqual([item["path"] for item in refused], ["wiki/.lock"], state)
+            self.assertEqual(refused[0]["kind"], sa.RESERVED_NAME, state)
+            self.assertIn("refuse", refused[0]["reason"].lower(), state)
+
+    def test_a_reserved_stem_is_judged_the_same_way(self) -> None:
+        """`CON.md` already blocked; it must now carry the same reason."""
+        with TempWiki() as wiki:
+            (wiki.path / "wiki" / "CON.md").write_text(PAGE, encoding="utf-8")
+            state = wiki.verify()
+            self.assertEqual(state["state"], "invalid_wiki", state)
+            self.assertEqual(
+                [item["path"] for item in state.get("storage_refused", [])], ["wiki/CON.md"], state
+            )
+
+    def test_both_skills_agree_about_a_reserved_dotfile(self) -> None:
+        with TempWiki() as wiki:
+            (wiki.path / "wiki" / ".lock").write_text("", encoding="utf-8")
+            self.assertEqual(
+                wiki.verify()["state"],
+                wiki.verify(query_side=True)["state"],
+                "both skills ship the same verifier and must judge this alike",
+            )
+
+    def test_the_maintenance_lock_is_not_mistaken_for_a_reserved_name(self) -> None:
+        """`.llmwiki.lock` is a near miss on `.lock` and must stay acceptable."""
+        with TempWiki() as wiki:
+            (wiki.path / "wiki" / ".llmwiki.lock").write_text("", encoding="utf-8")
+            self.assertEqual(wiki.verify()["state"], "ready")
+
+    def test_an_ignorable_dotfile_still_never_blocks(self) -> None:
+        with TempWiki() as wiki:
+            (wiki.path / "wiki" / ".DS_Store").write_bytes(b"\x00\x01macos")
+            state = wiki.verify()
+            self.assertEqual(state["state"], "ready", state)
+            self.assertTrue(
+                any(".DS_Store" in item["path"] for item in state.get("ignored_artifacts", [])),
+                f"operating-system noise stays disclosed: {state}",
+            )
+
+    def test_desktop_ini_stays_ignorable_after_leaving_the_reserved_set(self) -> None:
+        with TempWiki() as wiki:
+            (wiki.path / "wiki" / "desktop.ini").write_text("[.ShellClassInfo]\n", encoding="utf-8")
+            state = wiki.verify()
+            self.assertEqual(state["state"], "ready", state)
+            self.assertEqual(state.get("storage_refused", []), [], state)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

@@ -175,6 +175,7 @@
         "Die erste Frage erklärt Zweck und Ablauf der Identitätsklärung und beginnt mit Zweck und Wissensarten.",
         "Bis zur ausdrücklichen Bestätigung entstehen weder Zielstruktur noch Lock oder Identitätsdatei.",
         "Der Vorschlag deckt Zielgruppe, Antwortsprache, Anrede, Ton, Detail, Struktur, Quellenanzeige, Unsicherheit, Historie, Grenzen und Tabus ab.",
+        "Der Vorschlag wird für die festgelegte Wiki-Sprache gerendert; Überschriften und Erklärtext folgen ihr, die Feldwerte bleiben unverändert.",
         "Initialisierung bindet exakt den bestätigten proposal_sha256 und erzeugt SOUL.md sowie schema/CONTENT_POLICY.md."
       ]
     },

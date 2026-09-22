@@ -22,7 +22,7 @@ Answer only from a snapshot whose `meta/manifest.json` verifies as `lmwiki-relea
 - `ready`: continue and identify the release version in the answer when useful.
 - `wiki_busy`: do not read partially maintained content; ask the user to retry after maintenance.
 - `snapshot_changed`: discard the draft and restart from the new release.
-- `invalid_wiki`: do not answer from unverified files; report the release verification failure.
+- `invalid_wiki`: do not answer from unverified files; report the release verification failure. This also covers a file whose name the storage layer refuses, such as `wiki/.lock` or `wiki/CON.md`: it exists here but would never reach the storage, so this copy is not the wiki another device sees. Name the path and the reason the verifier gives, and say the maintenance skill resolves it.
 - `sync_artifacts_present`: a synchronization client kept a conflicting copy beside a released file. The release itself is intact, but two devices hold different content, so do not answer. Name the file and say the maintenance skill resolves it.
 - `sync_in_progress`: the manifest is newer than the files it describes, which is a transfer still running rather than damage. Do not answer, and say that retrying shortly is the remedy; never describe this as a corrupt wiki.
 - `hydration_required`: released files hold no local content because the storage keeps them in the cloud. Verifying them would download the wiki and fails offline. Report the file count and estimated volume, and ask before proceeding rather than starting the download.

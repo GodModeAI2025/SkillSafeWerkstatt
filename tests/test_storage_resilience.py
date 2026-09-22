@@ -265,6 +265,7 @@ class StoragePathProfile(unittest.TestCase):
         plan = run_json(
             MAINTAIN / "plan_identity.py",
             "--input", str(directory / "i.json"),
+            "--wiki-language", "de",
             "--output", str(directory / "p.json"),
         )
         result = run(

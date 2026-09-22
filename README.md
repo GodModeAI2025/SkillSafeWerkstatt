@@ -167,7 +167,8 @@ Die gepflegte Wiki-Sprache wird bei der Einrichtung ausdrücklich festgelegt und
 - Quellen bleiben in `sources/` in ihrer Originalsprache.
 - Wiki-Seiten, Zusammenfassungen, Claim-Texte, Clusterbeschreibungen und bevorzugte Begriffe werden in der festgelegten Wiki-Sprache gepflegt.
 - Anderssprachige Fachausdrücke können als Aliase in den Begriffswelten erhalten bleiben.
-- Eine spätere Sprachänderung ist möglich, gilt aber als vollständige Migration mit Auswirkungsplan, Bestätigung, Snapshot, vollständiger Übersetzung, neuem Graph, Prüfung und Major-Release.
+- Auch erzeugte Prosa folgt der Wiki-Sprache: die Überschriften und der Erklärtext von `SOUL.md` und `schema/CONTENT_POLICY.md` sowie die generierten Verzeichnisindizes. Deutsch und Englisch sind eingebaut, andere Sprachcodes bekommen ein englisches Gerüst um die unveränderten Feldwerte.
+- Eine spätere Sprachänderung ist möglich, gilt aber als vollständige Migration mit Auswirkungsplan, Bestätigung, Snapshot, vollständiger Übersetzung, neu gerenderten Identitätsdateien, neuem Graph, Prüfung und Major-Release.
 
 Eine teilweise übersetzte aktive Wissensschicht darf nicht veröffentlicht werden.
 
@@ -359,7 +360,7 @@ Review-Einträge werden nur dann geschrieben, wenn die betreffende Prüfung tats
 
 `schema/CONTENT_POLICY.md` bleibt davon getrennt. Sie legt fest, ob das Wiki primär einen aktuellen Stand, ein historisches Journal oder ein Hybridmodell führt und wie Ersetzung sowie belegte Konflikte behandelt werden. Entfernen bleibt immer Vorschau plus ausdrückliche Bestätigung und geschieht nie automatisch.
 
-Beide Dateien werden beim Einrichten aus einem hashgebundenen, bestätigten Vorschlag erzeugt. Spätere Änderungen verwenden denselben Vorschau-/Bestätigungsmechanismus und einen Snapshot. `SOUL.md` steuert keine Dateiberechtigungen, hebt keine Sicherheitsregeln auf und macht gewöhnliche Wiki- oder Quellentexte nicht zu Agentenanweisungen.
+Beide Dateien werden beim Einrichten aus einem hashgebundenen, bestätigten Vorschlag erzeugt. Der Vorschlag wird für die festgelegte Wiki-Sprache gerendert und trägt sie im Hash; ein Vorschlag für eine andere Sprache wird bei Einrichtung und Anwendung abgelehnt. Spätere Änderungen verwenden denselben Vorschau-/Bestätigungsmechanismus und einen Snapshot. `SOUL.md` steuert keine Dateiberechtigungen, hebt keine Sicherheitsregeln auf und macht gewöhnliche Wiki- oder Quellentexte nicht zu Agentenanweisungen.
 
 ### 4.14 Graph und statische Website
 
@@ -460,7 +461,7 @@ Ein OneDrive- oder SharePoint-Client ist ein **Schreiber auf dem Wiki-Verzeichni
 
 - **Konfliktkopie:** Der Client führt niemals zusammen. Haben zwei Geräte dieselbe Datei geändert, bleiben beide erhalten und eine wird nach dem Gerät umbenannt. Das Lesen stoppt, denn die Kopie kann Arbeit enthalten, die sonst niemand hat. Die Auflösung läuft über Plan/Apply: Der Plan stellt beide Seiten mit Hash, Größe und Änderungszeit gegenüber, eine inhaltsgleiche Kopie wird zum Entfernen empfohlen, eine abweichende bleibt Entscheidung des Anwenders. Vor dem Anwenden entsteht ein Snapshot. **Ohne Bestätigung wird nie gelöscht.**
 - **Betriebssystemartefakt** wie `.DS_Store`, `Thumbs.db`, `desktop.ini` oder `~$`-Dateien: trägt keinen Inhalt. Es wird gemeldet und ansonsten ignoriert — es blockiert keinen Leser, lässt keinen Lint scheitern und gelangt nie in ein Release-Manifest. Ein Blick in `sources/` im Finder darf ein Wiki nicht stilllegen.
-- **Gesperrter Name oder Zeichen:** Namen wie `.lock`, `CON`, `AUX`, `NUL`, `COM0`–`COM9`, `LPT0`–`LPT9`, alles mit `~$` am Anfang oder `_vti_` an beliebiger Stelle, die Zeichen `" * : < > ? / \ |`, führende und schließende Leerzeichen sowie ein schließender Punkt. Das sind Lint-Fehler, weil solche Dateien die Ablage stillschweigend nie erreichen. Ist ein Name zugleich ein Betriebssystemartefakt — `desktop.ini` vor allem —, gilt er als Artefakt und bleibt ignorierbar: Er trägt keinen Inhalt, also kostet es auch nichts, dass die Ablage ihn verweigert.
+- **Gesperrter Name oder Zeichen:** Namen wie `.lock`, `CON`, `AUX`, `NUL`, `COM0`–`COM9`, `LPT0`–`LPT9`, `_vti_` an beliebiger Stelle, die Zeichen `" * : < > ? / \ |`, führende und schließende Leerzeichen sowie ein schließender Punkt. Das sind Lint-Fehler, weil solche Dateien die Ablage stillschweigend nie erreichen. `desktop.ini` und `~$`-Namen verweigert die Ablage ebenfalls, sie gelten hier aber als das, was sie sind — Betriebssystemartefakte — und bleiben ignorierbar: Sie tragen keinen Inhalt, also kostet die Verweigerung auch nichts. Die Artefaktregel wird zuerst geprüft und ist für diese Namen die einzige.
 
 Zusätzlich geprüft werden Pfade, die sich nur in der Groß-/Kleinschreibung unterscheiden — SharePoint kann beide nicht gleichzeitig halten. Trägt `schema/WIKI_PROFILE.md` einen `storage_path_prefix`, wird außerdem die 400-Zeichen-Grenze als Fehler und die Windows-Grenze von 260 Zeichen als Warnung geprüft.
 
@@ -592,7 +593,7 @@ Mögliche Zustände sind:
 - `ready`: Der Release ist stabil und kann gelesen werden.
 - `wiki_busy`: Eine Pflege besitzt den Lock; es wird kein möglicher Mischstand gelesen.
 - `snapshot_changed`: Der Stand hat sich während der Anfrage geändert; der Entwurf wird verworfen.
-- `invalid_wiki`: Release oder Dateien sind nicht verifizierbar; daraus wird keine Sachantwort erzeugt.
+- `invalid_wiki`: Release oder Dateien sind nicht verifizierbar; daraus wird keine Sachantwort erzeugt. Hierher gehört auch eine Datei mit einem Namen, den die Ablage verweigert (etwa `wiki/.lock` oder `wiki/CON.md`): Sie liegt lokal vor, erreicht die Ablage aber nie — dieser Stand ist also nicht der, den ein anderes Gerät sieht. Die Meldung nennt Pfad und Grund.
 - `sync_artifacts_present`: Der Sync-Client hat eine Konfliktkopie neben einer veröffentlichten Datei behalten. Der Release selbst ist intakt, aber zwei Geräte halten verschiedene Inhalte. Der Pflege-Skill löst das auf.
 - `sync_in_progress`: Das Manifest ist neuer als die Dateien, die es beschreibt. Das ist eine laufende Übertragung, keine Beschädigung — Warten hilft, Reparieren nicht.
 - `hydration_required`: Veröffentlichte Dateien haben keinen lokalen Inhalt, weil die Ablage sie in der Cloud hält. Sie zu prüfen würde das Wiki herunterladen und schlägt offline fehl. Der Skill meldet Anzahl und geschätztes Volumen und fragt, statt den Download zu starten.

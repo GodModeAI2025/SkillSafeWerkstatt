@@ -53,8 +53,12 @@ RESERVED_STEMS = frozenset(
     | {f"lpt{digit}" for digit in range(10)}
 )
 
-#: Full names OneDrive and SharePoint refuse outright.
-RESERVED_NAMES = frozenset({".lock", "desktop.ini"})
+#: Full names OneDrive and SharePoint refuse outright *and* that no other rule
+#: already claims. The storage also refuses `desktop.ini` and every `~$` name,
+#: but those carry nothing, so `_is_os_artifact` answers for them first and this
+#: branch would never see them. Listing them here too would be dead weight that
+#: silently turns into a lint error the moment someone reorders `classify()`.
+RESERVED_NAMES = frozenset({".lock"})
 
 #: Characters SharePoint rejects in a file or folder name.
 INVALID_CHARACTERS = frozenset('"*:<>?/\\|')
@@ -141,6 +145,10 @@ def classify(relative: str) -> Optional[Artifact]:
     if not name:
         return None
 
+    # Deliberately first: `desktop.ini` and every `~$` name are also names the
+    # storage refuses, but they carry nothing, so refusing them costs nothing
+    # and a wiki must not go offline because Explorer wrote one. Reordering this
+    # would turn ordinary desktop noise into a lint error everywhere at once.
     if _is_os_artifact(name):
         return Artifact(relative, IGNORABLE, f"operating-system or Office artifact {name!r}")
 

@@ -113,6 +113,34 @@ class StorageRules(unittest.TestCase):
         # The skill's own lock file must stay acceptable to the storage layer.
         self.assertIsNone(sa.classify(".llmwiki.lock"))
 
+    def test_every_reserved_entry_can_actually_be_returned(self) -> None:
+        """No entry may be shadowed by a rule that runs earlier in classify().
+
+        `desktop.ini` sat in RESERVED_NAMES while the artifact rule answered for
+        it first, so the entry did nothing and would have turned into a lint
+        error across the toolchain the moment someone reordered the branches.
+        """
+        names = list(sa.RESERVED_NAMES) + [f"{stem}.md" for stem in sa.RESERVED_STEMS]
+        for name in sorted(names):
+            with self.subTest(name=name):
+                artifact = sa.classify(f"wiki/{name}")
+                self.assertIsNotNone(artifact, name)
+                self.assertEqual(
+                    artifact.kind,
+                    sa.RESERVED_NAME,
+                    f"{name!r} is listed as reserved but classifies as {artifact.kind}",
+                )
+
+    def test_names_the_storage_refuses_but_that_carry_nothing_stay_ignorable(self) -> None:
+        """One rule, not two: an Office or shell artifact wins over the refusal."""
+        for name in ("desktop.ini", "~$governance.docx", "~$plan.md"):
+            with self.subTest(name=name):
+                artifact = sa.classify(f"wiki/{name}")
+                self.assertIsNotNone(artifact, name)
+                self.assertEqual(artifact.kind, sa.IGNORABLE, name)
+                self.assertTrue(sa.is_ignorable(f"wiki/{name}"), name)
+        self.assertNotIn("desktop.ini", sa.RESERVED_NAMES)
+
 
 class PathBudget(unittest.TestCase):
     def test_relative_path_alone_stays_under_budget(self) -> None:
