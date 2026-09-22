@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import subprocess
 import sys
 import unittest
@@ -67,7 +68,7 @@ class ImportIntegrity(unittest.TestCase):
 class SharedModuleParity(unittest.TestCase):
     """Modules both skills carry must be byte-identical, or they will diverge."""
 
-    SHARED = ("sync_artifacts.py", "trust_contract.py", "freshness.py")
+    SHARED = ("sync_artifacts.py", "trust_contract.py", "freshness.py", "verify_release.py")
 
     def test_shared_modules_are_identical(self) -> None:
         for name in self.SHARED:
@@ -127,6 +128,45 @@ class Packages(unittest.TestCase):
                     for path in (REPO / skill / "scripts").glob("*.py")
                 }
                 self.assertTrue(on_disk <= names, sorted(on_disk - names))
+
+
+class ActionCatalog(unittest.TestCase):
+    """The catalog is the machine-readable invocation surface.
+
+    A caller builds its command line from `helper`, so a helper string that
+    argparse rejects is as wrong as a missing action.
+    """
+
+    def catalog(self, skill: str) -> dict:
+        result = subprocess.run(
+            [sys.executable, str(REPO / skill / "scripts" / "describe_actions.py")],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return json.loads(result.stdout)
+
+    def test_every_helper_names_the_subcommand_its_script_requires(self) -> None:
+        for skill in SKILLS:
+            scripts = REPO / skill / "scripts"
+            for entry in self.catalog(skill)["actions"]:
+                with self.subTest(skill=skill, action=entry["id"]):
+                    parts = entry["helper"].split()
+                    script = scripts / parts[0]
+                    self.assertTrue(script.is_file(), entry["helper"])
+                    source = script.read_text(encoding="utf-8")
+                    if "add_subparsers" in source:
+                        self.assertEqual(
+                            len(parts),
+                            2,
+                            "the script takes a subcommand, so the catalog must name it",
+                        )
+                    else:
+                        self.assertEqual(
+                            len(parts),
+                            1,
+                            "the script takes no subcommand, so the catalog must not name one",
+                        )
 
 
 class SkillFrontmatter(unittest.TestCase):

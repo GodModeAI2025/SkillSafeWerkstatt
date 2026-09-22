@@ -47,14 +47,14 @@ CATALOG = {
         action("export-frozen-skill", "export_wiki_skill.py", "Export one verified release as an immutable knowledge-only skill.", [{"name": "skill_name", "type": "lowercase-hyphenated", "required": True}], writes=False),
         action(
             "resolve-conflict-copy-plan",
-            "resolve_conflict_copy.py",
+            "resolve_conflict_copy.py plan",
             "Report synchronization conflict copies with both sides, without changing anything.",
             [],
             writes=False,
         ),
         action(
             "resolve-conflict-copy-apply",
-            "resolve_conflict_copy.py",
+            "resolve_conflict_copy.py apply",
             "Apply one confirmed, hash-bound conflict resolution after an automatic snapshot.",
             [
                 {"name": "plan_file", "type": "string", "required": True},
@@ -65,7 +65,7 @@ CATALOG = {
         ),
         action(
             "verify-pages-plan",
-            "verify_pages.py",
+            "verify_pages.py plan",
             "Show which pages a confirmation would cover and the tier it would record.",
             [
                 {"name": "actor", "type": "string", "required": True},
@@ -75,7 +75,7 @@ CATALOG = {
         ),
         action(
             "verify-pages-apply",
-            "verify_pages.py",
+            "verify_pages.py apply",
             "Record a confirmed page review after an automatic snapshot; a human actor "
             "additionally requires explicit user confirmation.",
             [
