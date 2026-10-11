@@ -22,6 +22,7 @@ CATALOG = {
         {"id": "assess-quality", "helper": "assess_quality.py", "description": "Assess technical state, review freshness, open questions, and snapshot age.", "writes": False, "destructive": False, "parameters": [{"name": "expect_manifest_sha256", "type": "sha256", "required": False}]},
         {"id": "inventory-frontmatter", "helper": "inventory_wiki.py", "description": "Return property counts, observed types, samples, and schema drift from a verified release.", "writes": False, "destructive": False, "parameters": [{"name": "expect_manifest_sha256", "type": "sha256", "required": False}]},
         {"id": "search", "helper": "search_wiki.py", "description": "Search claims and sources with concept expansion and an optional validated metadata selector.", "writes": False, "destructive": False, "parameters": [{"name": "query", "type": "string", "required": True}, {"name": "filter_json", "type": "selector", "required": False}, {"name": "include_sources", "type": "boolean", "required": False}, {"name": "include_history", "type": "boolean", "required": False}]},
+        {"id": "score-notes", "helper": "score_notes.py", "description": "Optionally re-rank BM25 candidate notes through the consent-gated decision layer; degrades to the BM25 order whenever the layer is inactive or unavailable.", "writes": False, "destructive": False, "parameters": [{"name": "query", "type": "string", "required": True}, {"name": "candidates", "type": "integer", "required": False}, {"name": "limit", "type": "integer", "required": False}]},
     ],
 }
 

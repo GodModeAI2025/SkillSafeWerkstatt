@@ -151,6 +151,29 @@
         "Abgelaufene Treffer werden markiert statt stillschweigend unterdrückt.",
         "Der Skill unterscheidet Ablaufdatum, Vertrauensstufe und Qualitätsstatus voneinander."
       ]
+    },
+    {
+      "id": 14,
+      "prompt": "Beantworte meine Frage aus dem angegebenen Wiki. Wenn dort die Entscheidungsschicht aktiviert ist, nutze ihre Notizauswahl für die Suche und sag mir, welchen Weg die Auswahl genommen hat.",
+      "expected_output": "Release-Integrität wird zuerst geprüft; score_notes.py liefert die Auswahl: state scored führt zu einer provider-gerankten Notizliste, sonst zu den deterministischen BM25-Notizen im fallback-Feld; die Antwort nennt den gewählten Weg, z. B. 'Notizauswahl: Entscheidungsschicht (Modell <model>)' oder den Fallback.",
+      "files": [],
+      "expectations": [
+        "Bei state scored liest der Agent die gerankten Notizen; bei inactive, consent_required, provider_unavailable, provider_invalid_response oder no_candidates_above_threshold liest er die BM25-Notizen aus dem fallback-Feld.",
+        "Die Antwort offenbart, welcher Auswahlweg genutzt wurde, und stellt ein Fallback-Ergebnis nicht als Klassifikationsentscheidung dar.",
+        "Der Lese-Helfer schreibt nichts in das Wiki; eine Fehlfunktion des Providers wird nicht als Fehler des Wikis behandelt.",
+        "Eine aktive Entscheidungsschicht bedeutet, dass Notizinhalte unter gespeicherter Einwilligung an ein externes Endpoint gehen; der Agent stellt diesen Transfer nicht als in diesem Lauf entschieden dar."
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Das Wiki zeigt eine Entscheidungsschicht mit consent_required an. Beantworte meine Frage trotzdem und sag mir, was der Status bedeutet und wer die Schicht aktivieren kann.",
+      "expected_output": "Die Antwort verläuft über den deterministischen BM25-Fallback, ohne Provider-Aufruf; der Status wird korrekt erklärt: Die Schicht ist beabsichtigt, aber ohne gespeicherte Einwilligung; nur der Pflege-Skill kann Konfiguration und Einwilligung setzen, nie der Lese-Skill.",
+      "files": [],
+      "expectations": [
+        "Es wird kein externer Aufruf unternommen und kein API-Key verlangt, solange die Einwilligung fehlt.",
+        "Der Agent erklärt, dass es sich bei consent_required um einen Warnzustand handelt, in dem nichts übertragen wird, aber die Absicht unklar bleibt.",
+        "Aktivierung wird als Pflegeentscheidung mit Datentransfer-Erklärung und Einwilligung zurückgewiesen, nicht als eine Aufgabe des Lese-Workflows."
+      ]
     }
   ]
 }

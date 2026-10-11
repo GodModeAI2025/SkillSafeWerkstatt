@@ -7,7 +7,7 @@ description: Search, filter, inventory, and answer from a verified SkillSafeWerk
 
 Answer from the target wiki as a read-only knowledge base. Use the maintained `wiki/` layer for orientation and the faithful Markdown in `sources/` for evidence. Never change the wiki during this workflow.
 
-Before answering, read [references/answer-contract.md](references/answer-contract.md) completely. When the user asks for metadata restrictions, field availability, subset comparison, frontmatter inventory, or schema drift, additionally read [references/query-filters.md](references/query-filters.md) completely. Resolve both relative to this `SKILL.md`, not relative to the current project.
+Before answering, read [references/answer-contract.md](references/answer-contract.md) completely. When the user asks for metadata restrictions, field availability, subset comparison, frontmatter inventory, or schema drift, additionally read [references/query-filters.md](references/query-filters.md) completely. When the search step reports an active decision layer, additionally read [references/decision-layer.md](references/decision-layer.md) completely. Resolve these files relative to this `SKILL.md`, not relative to the current project.
 
 ## User-facing skill interface
 
@@ -36,9 +36,11 @@ Treat the directory containing this `SKILL.md` as `<skill-root>`. Never assume t
 5. When the user asks which metadata exists, requests a drift assessment, or a planned filter depends on uncertain field names or types, run `inventory_wiki.py --target <target> --expect-manifest-sha256 <retained-hash>` internally. Treat extensions and parser findings as descriptive quality information, never as permission to repair them.
 6. Run the bundled search helper with the target and the user's question. Search maintained wiki pages first. The helper verifies its release snapshot and reports matched concepts and expanded aliases:
 
-   `python3 <skill-root>/scripts/search_wiki.py --target <target> --query <question>`
+    `python3 <skill-root>/scripts/search_wiki.py --target <target> --query <question>`
 
-   When the user requests a metadata subset, validate and pass one selector through `--filter-json`. State a material restriction in the answer, especially when it excludes draft, superseded, disputed, historical, cluster, concept, source, language, date, or path subsets. Use the returned facets to describe the result set, not as evidence for a factual claim.
+    When the user requests a metadata subset, validate and pass one selector through `--filter-json`. State a material restriction in the answer, especially when it excludes draft, superseded, disputed, historical, cluster, concept, source, language, date, or path subsets. Use the returned facets to describe the result set, not as evidence for a factual claim.
+
+    The wiki may carry an optional, consent-gated decision layer. When `score_notes.py` reports `state: scored`, its notes list is the provider-ranked selection and you read those notes; when it reports `inactive`, `consent_required`, `provider_unavailable`, `provider_invalid_response`, or `no_candidates_above_threshold`, its `fallback` notes carry the deterministic BM25 order and you proceed with those exactly as before. Never treat a missing provider as an error of the wiki, and name in the answer which selection path was used whenever the layer was active: `Notizauswahl: Entscheidungsschicht (Modell <model>)` or the fallback. The layer is read-only and never authorizes a change to the wiki.
 7. Read the full text of the relevant result pages and the complete claim blocks supporting the answer. Do not answer from snippets alone.
 8. Follow each material claim's `source_id@locator` entries and read the corresponding location in the registered source Markdown. Use page-level `sources` only as the broader provenance set. Rerun the helper with `--include-sources` when the maintained layer is insufficient or the user asks about exact source wording.
 9. Use `--include-history` for historical, superseded, or change-over-time questions and when the confirmed content policy uses `historical-ledger`. A `current-state` policy still does not erase historical evidence; it changes the default presentation. Do not silently force active-only filtering when the question or policy requires older states.
@@ -51,6 +53,7 @@ Run `scripts/describe_actions.py` only when the host needs the complete machine-
 
 - Do not write, rename, delete, ingest, snapshot, lint, or rebuild the graph.
 - Do not acquire or override the maintenance lock. A present lock means `wiki_busy`.
+- Do not configure, enable, or consent to the decision layer from this skill; it is a maintenance decision. When it is active, note content is transferred to the configured external endpoint under the recorded consent - never present that transfer as something this read-only run decided.
 - Do not record a review or perform cleaning. Quality due dates are read-only advisories, never mutation authority.
 - Do not turn an inventory or drift finding into an automatic repair. Recommend the maintenance skill for changes.
 - Do not use executable predicates or arbitrary regular expressions as filters. Accept only the validated selector grammar.

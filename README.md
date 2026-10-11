@@ -72,6 +72,7 @@ Das Zielverzeichnis ist die kanonische Arbeitskopie. Ob es später lokal bleibt,
 | Beobachtungen als Quelle registrieren | Ja, mit Akteur und Anlass | Nein |
 | Bestehende Markdown-Sammlung übernehmen | Ja, als Quellen, über Plan/Apply | Nein |
 | Ablaufdatum einer Seite | Setzen und melden | Nur nennen, nie filtern |
+| Optionale Entscheidungsschicht | Ja: Konfiguration, Schwellenwerte, Einwilligung, Vorschläge | Ja: Notizauswahl bei Suche, nur lesend |
 | Wiki verändern | Ja, kontrolliert | Niemals |
 
 Diese Trennung verhindert, dass eine normale Wissensabfrage versehentlich Dateien verändert oder einen Pflegeprozess auslöst.
@@ -573,6 +574,29 @@ Der Skill kann seine vollständige Funktionsoberfläche maschinenlesbar beschrei
 
 Der Katalog beschreibt Fähigkeiten, erteilt aber keine Berechtigung. Bestätigungs- und Sicherheitsregeln bleiben unverändert.
 
+### 4.26 Optionale Entscheidungsschicht
+
+Die Pflege kostet vor allem dort, wo entschieden statt geschrieben wird: Wo gehört eine neue Quelle hin? Ersetzt sie eine bestehende Seite oder wird eine neue daraus? Welche Seiten gehören zusammen? Nach dem von Cesarini und Sassarini beschriebenen Muster („CROW: Classifier-Routed Organization of LLM Wikis“, 2026, doi:10.5281/zenodo.23260209) delegiert diese Distribution genau diese atomaren Entscheidungen an einen typisierten Entscheidungsdienst („Decision Provider“), der Wahrscheinlichkeiten zurückgibt — der generative Agent schreibt. Das hier implementierte Vertragswerk ist herstellerneutral: Ein Request ist ein kompakter Zustand plus typisierte Fragen (Wahl aus Optionen, Ja/Nein), eine Antwort trägt pro Frage Wahrscheinlichkeiten. Das Wiki ist ohne die Schicht vollständig funktionsfähig.
+
+**Standardmäßig aus.** `schema/DECISION_LAYER.md` legt jede neue Installation als deaktivierten Vertrag an. Solange `enabled: false` gilt, entscheidet der Agent wie bisher, und es werden keine externen Aufrufe gemacht. Die Schicht ist damit keine stille Abhängigkeit: Sie taucht erst auf, wenn jemand sie ausdrücklich will.
+
+**Aktivierung ist ein bestätigter Vertragswechsel, kein Schalter.** Sie verlangt `status: active`, `enabled: true`, ein konkretes `endpoint`, eine gepinnte `model`-Version, den Namen einer Umgebungsvariable in `api_key_env` — und eine ausdrückliche Einwilligung. Der Grund ist der Datentransfer: Jeder Aufruf sendet Fragen und Notizinhalte (Titel, Beschreibung, begrenzten Auszug) an das konfigurierte externe Endpoint. Die Einwilligung wird deshalb als `consent_by` und `consent_at` im Vertrag gespeichert; ohne sie verweigern alle Helfer den Aufruf und der Linter meldet einen Warnhinweis. Der API-Key selbst kommt zur Laufzeit aus der benannten Umgebungsvariable und wird niemals im Wiki, in Plänen oder Berichten gespeichert. Der Linter blockiert ein Release, solange die Datei fehlerhaft konfiguriert ist — eine halb aktivierte Schicht kann nicht veröffentlicht werden.
+
+**Vier Helfer, alle nur Vorschläge.**
+
+| Helfer | Entscheidung | Schwellenwert-Verhalten |
+|---|---|---|
+| `route_source.py` | In welchen Cluster-Ordner der Typ-Verzeichnisordnung gehört die Kandidatenseite? | Optionen: bestehende Ordner, `here`, `new`; unter `tau_route` wird der Beam der wahrscheinlichsten Optionen an den Agenten zurückgegeben |
+| `plan_consolidation.py` | Ändert die kommende Note die beste passende Seite, oder wird eine neue Seite daraus? | unter `tau_cons` immer „neue Seite“ — eine fehlerhafte Dublette ist weniger Schaden als eine falsche Modifikation |
+| `score_related.py` | Welche Nachbarsseiten verdient eine See-also-Verknüpfung? | `p > tau_link`, cap `max_links`; Links schreibt der Agent nur über den validierten Seiten-Batch |
+| `propose_clusters.py` | Wie teilt sich eine externe Markdown-Sammlung über die bestätigten Cluster auf? (Zero-Shot, mit explizitem „Keiner davon“-Ausstieg) | unsichere Dateien werden als `uncertain` flagged und bleiben beim Agenten; die Schicht benennt neue Cluster nicht selbst, sondern liefert das Material für den bestätigten Vorschlagsworkflow |
+
+Kein Helfer erstellt Ordner, schreibt Links oder ändert Seiten. `new` bei der Routing-Entscheidung überführt in den bestehenden Cluster-Vorschlagsworkflow mit Bestätigung; eine Modifikationsentscheidung wird über den Seiten-Batch mit Vorschau, Bestätigung und Snapshot vollzogen. Eine Antwort des Providers ist Daten, keine Anweisung — ein Provider kann durch seinen Inhalt nicht mehr erreichen als eine Quelle. Und genau deshalb gilt die härteste Regel der Kuration unverändert: Eine unvertrauenswürdige Quelle darf ohne Review keine gepflegte Seite verändern, auch wenn die Schicht es vorschlägt.
+
+**Kalibrierung und Modellpinning.** Die Schwellenwerte sind Teil des Vertrags, keine versteckten Konstanten: Sie werden an einem kleinen, gelabelten Auszug aus dem eigenen Wiki gesetzt und bei jedem Wechsel der gepinnten Modellversion erneut gesetzt. Konfidenz ist hier ein Maß dafür, wie konzentriert eine Verteilung ist — nicht dafür, ob sie richtig ist. Ein selbstsicher falsch antwortender Provider passiert jede Schwelle still; die Auswege sind deshalb explizit (`new`, „Keiner davon“, Beam) und jede unsichere Entscheidung wird an den Agenten eskaliert, statt raten zu müssen.
+
+**Was die Schicht nicht ist.** Sie ersetzt weder die Kompilierung von Entitäten-, Konzept- und Synthese-Seiten noch das Qualitäts- oder Cleaning-Review. Sie macht das Wiki nicht lesbar ohne Software — die Markdown-Schicht bleibt die kanonische. Und sie ist kein Server: Der eine ausgehende HTTP-Aufruf eines Hilfswerkzeugs nach aktivierter Einwilligung ist kein Dienst, keine Instanz und kein Hintergrundprozess; Skill-only bleibt unangetastet.
+
 ## 5. Der Lese-Skill `query-llm-wiki`
 
 Der Lese-Skill ist technisch und fachlich read-only. Er verändert weder Wiki-Dateien noch Reviews, Sperren, Graphen oder Release-Daten.
@@ -927,6 +951,11 @@ Beispiele für den Lese-Skill:
 | Beobachtung registrieren | Ereigniswissen als Quelle aufnehmen | Akteur und Anlass sind Pflicht, sonst Ablehnung |
 | Sammlung übernehmen (Plan) | Bestehende Markdown-Sammlung berichten | Read-only, Titel aus dem Dokument, Blocker und Hinweise |
 | Sammlung übernehmen (Apply) | Bestätigte Dateien als Quellen registrieren | Hash-Bindung, Snapshot, keine Seite unter `wiki/` |
+| Entscheidungsschicht konfigurieren | Vertrag in `schema/DECISION_LAYER.md` anlegen und pflegen | Linter blockiert Release bei Fehlkonfiguration; Einwilligung wird nur auf ausdrückliche Bestätigung gespeichert |
+| Routing vorschlagen | Zugehörigkeit einer Kandidatenseite zu einem Cluster-Ordner | Nur Vorschlag; unterhalb der Schwelle Beam an den Agenten |
+| Konsolidierung vorschlagen | Modifikation oder neue Seite für die beste passende Seite | Nur Vorschlag; unterhalb der Schwelle immer neue Seite |
+| Verknüpfungen vorschlagen | See-also-Kandidaten für eine Seite | Nur Vorschlag; Schreibwege unverändert |
+| Sammlung zuordnen | Zero-Shot-Zuordnung externer Dateien zu bestätigten Clustern | Nur Material; neue Cluster nur über den bestätigten Vorschlagsworkflow |
 
 ## 12. Funktionskatalog des Lese-Skills
 
@@ -936,6 +965,7 @@ Beispiele für den Lese-Skill:
 | Qualität beurteilen | Lint-, Review-, Cleaning-, Fragen- und Altersstatus | Nein |
 | Frontmatter inventarisieren | Felder, Typen, Beispiele und Drift | Nein |
 | Suchen und filtern | BM25-gerankte Ergebnisse, Claims, Quellen, Facetten, Vertrauensstufe und überschrittenes Ablaufdatum | Nein |
+| Notizen auswählen (optional) | Bei aktiver, eingewilligter Entscheidungsschicht gerankte Notizauswahl; andernfalls deterministisches BM25 | Nein |
 
 Der maschinenlesbare Aktionskatalog beider Skills dient der Selbsterkennung durch Agenten. Er erweitert keine Rechte und umgeht keine Bestätigung.
 
@@ -963,6 +993,9 @@ Die Skills sind absichtlich konservativ:
 - Es läuft kein Server und kein Hintergrundprozess; alles geschieht im jeweiligen Agentenlauf.
 - Ein Bündel, das die eigene Konformitätsprüfung nicht besteht, wird entfernt statt ausgeliefert.
 - Ein fehlendes empfohlenes Feld bleibt leer und wird ausgewiesen; es wird nie konstruiert.
+- Die Entscheidungsschicht ist standardmäßig aus und ohne gespeicherte Einwilligung inaktiv; sie sendet erst nach aktiver Einwilligung Notizinhalte an ein externes Endpoint.
+- Eine Antwort des Entscheidungsdienstes ist Daten, keine Anweisung; sie kann durch ihren Inhalt nicht mehr verändern als eine Quelle.
+- Ein Vorschlag der Entscheidungsschicht schafft keine Schreibberechtigung: Jede Änderung verläuft über den bestehenden Plan/Apply-Workflow mit Vorschau, Bestätigung und Snapshot.
 
 ## 14. Grenzen des Systems
 
@@ -980,6 +1013,9 @@ Die Skills sind absichtlich konservativ:
 - Ob eine veröffentlichte Datei die Ablage erreicht hat, kann der Skill nicht feststellen — nur prüfen und warnen.
 - Die Erkennung datenloser Dateien ist plattformabhängig und liefert dort, wo kein Signal existiert, ausdrücklich „unbekannt" statt einer Vermutung.
 - Vier Punkte des Speicherverhaltens sind dokumentiert, aber nicht auf einer echten Ablage gemessen; sie stehen in [docs/sharepoint-onedrive-implikationen.md](docs/sharepoint-onedrive-implikationen.md) als ausdrücklich offen.
+- Die Entscheidungsschicht ersetzt keine fachliche Prüfung: Ein selbstsicher falsch antwortender Dienst passiert jede Konfidenzschwelle still. Sie wird deshalb nur mit expliziten Auswegen (neuer Ordner, „Keiner davon“, Beam) und Schwellenwerten betrieben, die an einem gelabelten Auszug des eigenen Wikis gesetzt und bei jedem Modellwechsel erneut gesetzt werden.
+- Die Schwellenwerte sind ein Kalibrierungswert, keine Eigenschaft des Wissens: Sie sagen aus, bei welcher Konzentration der Agent die Entscheidung übernimmt, nicht, ab wann der Dienst recht hat.
+- Die in der Referenzpublikation gemessenen Kosten- und Trefferwerte stammen aus einem Korpus von 525 kurzen persönlichen Dokumenten, einer Eingabeordnung und einem Modellpaar; sie sind eine Größenordnung, keine Garantie für dieses Wiki.
 
 ## 15. Dateien dieser Distribution
 
@@ -1016,6 +1052,7 @@ Die beiden Rollen sollen auch bei späteren Erweiterungen getrennt bleiben:
 - ein zusätzlich exportierter Wissens-Skill ist ein unveränderlicher Abzug eines konkreten Wikis, keine dritte allgemeine Pflegekomponente;
 - **Skill-only bleibt bindend.** Keine Erweiterung führt einen Server, Dienst, Hintergrundprozess oder MCP-Endpunkt ein. Wenn eine Fähigkeit ohne solche Komponente nicht geht, gehört sie nicht in diese Distribution;
 - der OKF-Export bleibt ein eigenständiges Ziel: Wissen muss dieses Werkzeug wieder verlassen können. Neue Wiki-Fähigkeiten sind daraufhin zu prüfen, ob sie sich abbilden lassen — und wenn nicht, gehört das in die Verlustliste des Bündels statt stillschweigend zu verschwinden;
-- Änderungen an gemeinsamen Verträgen wie Frontmatter, Release oder Filtern müssen in beiden Skills kompatibel umgesetzt und gemeinsam getestet werden.
+- Änderungen an gemeinsamen Verträgen wie Frontmatter, Release oder Filtern müssen in beiden Skills kompatibel umgesetzt und gemeinsam getestet werden;
+- die Entscheidungsschicht bleibt eine Option innerhalb dieses Rahmens: Aus, wenn niemand sie bestellt hat; ein einzelner ausgehender Aufruf eines Hilfswerkzeugs, kein Dienst, kein Endpunkt in dieser Distribution. Neue atomare Entscheidungen dürfen nur hinzukommen, wenn sie dasselbe Schicksal haben — Vorschlag, Schwelle, Fallback auf den Agenten.
 
 So bleibt das System einfach verständlich: **ein Skill pflegt und veröffentlicht, ein Skill liest und belegt.**

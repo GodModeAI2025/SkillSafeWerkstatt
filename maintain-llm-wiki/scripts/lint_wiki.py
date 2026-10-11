@@ -556,6 +556,44 @@ def main() -> int:
     registry = load_registry(target / "meta/sources.jsonl", errors)
     cluster_definitions = load_clusters(target / "schema/CLUSTERS.md", errors, warnings)
     concept_definitions = load_concepts(target / "schema/CONCEPTS.md", errors)
+
+    # The decision layer is optional. When the file is present, its contract must
+    # be well formed; a misconfiguration is an error because it would silently
+    # disable the feature half-way. An enabled file without recorded consent is a
+    # warning: no provider call can happen, but the intent is ambiguous.
+    import decision_provider
+
+    decision_layer = decision_provider.load_config(target)
+    if decision_layer["config"].get("exists"):
+        if decision_layer["state"] == "misconfigured":
+            errors.append(f"schema/DECISION_LAYER.md: {decision_layer['reason']}")
+        elif decision_layer["state"] == "consent_required":
+            warnings.append(
+                "schema/DECISION_LAYER.md: enabled is true without recorded consent; the decision "
+                "layer refuses provider calls until consent_by and consent_at are set"
+            )
+        max_notes_per_cluster = int(decision_layer["config"].get("max_notes_per_cluster") or 40)
+    else:
+        max_notes_per_cluster = 40
+
+    # Folders that keep growing push routing and review costs up with their size.
+    # The limit is a scale warning, not a split order: nothing is moved or split
+    # automatically.
+    for cluster_id, definition in sorted(cluster_definitions.items()):
+        if definition.get("status") != "active":
+            continue
+        directory = str(definition.get("directory") or "")
+        if not directory:
+            continue
+        folder = target / directory
+        if not folder.is_dir():
+            continue
+        note_count = sum(1 for path in folder.glob("*.md") if path.name != navigation.INDEX_NAME)
+        if note_count > max_notes_per_cluster:
+            warnings.append(
+                f"cluster {cluster_id} ({directory}) holds {note_count} notes above the limit of "
+                f"{max_notes_per_cluster}; consider proposing a cluster split or folder restructuring"
+            )
     # Classify what the storage layer and the operating system put here before
     # judging any of it as wiki content.
     storage_findings = check_storage_layer(target, errors, warnings)

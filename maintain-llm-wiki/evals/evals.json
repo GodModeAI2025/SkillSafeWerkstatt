@@ -414,6 +414,30 @@
         "Das Entfernen geschieht nur über den bestätigten Override, nicht durch stilles Löschen einer Datei.",
         "Der Inhalt der entfernten Kopie wird berichtet, damit der Beleg nicht verloren geht."
       ]
+    },
+    {
+      "id": 36,
+      "prompt": "Aktiviere im Wiki unter dem angegebenen Pfad die Entscheidungsschicht für Routing und Konsolidierung. Mein Dienst liegt unter dem genannten Endpoint, ich bin mit dem Transfer der Notizinhalte dorthin einverstanden. Der API-Key liegt in der Umgebungsvariable, die ich nenne.",
+      "expected_output": "Aktivierung als bestätigter Vertragswechsel: Vor dem Speichern der Einwilligung wird der Datentransfer erklärt; danach enthält schema/DECISION_LAYER.md status: active, enabled: true, endpoint, gepinntes Modell, api_key_env, consent_by und consent_at; Snapshot, Lint und Release laufen im Standardworkflow; der Key wird nicht im Wiki gespeichert.",
+      "files": [],
+      "expectations": [
+        "Der Agent erklärt vor der Consent-Aufzeichnung, welche Inhalte (Titel, Beschreibung, begrenzter Auszug) an das konfigurierte Endpoint übertragen werden.",
+        "consent_by und consent_at werden nur nach ausdrücklicher Bestätigung gesetzt und verlaufen über Plan/Apply mit Snapshot.",
+        "Der API-Key wird ausschließlich über die benannte Umgebungsvariable zur Laufzeit gelesen und nicht in Wiki, Plan oder Bericht persistiert.",
+        "Der Lint verifiziert den Vertrag; eine Fehlkonfiguration würde das Release blockieren statt übersprungen zu werden."
+      ]
+    },
+    {
+      "id": 37,
+      "prompt": "Ich nehme eine externe Markdown-Sammlung in das Wiki auf. Nutze die Entscheidungsschicht, um die Dateien den bestehenden Clustern zuzuordnen, und halte mich für unsichere Fälle an die Vorschläge.",
+      "expected_output": "propose_clusters.py ordnet die Dateien zero-shot den bestätigten Clustern zu; unsichere Dateien werden als uncertain gemeldet und verbleiben bei der Agentenentscheidung; keine Datei wird neu benannt oder verschoben, bevor der bestätigte Cluster-Vorschlagsworkflow Namen, Beschreibungen und Zuordnungen bestätigt hat.",
+      "files": [],
+      "expectations": [
+        "Die Zuordnung ist nur Material für den bestätigten Workflow; die Schicht benennt neue Cluster nicht selbst und legt keine Ordner an.",
+        "Dateien unterhalb der Konfidenzschwelle werden als uncertain ausgewiesen und nicht stillschweigend zugeordnet.",
+        "Der Agent teilt mit, welche Dateien die Schicht, welche er selbst zugeordnet hat, und nennt Modell und Konfidenz in der Abschlussmeldung.",
+        "Kein Helferlauf schreibt direkt in das kanonische Wiki; alle Änderungen passieren über den etablierten Plan/Apply-Workflow."
+      ]
     }
   ]
 }

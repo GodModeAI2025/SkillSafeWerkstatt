@@ -330,6 +330,16 @@
     .feature:nth-child(6) { --feature-color: var(--coral); }
     .feature h3 { margin-bottom: 11px; font-size: 1.18rem; letter-spacing: -.02em; }
     .feature p { margin: 0; color: var(--muted); }
+    .decision-honesty {
+      max-width: 860px;
+      margin: 26px 0 0;
+      padding: 22px 26px;
+      border: 1px dashed var(--line);
+      border-radius: var(--radius-md);
+      color: var(--muted);
+      font-size: .98rem;
+      line-height: 1.65;
+    }
 
     .identity-panel {
       display: grid;
@@ -434,6 +444,7 @@
         <a href="#skills">Zwei Skills</a>
         <a href="#workflow">Ablauf</a>
         <a href="#features">Prinzipien</a>
+        <a href="#decision">Entscheidungsschicht</a>
         <a href="#export">Export</a>
         <a href="#download">Download</a>
       </div>
@@ -532,9 +543,27 @@
           <article class="feature"><div class="feature-dot"></div><h3>Ablaufdatum pro Seite</h3><p>Eine Seite darf ihr eigenes Enddatum nennen. Ein überschrittenes Datum wird offengelegt, nie zum Filter: Abgelaufenes bleibt auffindbar.</p></article>
           <article class="feature"><div class="feature-dot"></div><h3>Beobachtungen als Quellen</h3><p>Wissen aus einer Besprechung wird zur regulären Quelle — mit benanntem Akteur und Anlass, sonst gar nicht.</p></article>
           <article class="feature"><div class="feature-dot"></div><h3>Übernahme statt Abtippen</h3><p>Ein bestehender Vault wird als Evidenz übernommen, nicht als Wissen: registrierte Quellen, keine Seite ohne Beleg.</p></article>
+          <article class="feature"><div class="feature-dot"></div><h3>Optionale Entscheidungsschicht</h3><p>Kuratorentscheidungen — dazugehörig, ersetzen, verknüpfen, zuordnen — dürfen an einen typisierten Entscheidungsdienst delegiert werden. Standardmäßig aus, erst nach Einwilligung, und jede Antwort ist nur ein Vorschlag.</p></article>
           <article class="feature"><div class="feature-dot"></div><h3>Skill-only</h3><p>Kein Server, kein Dienst, kein Hintergrundprozess. Ein Verzeichnis aus Markdown bleibt lesbar, auch wenn nichts läuft.</p></article>
           <article class="feature"><div class="feature-dot"></div><h3>Ehrliche Aussagen</h3><p>Lokal geschrieben heißt nicht hochgeladen. Der Skill sagt, was er weiß, und benennt, was er nicht wissen kann.</p></article>
         </div>
+      </section>
+
+      <section id="decision" aria-labelledby="decision-title">
+        <div class="section-heading">
+          <p class="eyebrow">Optional · CROW-Muster</p>
+          <h2 id="decision-title">Der Agent schreibt. Die Entscheidungen dürfen delegiert werden.</h2>
+          <p>Das von Cesarini und Sassarini beschriebene Muster trennt beides: ein typisierter Entscheidungsdienst antwortet mit Wahrscheinlichkeiten, das generative Modell kümmert sich ums Schreiben. SkillSafeWerkstatt übernimmt das Vertragswerk — ohne den Dienst dazuzuliefern, und nur wenn du es willst.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature"><div class="feature-dot"></div><h3>Standardmäßig aus</h3><p>Keine stille Abhängigkeit. Solange die Schicht nicht bestellte ist, entscheidet der Agent wie bisher — ohne einen einzigen externen Aufruf und ohne Datenveränderung.</p></article>
+          <article class="feature"><div class="feature-dot"></div><h3>Einwilligung ist Vertrag</h3><p>Jeder Aufruf überträgt Notizinhalte an ein externes Endpoint. Das wird erklärt, bevor du zustimmst; die Zustimmung wird im Wiki gespeichert, und der Linter blockiert ein Release, solange die Datei fehlerhaft ist.</p></article>
+          <article class="feature"><div class="feature-dot"></div><h3>Antworten sind Daten</h3><p>Ein Entscheidungsdienst ist durch seinen Inhalt nicht mehr mächtig als eine Quelle. Die Vertrauensregeln für unzuverlässige Materialien gelten unverändert.</p></article>
+          <article class="feature"><div class="feature-dot"></div><h3>Nur Vorschläge</h3><p>Route, Integration, Verknüpfung, Zuordnung — alles bleibt ein Vorschlag. Jede Änderung läuft über den bestehenden Plan/Apply-Workflow mit Vorschau, Bestätigung und Snapshot.</p></article>
+          <article class="feature"><div class="feature-dot"></div><h3>Unsicherheit wird zum Beam</h3><p>Unterhalb der Schwelle ratet die Schicht nicht: Sie gibt die wahrscheinlichsten Optionen an den Agenten zurück, oder sie gibt beim Lesen die BM25-Auswahl zurück.</p></article>
+          <article class="feature"><div class="feature-dot"></div><h3>Skill-only bleibt</h3><p>Es gibt keinen Server, keine Instanz, keinen Endpunkt in dieser Distribution — nur einen einzigen ausgehenden Aufruf des Hilfs-Tools nach aktiver Zustimmung.</p></article>
+        </div>
+        <p class="decision-honesty">Ehrlich dazu gesagt: Die Schicht reduziert die Kosten der Entscheidung, nicht ihren Fehlerbestand. Ein Dienst, der mit Sicherheit falsch antwortet, wird jede Schwelle stillschweigend passieren — deshalb bleiben Auswege (neuer Ordner, „Keiner davon", Beam) und die Schwellenwerte Teil des Vertrags, an einem Auszug des eigenen Wikis kalibriert und bei jedem Modellwechsel neu gesetzt. Die Referenzpublikation misst an einem Korpus von 525 kurzen persönlichen Dokumenten; ihre Zahlen sind eine Größenordnung, keine Garantie für dein Wiki.</p>
       </section>
 
       <section aria-labelledby="identity-title">

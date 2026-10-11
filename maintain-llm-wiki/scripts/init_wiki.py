@@ -169,6 +169,7 @@ def main() -> int:
 - [[schema/CLUSTERS|Navigation clusters]]
 - [[schema/CONCEPTS|Controlled concept worlds]]
 - [[schema/QUALITY_POLICY|Quality review policy]]
+- [[schema/DECISION_LAYER|Optional decision layer (off by default)]]
 - [Interactive knowledge graph](graph/index.html)
 
 The flat `sources/` directory contains registered faithful Markdown extractions
@@ -379,6 +380,106 @@ The intervals control read-only reminders. A technical lint runs at release,
 but semantic quality and cleaning reviews are recorded only after they were
 actually performed. Reaching an interval suggests the corresponding review; it
 does not authorize automatic cleaning, deletion, rewriting, or source removal.
+""",
+        created,
+    )
+
+    decision_layer_texts = {
+        "de": {
+            "heading": "Optionale Entscheidungsschicht",
+            "body": (
+                "Diese Datei steuert die optionale Entscheidungsschicht für Routing, "
+                "Konsolidierung, Verlinkung, Cluster-Vorschläge und Notizauswahl. Sie ist "
+                "standardmäßig **aus**. Solange `enabled: false` gilt, treffen alle "
+                "Kurations- und Suchentscheidungen der Agent im herkömmlichen Verfahren, "
+                "und es werden keine externen Aufrufe gemacht.\n\n"
+                "Aktivierung ist eine bewusste Entscheidung, keine Verbesserung am Rand: "
+                "Der Klassifikator sendet Fragen und Notizinhalte (Titel, Beschreibung, "
+                "Auszüge) an das konfigurierte externe Endpoint. Deshalb verlangt das "
+                "Helfer-Set außer `enabled: true` und `status: active` eine ausdrückliche "
+                "Einwilligung in `consent_by` und `consent_at` und verweigert den Aufruf "
+                "andernfalls. Schwellenwerte und Modellversion gehören zu diesem Vertrag: "
+                "Sie werden an einem kleinen, gelabelten Auszug aus dem eigenen Wiki "
+                "gekalibriert und bei jedem Modellwechsel erneut gesetzt.\n\n"
+                "Die Entscheidungsschicht ist ein Vorschlagsgeber. Sie erstellt keine "
+                "Ordner, schreibt keine Links und ändert keine Seiten; jede daraus "
+                "folgende Änderung läuft über die üblichen, bestätigten Plan/Apply-Abläufe. "
+                "Unvertrauenswürdige Quellen dürfen ohne Review keine Seitennote "
+                "verändern, auch wenn der Klassifikator es vorschlägt.\n\n"
+                "Konzept und gemessene Effekte: Cesarini und Sassarini, „CROW: "
+                "Classifier-Routed Organization of LLM Wikis“ (2026), "
+                "doi:10.5281/zenodo.23260209. Der hier implementierte Vertrag ist "
+                "herstellerneutral und arbeitet ohne die Entscheidungsschicht vollständig "
+                "weiter."
+            ),
+        },
+        "en": {
+            "heading": "Optional decision layer",
+            "body": (
+                "This file controls the optional decision layer for routing, consolidation, "
+                "linking, cluster proposals, and note selection. It is **off** by default. "
+                "While `enabled: false`, the agent takes every curation and retrieval decision "
+                "in the standard way, and no external call is made.\n\n"
+                "Activating it is a deliberate decision, not a side upgrade: the classifier "
+                "sends questions and note content (titles, descriptions, excerpts) to the "
+                "configured external endpoint. The bundled helpers therefore require, besides "
+                "`enabled: true` and `status: active`, an explicit consent recorded in "
+                "`consent_by` and `consent_at`, and refuse to call the provider otherwise. "
+                "Thresholds and the pinned model version are part of the contract: calibrate "
+                "them on a small labeled sample of this wiki and set them again whenever the "
+                "model changes.\n\n"
+                "The decision layer is a source of proposals. It creates no folders, writes "
+                "no links, and changes no page; every change it implies goes through the "
+                "usual confirmed plan/apply workflows. Untrusted sources may not modify a "
+                "maintained note without review, even when the classifier suggests it.\n\n"
+                "Concept and measured effects: Cesarini and Sassarini, “CROW: Classifier-"
+                "Routed Organization of LLM Wikis” (2026), doi:10.5281/zenodo.23260209. The "
+                "contract implemented here is vendor-neutral, and the wiki works fully "
+                "without the decision layer."
+            ),
+        },
+    }
+    decision_layer = decision_layer_texts.get(
+        primary_language,
+        {
+            "heading": "Optional decision layer",
+            "body": f"The decision layer is off by default. See the English template for {wiki_language_label} details.",
+        },
+    )
+    write_missing(
+        target / "schema/DECISION_LAYER.md",
+        f"""---
+schema_version: 1
+status: "draft"
+enabled: false
+provider: "http"
+endpoint: ""
+model: ""
+api_key_env: ""
+consent_by: ""
+consent_at: ""
+timeout_seconds: 60
+attempts: 3
+state_chars: 6000
+request_chars: 90000
+tau_route: 0.6
+tau_path: 0.5
+tau_ing: 0.5
+tau_cons: 0.6
+tau_link: 0.6
+tau_fold: 0.08
+tau_ret: 0.1
+beam: 2
+k: 8
+max_depth: 4
+max_links: 5
+max_notes_per_cluster: 40
+updated: "{today}"
+---
+
+# {decision_layer['heading']}
+
+{decision_layer['body']}
 """,
         created,
     )

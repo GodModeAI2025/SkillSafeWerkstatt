@@ -125,6 +125,10 @@ CATALOG = {
             confirmation=True,
         ),
         action("report-okf", "report_okf.py", "Report optional OKF required/recommended field compatibility without mutation.", [{"name": "include_sources", "type": "boolean", "required": False}], writes=False),
+        action("route-source", "route_source.py", "Optionally route a candidate note into a cluster folder through the consent-gated decision layer; read-only proposal, no folder is created.", [{"name": "note_file", "type": "runtime path", "required": True}], writes=False),
+        action("plan-consolidation", "plan_consolidation.py", "Optionally decide via the consent-gated decision layer whether an incoming note modifies a page or becomes a new one; read-only proposal.", [{"name": "note_file", "type": "runtime path", "required": True}, {"name": "page", "type": "wiki path", "required": True}], writes=False),
+        action("score-related", "score_related.py", "Optionally score See-also link candidates through the consent-gated decision layer; read-only proposal, links are written only via page batches.", [{"name": "note", "type": "wiki path", "required": True}, {"name": "candidates", "type": "wiki path[]", "required": True}], writes=False),
+        action("propose-clusters", "propose_clusters.py", "Optionally assign an external Markdown collection to confirmed clusters, zero-shot; read-only material for the confirmed cluster-proposal workflow.", [{"name": "directory", "type": "runtime path", "required": True}, {"name": "max_files", "type": "integer", "required": False}], writes=False),
     ],
 }
 
