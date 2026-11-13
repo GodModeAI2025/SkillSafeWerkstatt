@@ -96,6 +96,36 @@ class ImportIntegrity(unittest.TestCase):
                 self.assertEqual(local_imports(path) & forbidden, set())
 
 
+class ExportableLibraries(unittest.TestCase):
+    """Library modules the exporter may copy into a frozen skill stay read-only."""
+
+    EXPORTER = REPO / "maintain-llm-wiki" / "scripts" / "export_wiki_skill.py"
+    WRITE_MARKERS = (
+        "open(", "write_text", "write_bytes", "unlink", "rmtree", "os.replace", "os.rename",
+        ".rename(", "mkdir", "portable_io", "atomic_write", "__main__",
+    )
+
+    def allowlist(self) -> tuple[str, ...]:
+        tree = ast.parse(self.EXPORTER.read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "EXPORTABLE_LIBRARIES" for target in node.targets
+            ):
+                return tuple(ast.literal_eval(node.value))
+        self.fail("export_wiki_skill.py defines no EXPORTABLE_LIBRARIES allowlist")
+
+    def test_every_exportable_library_exists_and_writes_nothing(self) -> None:
+        libraries = self.allowlist()
+        self.assertTrue(libraries)
+        for name in libraries:
+            with self.subTest(library=name):
+                path = REPO / "maintain-llm-wiki" / "scripts" / name
+                self.assertTrue(path.is_file(), name)
+                text = path.read_text(encoding="utf-8")
+                found = [marker for marker in self.WRITE_MARKERS if marker in text]
+                self.assertEqual(found, [], f"{name} may be copied into exported skills and must stay read-only")
+
+
 class SharedModuleParity(unittest.TestCase):
     """Modules both skills carry must be byte-identical, or they will diverge."""
 

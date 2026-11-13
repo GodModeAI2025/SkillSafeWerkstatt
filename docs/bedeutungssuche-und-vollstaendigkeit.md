@@ -141,13 +141,15 @@ Endnutzer bemerkte den Fehler erst bei seiner ersten Frage. Für die Ausgangsfra
 erzeugte Skill hat bisher *alles* übersehen.
 
 **Empfehlung, umgesetzt.** Der Exporter ermittelt die benötigten Bibliotheken jetzt selbst, als
-transitive Hülle der Importe seiner Vorlagen. Ein Modul mit eigenem `__main__`-Einstieg
-verweigert er, denn Pflegewerkzeuge dürfen nie in einen Export. Vor dem Paketbau führt er jedes
-mitgelieferte Werkzeug einmal im erzeugten Ordner aus, auch die Suche. Das geschieht in einer
-Umgebung ohne `PYTHONPATH`, ohne Benutzer-Site-Pakete und ohne Bytecode-Schreiben. Scheitert
-das, entfernt er den Ordner und baut kein Paket. Interpreter-Caches kommen nie ins Paket. Neue
-Tests in `tests/test_export.py` prüfen das, und `tests/test_packaging.py` prüft jetzt auch die
-Vorlagen (Abschnitt „Umsetzungsstand").
+transitive Hülle der Importe seiner Vorlagen. Mitkommen darf nur, was auf seiner Liste geprüfter
+lesender Bibliotheken steht. Jedes andere Modul lehnt er mit Namen ab, denn Pflegewerkzeuge und
+schreibende Bibliotheken dürfen nie in einen Export. Ein neuer Import wird so laut abgelehnt
+statt still vergessen. Vor dem Paketbau führt er jedes mitgelieferte Werkzeug einmal im
+erzeugten Ordner aus, auch die Suche. Dabei steht nur die Standardbibliothek zur Verfügung: ohne
+`PYTHONPATH`, ohne Site-Pakete, ohne Bytecode-Schreiben. Scheitert das, entfernt er den Ordner
+und baut kein Paket. Interpreter-Caches neben den Werkzeugen kommen nie ins Paket. Neue Tests in
+`tests/test_export.py` prüfen das, und `tests/test_packaging.py` prüft jetzt auch die Vorlagen
+(Abschnitt „Umsetzungsstand").
 
 ### Befund 1 — Verluste sind stumm
 
@@ -517,18 +519,29 @@ hinter dem Präzisionstor freischalten.
 Stufe 0 ist in diesem Branch umgesetzt:
 
 - `maintain-llm-wiki/scripts/export_wiki_skill.py`: `library_closure()` ermittelt die
-  Bibliotheken aus den Importen der Vorlagen und verweigert Module mit `__main__`-Einstieg.
-  `run_self_check()` führt Verifikation, Identitätsstatus, Qualitätsbewertung und Suche im
-  erzeugten Ordner aus, ohne `PYTHONPATH` und Benutzer-Site, mit `-B`. Bei Fehlschlag wird der
-  Ordner entfernt. `packaged_files()` hält `__pycache__` und `.pyc` aus dem Paket.
-- `tests/test_export.py` (neu, 8 Tests): Export gelingt; jedes Werkzeug läuft im installierten
-  Ordner allein; die Importhülle enthält `trust_contract.py` und kein Pflegewerkzeug; kein Cache
-  in Ordner und Paket; zwei Exporte eines Release sind byte-identisch; ein unerfüllbarer Import
-  lässt den Export scheitern; eine neue Bibliothek wird ohne Änderung am Exporter mitkopiert;
-  ein Pflegewerkzeug als Import wird verweigert. Gegen den alten Exporter schlagen 5 der 8 Tests
-  fehl, auch der Kerntest.
+  Bibliotheken aus den Importen der Vorlagen und lässt nur Module der Positivliste
+  `EXPORTABLE_LIBRARIES` zu (heute `frontmatter_contract.py`, `trust_contract.py`,
+  `wiki_filters.py`). `run_self_check()` führt Verifikation, Identitätsstatus,
+  Qualitätsbewertung und Suche im erzeugten Ordner aus, mit `-B -S -s` und ohne `PYTHONPATH`.
+  Bei Fehlschlag wird der Ordner entfernt. `packaged_files()` hält Caches unter `scripts/` aus
+  dem Paket, lässt aber jede Datei unter `references/knowledge/` darin, weil das Manifest sie
+  bindet.
+- `tests/test_export.py` (neu, 13 Tests): Export gelingt; jedes Werkzeug läuft im installierten
+  Ordner allein und aus dem entpackten `.skill`-Paket; eine veröffentlichte Datei namens
+  `graph/legacy.pyc` kommt mit ins Paket; nur geprüfte Bibliotheken, darunter
+  `trust_contract.py`, und kein Pflegewerkzeug; kein Cache neben den Werkzeugen; zwei Exporte
+  eines Release sind byte-identisch; der Paketfilter wirkt nur unter `scripts/`. Abgelehnt
+  werden: ein unerfüllbarer Import, auch wenn `PYTHONPATH` oder eine `.pth`-Datei in den
+  Site-Paketen ihn bereitstellen würde; eine ungeprüfte neue Bibliothek; `release_wiki`,
+  `navigation` und `portable_io` als Importe. Nach einer Ablehnung bleibt kein Ordner zurück.
 - `tests/test_packaging.py`: Die Vorlagen unter `assets/knowledge-skill` werden auf auflösbare
-  Importe geprüft. Alle Helfer und Vorlagen müssen mit der Grammatik von Python 3.9 parsen.
+  Importe geprüft. Jede Bibliothek der Positivliste muss frei von Schreibaufrufen bleiben. Alle
+  Helfer und Vorlagen müssen mit der Grammatik von Python 3.9 parsen.
+- Gegenproben: Gegen den Exporter vor diesem Branch schlug der Kerntest fehl. Eine unabhängige
+  Prüfung meiner ersten Korrektur fand vier weitere Fehler: Bytecode-benannte Release-Dateien
+  fehlten im Paket; schreibende Bibliotheken ohne Einstieg wären mitgekommen; ein umgedrehter
+  `__main__`-Vergleich blieb unerkannt; über `.pth`-Dateien bestand der Selbsttest fälschlich.
+  Die Tests oben schlagen gegen diese erste Korrektur 11-mal an.
 - `maintain-llm-wiki/SKILL.md`, `references/wiki-contract.md` und README Abschnitt 4.16
   beschreiben Importhülle und Selbsttest. Beide Pakete sind neu gebaut.
 

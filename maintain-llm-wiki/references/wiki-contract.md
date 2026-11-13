@@ -180,7 +180,7 @@ The package layout is:
     `-- wiki_filters.py         # internal read-only library
 ```
 
-The library modules are not a fixed list: the exporter copies the transitive closure of the templates' imports from the maintenance skill's scripts, refuses a module that has its own `__main__` entrypoint, and runs every bundled helper once inside the generated folder, in an interpreter environment without `PYTHONPATH`, user site packages, or bytecode writing, before it builds the package. A failure removes the folder.
+The library modules are computed, not copied from a list: the exporter takes the transitive closure of the templates' imports from the maintenance skill's scripts. Every module in that closure must be on the exporter's reviewed read-only allowlist (`EXPORTABLE_LIBRARIES`); anything else, including maintenance helpers and writer libraries such as `portable_io.py` or `navigation.py`, is refused by name before any output is written. Before it builds the package, the exporter runs every bundled helper once inside the generated folder with `-B -S -s` and without `PYTHONPATH`, so only the standard library and the skill's own scripts can satisfy an import. A failure removes the folder. Interpreter caches beside the helpers are never packaged; every file under `references/knowledge/` is, whatever its name, because the release manifest binds it.
 
 `references/knowledge/` contains every file named by the original `lmwiki-release/1` manifest plus that manifest itself. `references/SNAPSHOT.json` records format `lmwiki-skill-snapshot/1`, skill identity, wiki title, version, release ID, release time, original manifest SHA-256, released file count, `read_only: true`, and `self_maintenance: false`. It contains no machine-specific source location.
 

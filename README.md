@@ -407,7 +407,7 @@ Der Pflege-Skill kann einen verifizierten Release als eigenständigen Wissens-Sk
 - enthält genau einen veröffentlichten Wiki-Stand;
 - ist unveränderlich und nicht selbstpflegend;
 - besitzt keinen Ingest-, Pflege-, Release-, Lock- oder Restore-Code;
-- enthält nur Verifikation, Suche und Qualitätsbewertung sowie benötigte read-only Bibliotheken; welche Bibliotheken das sind, ermittelt der Exporter aus den Importen selbst, statt einer handgepflegten Liste zu folgen, und er verweigert jedes Pflegewerkzeug darunter;
+- enthält nur Verifikation, Suche und Qualitätsbewertung sowie benötigte read-only Bibliotheken; welche das sind, ermittelt der Exporter aus den Importen selbst; mitkommen darf nur, was auf seiner Liste geprüfter lesender Bibliotheken steht, sodass weder ein Pflegewerkzeug noch eine schreibende Bibliothek in einen Export gelangt, und ein neuer Import ohne Prüfung wird mit Namen abgelehnt statt stillschweigend vergessen;
 - wird erst gemeldet, wenn jedes mitgelieferte Werkzeug im erzeugten Ordner einmal fehlerfrei gelaufen ist, auch die Suche; scheitert das, wird der Ordner wieder entfernt und kein Paket erzeugt;
 - bindet alle Inhalte über das ursprüngliche Release-Manifest;
 - enthält keine absoluten Quellpfade, Tokens oder transienten Locks;

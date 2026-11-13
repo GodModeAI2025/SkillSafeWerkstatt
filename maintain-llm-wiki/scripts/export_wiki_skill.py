@@ -28,10 +28,16 @@ DEFAULT_DESCRIPTION = (
     "answer with claim-level source citations. Never maintain or modify it."
 )
 RESERVED_SKILL_WORDS = {"anthropic", "claude"}
-# The exported skill's executable helpers. Every bundled library module they
-# import, directly or transitively, is computed from the source and copied, so
-# a new import can never again leave the exported search unable to start.
+# The exported skill's executable helpers. The bundled library modules they
+# import, directly or transitively, are computed from the source, so a new
+# import can never again leave the exported search unable to start unnoticed.
 TEMPLATE_ENTRYPOINTS = ("verify_knowledge.py", "search_knowledge.py", "assess_quality.py", "identity_status.py")
+# Library modules reviewed as read-only: no writes, no entrypoint. Only these
+# may enter an export. A template that comes to import any other module of the
+# maintenance skill is refused by name until that module has been reviewed and
+# listed here; this is an allowlist on purpose, because writer libraries such as
+# portable_io.py or navigation.py have no entrypoint a heuristic could detect.
+EXPORTABLE_LIBRARIES = ("frontmatter_contract.py", "trust_contract.py", "wiki_filters.py")
 # The self-check runs every entrypoint once inside the generated skill.
 SELF_CHECK_CALLS = (
     ("verify_knowledge.py",),
@@ -161,23 +167,18 @@ def bare_imports(path: Path) -> set[str]:
     return found
 
 
-def is_executable_helper(path: Path) -> bool:
-    """True for a module with a `__main__` entrypoint, i.e. a helper rather than a library."""
-    tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Compare) and isinstance(node.left, ast.Name) and node.left.id == "__name__":
-            if any(isinstance(item, ast.Constant) and item.value == "__main__" for item in node.comparators):
-                return True
-    return False
-
-
-def library_closure(template_root: Path, library_root: Path, entrypoints: tuple[str, ...]) -> list[Path]:
+def library_closure(
+    template_root: Path,
+    library_root: Path,
+    entrypoints: tuple[str, ...],
+    allowed: tuple[str, ...] = EXPORTABLE_LIBRARIES,
+) -> list[Path]:
     """Every bundled library module the template entrypoints import, transitively.
 
     A name that resolves neither to a template nor to a module in `library_root`
-    is left to the standard library; the self-check proves it imports. A library
-    module that is itself an executable helper is refused: the exported skill
-    ships only its own read-only entrypoints plus non-executable libraries.
+    is left to the standard library; the self-check proves it imports. A module
+    of `library_root` that is not on the reviewed allowlist is refused, so the
+    exported skill can never ship a maintenance helper or writer library.
     """
     templates = {name[:-3] for name in entrypoints}
     pending: list[Path] = []
@@ -195,10 +196,12 @@ def library_closure(template_root: Path, library_root: Path, entrypoints: tuple[
             candidate = library_root / f"{name}.py"
             if not candidate.is_file():
                 continue
-            if is_executable_helper(candidate):
+            if candidate.name not in allowed:
                 fail(
-                    f"Knowledge-skill templates import {candidate.name}, which is an executable helper "
-                    "and must never be copied into an exported skill"
+                    f"Knowledge-skill templates import {candidate.name}, which is not a reviewed read-only "
+                    "library for exported skills. Maintenance helpers and writer libraries must never be "
+                    "copied into an export; a new read-only library must be reviewed and added to "
+                    "EXPORTABLE_LIBRARIES first"
                 )
             needed[name] = candidate
             pending.append(candidate)
@@ -206,7 +209,12 @@ def library_closure(template_root: Path, library_root: Path, entrypoints: tuple[
 
 
 def self_check_environment() -> dict[str, str]:
-    """A clean interpreter environment: nothing outside the skill can satisfy an import."""
+    """An interpreter environment without PYTHONPATH, user site, or bytecode writing.
+
+    Together with `-S` (no site-packages, no .pth files) only the standard
+    library and the skill's own scripts directory can satisfy an import.
+    UTF-8 output is forced: the check is about bundling, not host encodings.
+    """
     environment = {key: value for key, value in os.environ.items() if not key.upper().startswith("PYTHON")}
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONIOENCODING"] = "utf-8"
@@ -224,7 +232,7 @@ def run_self_check(skill_dir: Path) -> None:
     for call in SELF_CHECK_CALLS:
         script, *arguments = call
         result = subprocess.run(
-            [sys.executable, "-B", "-s", str(skill_dir / "scripts" / script), *arguments],
+            [sys.executable, "-B", "-S", "-s", str(skill_dir / "scripts" / script), *arguments],
             capture_output=True,
             cwd=str(skill_dir),
             env=environment,
@@ -245,15 +253,25 @@ def run_self_check(skill_dir: Path) -> None:
             fail(f"Generated knowledge skill failed its self-check: scripts/{script} {failure}")
 
 
+def is_script_cache(relative: PurePosixPath) -> bool:
+    """An interpreter cache next to the bundled helpers.
+
+    Only `scripts/` is filtered: every file under `references/knowledge/` is
+    bound by the release manifest, whatever its name, and must be packaged.
+    """
+    parts = relative.parts
+    return bool(parts) and parts[0] == "scripts" and (
+        "__pycache__" in parts or relative.suffix in {".pyc", ".pyo"}
+    )
+
+
 def packaged_files(skill_dir: Path) -> list[Path]:
-    """Files that belong in the package; interpreter caches never do."""
+    """Files that belong in the package; caches beside the helpers never do."""
     return sorted(
         (
             item
             for item in skill_dir.rglob("*")
-            if item.is_file()
-            and "__pycache__" not in item.relative_to(skill_dir).parts
-            and item.suffix not in {".pyc", ".pyo"}
+            if item.is_file() and not is_script_cache(PurePosixPath(item.relative_to(skill_dir).as_posix()))
         ),
         key=lambda item: item.relative_to(skill_dir).as_posix(),
     )
@@ -394,6 +412,12 @@ def main() -> int:
         # Never leave a skill folder that cannot answer: hosts install unpacked
         # folders too. This run created it after checking it did not exist.
         shutil.rmtree(skill_dir, ignore_errors=True)
+        if skill_dir.exists():
+            print(
+                f"The incomplete skill folder {skill_dir.name} could not be removed completely; "
+                "delete it before exporting again and do not install it.",
+                file=sys.stderr,
+            )
         raise
 
     deterministic_skill_package(skill_dir, package_path, str(initial.get("released_at") or ""))
