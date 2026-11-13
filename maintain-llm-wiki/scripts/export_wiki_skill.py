@@ -38,12 +38,25 @@ TEMPLATE_ENTRYPOINTS = ("verify_knowledge.py", "search_knowledge.py", "assess_qu
 # listed here; this is an allowlist on purpose, because writer libraries such as
 # portable_io.py or navigation.py have no entrypoint a heuristic could detect.
 EXPORTABLE_LIBRARIES = ("frontmatter_contract.py", "trust_contract.py", "wiki_filters.py")
+# Standard-library modules exported code may import. Reviewed for presence on
+# Python 3.9+ on Windows, macOS and Linux and for offering no file writing,
+# process control, or network access of their own. Any other import in a
+# template or allowlisted library is refused by name until reviewed here.
+EXPORTED_STDLIB = frozenset({
+    "__future__", "argparse", "dataclasses", "datetime", "hashlib", "json",
+    "math", "pathlib", "re", "typing", "unicodedata",
+})
 # The self-check runs every entrypoint once inside the generated skill.
 SELF_CHECK_CALLS = (
     ("verify_knowledge.py",),
     ("identity_status.py",),
     ("assess_quality.py",),
     ("search_knowledge.py", "--query", "wiki", "--include-sources"),
+    # The selector and trust-tier path, which SKILL.md tells agents to use.
+    (
+        "search_knowledge.py", "--query", "wiki", "--filter-json",
+        '{"kind":"filter","conditions":[{"property":"__trust_tier","operator":"equals","value":"unverified"}]}',
+    ),
 )
 
 
@@ -156,14 +169,23 @@ def validate_skill_text(skill_dir: Path, name: str, description: str, source_tar
 
 
 def bare_imports(path: Path) -> set[str]:
-    """Top-level module names a helper imports without a package prefix."""
+    """Top-level module names a helper imports, wherever the import statement sits.
+
+    Relative and dynamic imports are refused: the closure could not see what
+    they load, so an export could pass its self-check and still fail later.
+    """
     tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
     found: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             found.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            found.add(node.module.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                fail(f"Knowledge-skill helper {path.name} uses a relative import, which exported skills do not support")
+            if node.module:
+                found.add(node.module.split(".")[0])
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "__import__":
+            fail(f"Knowledge-skill helper {path.name} imports dynamically, which the exporter cannot check")
     return found
 
 
@@ -172,13 +194,14 @@ def library_closure(
     library_root: Path,
     entrypoints: tuple[str, ...],
     allowed: tuple[str, ...] = EXPORTABLE_LIBRARIES,
+    stdlib: frozenset = EXPORTED_STDLIB,
 ) -> list[Path]:
     """Every bundled library module the template entrypoints import, transitively.
 
-    A name that resolves neither to a template nor to a module in `library_root`
-    is left to the standard library; the self-check proves it imports. A module
-    of `library_root` that is not on the reviewed allowlist is refused, so the
-    exported skill can never ship a maintenance helper or writer library.
+    Each imported name must be another entrypoint, a module of `library_root`
+    on the reviewed allowlist, or a reviewed standard-library module. Anything
+    else is refused by name before output is written, so an export can neither
+    ship a maintenance helper or writer library nor silently miss a module.
     """
     templates = {name[:-3] for name in entrypoints}
     pending: list[Path] = []
@@ -193,8 +216,19 @@ def library_closure(
         for name in sorted(bare_imports(current)):
             if name in templates or name in needed:
                 continue
+            if (template_root / f"{name}.py").is_file():
+                fail(
+                    f"{current.name} imports {name}.py from the knowledge-skill templates, which is not an "
+                    "exported entrypoint; add it to TEMPLATE_ENTRYPOINTS or move the code"
+                )
             candidate = library_root / f"{name}.py"
             if not candidate.is_file():
+                if name not in stdlib:
+                    fail(
+                        f"{current.name} imports {name}, which is not on the exporter's reviewed list of "
+                        "standard-library modules for exported skills (EXPORTED_STDLIB); review it for "
+                        "Python 3.9+ on every platform and for write access before adding it"
+                    )
                 continue
             if candidate.name not in allowed:
                 fail(
@@ -211,11 +245,16 @@ def library_closure(
 def self_check_environment() -> dict[str, str]:
     """An interpreter environment without PYTHONPATH, user site, or bytecode writing.
 
-    Together with `-S` (no site-packages, no .pth files) only the standard
-    library and the skill's own scripts directory can satisfy an import.
-    UTF-8 output is forced: the check is about bundling, not host encodings.
+    Together with `-S` (no site-packages, no .pth files), neither PYTHONPATH nor
+    installed packages can satisfy an import. PYTHONHOME and PYTHONPLATLIBDIR
+    are kept: some relocated interpreters find their standard library only
+    through them. UTF-8 output is forced: the check is about bundling, not
+    host encodings.
     """
     environment = {key: value for key, value in os.environ.items() if not key.upper().startswith("PYTHON")}
+    for key in ("PYTHONHOME", "PYTHONPLATLIBDIR"):
+        if key in os.environ:
+            environment[key] = os.environ[key]
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONIOENCODING"] = "utf-8"
     environment["PYTHONNOUSERSITE"] = "1"
@@ -223,10 +262,11 @@ def self_check_environment() -> dict[str, str]:
 
 
 def run_self_check(skill_dir: Path) -> None:
-    """Run every bundled entrypoint once inside the generated skill.
+    """Run every bundled entrypoint inside the generated skill, on this interpreter.
 
     Verification alone does not import the search, so a missing library module
-    would otherwise surface only when an end user asks the first question.
+    would otherwise surface only when an end user asks the first question. The
+    check covers the paths in SELF_CHECK_CALLS on the exporting Python only.
     """
     environment = self_check_environment()
     for call in SELF_CHECK_CALLS:
@@ -350,7 +390,57 @@ def main() -> int:
     template_root = Path(__file__).resolve().parent.parent / "assets" / "knowledge-skill"
     libraries = library_closure(template_root, Path(__file__).resolve().parent, TEMPLATE_ENTRYPOINTS)
 
+    # Creating the skill folder without exist_ok claims this export name; a
+    # concurrent export of the same name fails here, before cleanup applies.
     output_dir.mkdir(parents=True, exist_ok=True)
+    skill_dir.mkdir()
+    # Every output path was checked above not to exist, so whatever exists of
+    # them after a failure was written by this run and is removed again: hosts
+    # install unpacked folders too, and a half-written or unchecked skill must
+    # never look installable. This covers refusals, errors, and interrupts.
+    completed = False
+    try:
+        result = write_export(
+            target, skill_dir, package_path, checksum_path, name, description,
+            initial, entries, manifest_path, template_root, libraries,
+        )
+        completed = result == 0
+        return result
+    finally:
+        if not completed:
+            remove_incomplete_export(skill_dir, package_path, checksum_path)
+
+
+def remove_incomplete_export(skill_dir: Path, package_path: Path, checksum_path: Path) -> None:
+    shutil.rmtree(skill_dir, ignore_errors=True)
+    for path in (package_path, checksum_path):
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    leftovers = [path.name for path in (skill_dir, package_path, checksum_path) if path.exists()]
+    if leftovers:
+        print(
+            "Incomplete export output could not be removed: " + ", ".join(leftovers)
+            + ". Delete it before exporting again and do not install it.",
+            file=sys.stderr,
+        )
+
+
+def write_export(
+    target: Path,
+    skill_dir: Path,
+    package_path: Path,
+    checksum_path: Path,
+    name: str,
+    description: str,
+    initial: dict[str, Any],
+    entries: list[Any],
+    manifest_path: Path,
+    template_root: Path,
+    libraries: list[Path],
+) -> int:
+    """Write the skill folder and package; the caller removes them on any failure."""
     knowledge_dir = skill_dir / "references" / "knowledge"
     scripts_dir = skill_dir / "scripts"
     knowledge_dir.mkdir(parents=True)
@@ -406,19 +496,7 @@ def main() -> int:
         print(json.dumps({"state": "export_refused", "release": final}, ensure_ascii=False, indent=2))
         return {"wiki_busy": 2, "snapshot_changed": 3}.get(str(final.get("state")), 4)
     validate_skill_text(skill_dir, name, description, target)
-    try:
-        run_self_check(skill_dir)
-    except SystemExit:
-        # Never leave a skill folder that cannot answer: hosts install unpacked
-        # folders too. This run created it after checking it did not exist.
-        shutil.rmtree(skill_dir, ignore_errors=True)
-        if skill_dir.exists():
-            print(
-                f"The incomplete skill folder {skill_dir.name} could not be removed completely; "
-                "delete it before exporting again and do not install it.",
-                file=sys.stderr,
-            )
-        raise
+    run_self_check(skill_dir)
 
     deterministic_skill_package(skill_dir, package_path, str(initial.get("released_at") or ""))
     package_sha256 = sha256_file(package_path)

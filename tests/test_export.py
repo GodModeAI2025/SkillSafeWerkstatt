@@ -18,6 +18,7 @@ import unittest
 import zipfile
 from pathlib import Path
 from typing import Optional
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "maintain-llm-wiki" / "scripts"))
@@ -33,17 +34,16 @@ ENTRYPOINT_CALLS = {
     "assess_quality.py": (),
     "search_knowledge.py": ("--query", "Testwiki"),
 }
-WRITERS = {
-    "release_wiki.py", "page_batch.py", "snapshot_wiki.py", "restore_wiki.py",
-    "frontmatter_actions.py", "verify_pages.py", "resolve_conflict_copy.py",
-    "register_source.py", "init_wiki.py", "build_graph.py", "portable_io.py",
-    "navigation.py", "export_wiki_skill.py", "wiki_lock.py", "run_locked.py",
-}
+# Every maintenance-skill module that is not a reviewed exportable library.
+WRITERS = {path.name for path in MAINTAIN.glob("*.py")} - set(export_wiki_skill.EXPORTABLE_LIBRARIES)
 
 
 def clean_environment() -> dict[str, str]:
     """No PYTHONPATH or user site: the export has to be self-contained."""
     environment = {key: value for key, value in os.environ.items() if not key.upper().startswith("PYTHON")}
+    for key in ("PYTHONHOME", "PYTHONPLATLIBDIR"):
+        if key in os.environ:
+            environment[key] = os.environ[key]
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONIOENCODING"] = "utf-8"
     environment["PYTHONNOUSERSITE"] = "1"
@@ -142,6 +142,16 @@ class ExportedSkillRuns(unittest.TestCase):
         helpers = [name for name in names if name.startswith("testwissen/scripts/")]
         self.assertEqual([name for name in helpers if "__pycache__" in name or name.endswith(".pyc")], [])
 
+    def test_package_entries_carry_the_release_time_and_fixed_modes(self) -> None:
+        # The harness release is seconds old, so this cannot tell the release
+        # time from the clock; PackagingFiltersOnlyHelperCaches pins that.
+        snapshot = json.loads((self.skill / "references" / "SNAPSHOT.json").read_text(encoding="utf-8"))
+        expected = export_wiki_skill.zip_datetime(snapshot["released_at"])
+        for info in zipfile.ZipFile(self.package).infolist():
+            with self.subTest(entry=info.filename):
+                self.assertEqual(info.date_time, expected)
+                self.assertEqual(info.external_attr, 0o100644 << 16)
+
     def test_two_exports_of_one_release_are_byte_identical(self) -> None:
         second = export(EXPORTER, self.wiki.path, self.tmp / "out-again")
         self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
@@ -169,8 +179,12 @@ class PackagingFiltersOnlyHelperCaches(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(text, encoding="utf-8")
             package = root / "demo.skill"
-            export_wiki_skill.deterministic_skill_package(skill, package, "2026-01-01T00:00:00Z")
-            names = set(zipfile.ZipFile(package).namelist())
+            # A release time far from now: a package stamped with the clock
+            # instead of the release would show a different date here.
+            export_wiki_skill.deterministic_skill_package(skill, package, "2001-02-03T04:05:06Z")
+            infos = zipfile.ZipFile(package).infolist()
+            self.assertEqual({info.date_time for info in infos}, {(2001, 2, 3, 4, 5, 6)})
+            names = {info.filename for info in infos}
             self.assertEqual(
                 names,
                 {
@@ -202,28 +216,95 @@ class ExportRefusesABrokenSkill(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self._dir, ignore_errors=True)
 
-    def add_template_import(self, line: str) -> None:
+    def add_template_line(self, line: str, anchor: str = "from wiki_filters import matches_selector, validate_selector\n") -> None:
         text = self.template.read_text(encoding="utf-8")
-        anchor = "from wiki_filters import matches_selector, validate_selector\n"
         self.assertIn(anchor, text)
-        self.template.write_text(text.replace(anchor, anchor + line + "\n"), encoding="utf-8")
+        self.template.write_text(text.replace(anchor, anchor + line + "\n", 1), encoding="utf-8")
+
+    def treat_as_standard_library(self, module: str) -> None:
+        """Simulate a reviewer wrongly listing a module as standard library."""
+        text = self.exporter.read_text(encoding="utf-8")
+        anchor = '"math", "pathlib", "re", "typing", "unicodedata",'
+        self.assertIn(anchor, text)
+        self.exporter.write_text(text.replace(anchor, anchor + f' "{module}",'), encoding="utf-8")
 
     def outside_module(self) -> Path:
-        """A directory outside the skill that holds the module a template imports."""
+        """A directory outside the skill that holds a module a template imports."""
         outside = self.tmp / "outside"
         outside.mkdir()
         (outside / "lmwiki_outside.py").write_text("VALUE = 1\n", encoding="utf-8")
-        self.add_template_import("import lmwiki_outside")
+        self.treat_as_standard_library("lmwiki_outside")
+        self.add_template_line("import lmwiki_outside")
         return outside
 
     def assert_refused(self, result: subprocess.CompletedProcess, message: str) -> None:
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn(message, result.stderr)
         self.assertFalse((self.tmp / "out" / "testwissen.skill").exists())
+        self.assertFalse((self.tmp / "out" / "testwissen.skill.sha256").exists())
         self.assertFalse((self.tmp / "out" / "testwissen").exists(), "a broken skill folder was left behind")
 
-    def test_an_import_nothing_can_satisfy_fails_the_self_check(self) -> None:
-        self.add_template_import("import lmwiki_module_that_does_not_exist")
+    # -- refused before anything is written ---------------------------------
+
+    def test_an_unknown_module_is_refused_by_name(self) -> None:
+        self.add_template_line("import lmwiki_module_that_does_not_exist")
+        result = export(self.exporter, self.wiki.path, self.tmp / "out")
+        self.assert_refused(result, "imports lmwiki_module_that_does_not_exist, which is not on the exporter's reviewed list")
+
+    def test_an_unreviewed_standard_library_module_is_refused(self) -> None:
+        # tomllib is missing before Python 3.11; os and shutil can write files.
+        original = self.template.read_text(encoding="utf-8")
+        for module in ("tomllib", "os", "shutil", "importlib"):
+            with self.subTest(module=module):
+                self.template.write_text(original, encoding="utf-8")
+                self.add_template_line(f"import {module}")
+                result = export(self.exporter, self.wiki.path, self.tmp / "out")
+                self.assert_refused(result, f"imports {module}, which is not on the exporter's reviewed list")
+
+    def test_relative_and_dynamic_imports_are_refused(self) -> None:
+        original = self.template.read_text(encoding="utf-8")
+        cases = {
+            "from . import trust_contract": "relative import",
+            '_tiers = __import__("trust_contract")': "imports dynamically",
+        }
+        for line, message in cases.items():
+            with self.subTest(line=line):
+                self.template.write_text(original, encoding="utf-8")
+                self.add_template_line(line)
+                result = export(self.exporter, self.wiki.path, self.tmp / "out")
+                self.assert_refused(result, message)
+
+    def test_a_template_module_that_is_not_an_entrypoint_is_refused(self) -> None:
+        (self.template.parent / "knowledge_common.py").write_text("VALUE = 1\n", encoding="utf-8")
+        self.add_template_line("import knowledge_common")
+        result = export(self.exporter, self.wiki.path, self.tmp / "out")
+        self.assert_refused(result, "knowledge_common.py from the knowledge-skill templates, which is not an exported entrypoint")
+
+    def test_an_unreviewed_library_is_refused_by_name(self) -> None:
+        (self.skill_copy / "scripts" / "lmwiki_new_library.py").write_text(
+            '"""A library module nobody has reviewed for exports."""\nVALUE = 1\n',
+            encoding="utf-8",
+        )
+        self.add_template_line("import lmwiki_new_library")
+        result = export(self.exporter, self.wiki.path, self.tmp / "out")
+        self.assert_refused(result, "lmwiki_new_library.py, which is not a reviewed read-only library")
+
+    def test_maintenance_helpers_and_writer_libraries_are_refused(self) -> None:
+        # release_wiki has an entrypoint; navigation and portable_io write files
+        # but have none, which is why the exporter uses an allowlist.
+        original = self.template.read_text(encoding="utf-8")
+        for module in ("release_wiki", "navigation", "portable_io"):
+            with self.subTest(module=module):
+                self.template.write_text(original, encoding="utf-8")
+                self.add_template_line(f"import {module}")
+                result = export(self.exporter, self.wiki.path, self.tmp / "out")
+                self.assert_refused(result, f"{module}.py, which is not a reviewed read-only library")
+
+    # -- caught by the self-check, the second line of defence ---------------
+
+    def test_a_listed_module_that_is_missing_fails_the_self_check(self) -> None:
+        self.treat_as_standard_library("lmwiki_module_that_does_not_exist")
+        self.add_template_line("import lmwiki_module_that_does_not_exist")
         result = export(self.exporter, self.wiki.path, self.tmp / "out")
         self.assert_refused(result, "self-check")
         self.assertIn("search_knowledge.py", result.stderr)
@@ -258,25 +339,37 @@ class ExportRefusesABrokenSkill(unittest.TestCase):
         result = export(self.exporter, self.wiki.path, self.tmp / "out", python=str(python))
         self.assert_refused(result, "self-check")
 
-    def test_an_unreviewed_library_is_refused_by_name(self) -> None:
-        (self.skill_copy / "scripts" / "lmwiki_new_library.py").write_text(
-            '"""A library module nobody has reviewed for exports."""\nVALUE = 1\n',
-            encoding="utf-8",
+    def test_the_self_check_covers_the_metadata_filter_path(self) -> None:
+        """SKILL.md tells agents to pass --filter-json; that path must run too."""
+        self.add_template_line(
+            '    if selector.get("kind") != "all":\n        raise RuntimeError("filter path is broken")',
+            anchor="    release = verify()\n",
         )
-        self.add_template_import("import lmwiki_new_library")
         result = export(self.exporter, self.wiki.path, self.tmp / "out")
-        self.assert_refused(result, "lmwiki_new_library.py, which is not a reviewed read-only library")
+        self.assert_refused(result, "self-check")
 
-    def test_maintenance_helpers_and_writer_libraries_are_refused(self) -> None:
-        # release_wiki has an entrypoint; navigation and portable_io write files
-        # but have none, which is why the exporter uses an allowlist.
-        original = self.template.read_text(encoding="utf-8")
-        for module in ("release_wiki", "navigation", "portable_io"):
-            with self.subTest(module=module):
-                self.template.write_text(original, encoding="utf-8")
-                self.add_template_import(f"import {module}")
-                result = export(self.exporter, self.wiki.path, self.tmp / "out")
-                self.assert_refused(result, f"{module}.py, which is not a reviewed read-only library")
+    # -- every other failure after writing began also leaves nothing --------
+
+    def test_a_refused_export_leaves_no_output_behind(self) -> None:
+        # A released file that contains the absolute wiki path is refused by
+        # the leak check after the folder was written; nothing may remain.
+        self.wiki.write("graph/notes.txt", f"{self.wiki.path}\n")
+        self.wiki.release("export-leak-1")
+        result = export(self.exporter, self.wiki.path, self.tmp / "out")
+        self.assert_refused(result, "leaks the absolute source path")
+        again = export(self.exporter, self.wiki.path, self.tmp / "out")
+        self.assertNotIn("Refusing to overwrite", again.stderr)
+
+
+class SelfCheckEnvironment(unittest.TestCase):
+    def test_pythonhome_survives_and_pythonpath_does_not(self) -> None:
+        patched = {"PYTHONHOME": "/opt/relocated", "PYTHONPATH": "/elsewhere", "PYTHONSTARTUP": "/x.py"}
+        with mock.patch.dict(os.environ, patched):
+            environment = export_wiki_skill.self_check_environment()
+        self.assertEqual(environment.get("PYTHONHOME"), "/opt/relocated")
+        self.assertNotIn("PYTHONPATH", environment)
+        self.assertNotIn("PYTHONSTARTUP", environment)
+        self.assertEqual(environment["PYTHONDONTWRITEBYTECODE"], "1")
 
 
 if __name__ == "__main__":

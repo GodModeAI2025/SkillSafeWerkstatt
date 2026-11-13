@@ -91,8 +91,9 @@ nutzt die Suche nicht.
 
 Der **exportierte** Wissens-Skill hat eine eigene, ältere Suche
 (`maintain-llm-wiki/assets/knowledge-skill/search_knowledge.py`). Sie arbeitet additiv mit
-handgewählten Gewichten, kennt kein BM25, keine Historie, keine Vertrauensstufen und keine
-Ablaufdaten.
+handgewählten Gewichten, kennt kein BM25, keine Historie und keine Ablaufdaten und weist die
+Vertrauensstufe eines Treffers nicht aus. Filtern lässt sie nur über `--filter-json` mit
+`__trust_tier`.
 
 ---
 
@@ -104,10 +105,10 @@ Untersucht und, wo möglich, gemessen wurden fünf Familien:
 |---|---|---|
 | A Neuronale Embeddings (Modell, Vektorindex) | nicht gemessen | bricht vier Regeln; `onnxruntime` braucht Python ≥ 3.11, das Modell muss heruntergeladen werden |
 | B Statische Embedding-Tabelle im Skill | 68 / 81 / 99 allein, **+0** auf dem empfohlenen Stapel | liefert für *jede* Negativfrage 12 Treffer und zerstört damit jedes Fehlanzeige-Signal |
-| C1 Zeichen- und Wortform-Abgleich | 67–71 / 81–83 / 88–91 | **übernehmen** als erklärbare Wortform-Schicht (Befund 2) |
-| C2–C5 LSA, Random Indexing, Kookkurrenz, Pseudo-Relevanz-Feedback | 59–67 / – / – | schlechter als C1, nicht erklärbar |
+| C1 Zeichen-n-Gramm-Kosinus (3–5) | 76 / 88 / 99, aber 12 Treffer für jede Negativfrage | nicht als Ranker; **übernehmen** nur als erklärbare Wortform-Schicht (67–71 / 81–83 / 88–91, Befund 2) |
+| C2–C5 LSA, Random Indexing, Kookkurrenz, Pseudo-Relevanz-Feedback | – / 59–67 / – | schlechter als die Wortform-Schicht, nicht erklärbar |
 | D Kuratierte Erweiterung (Aliase, eingefroren im Release) | 70 / 79 / 85 | **übernehmen**, wirkt teilweise schon heute |
-| E Host-Agent formuliert um | 14–16 von 16 Umschreibungs- und Fremdsprachfragen unter den ersten 12 (Original allein: 3 von 16) | **übernehmen**, der einzige Hebel für andere Sprachen |
+| E Host-Agent formuliert um | 16 von 16 Umschreibungs- und Fremdsprachfragen unter den ersten 12, je nach Fusionsverfahren 14–16 von 16 unter den ersten 3 (Original allein: 3 von 16 unter den ersten 12) | **übernehmen**, der einzige Hebel für andere Sprachen |
 
 Die Regelkonflikte im Einzelnen:
 
@@ -141,22 +142,25 @@ Endnutzer bemerkte den Fehler erst bei seiner ersten Frage. Für die Ausgangsfra
 erzeugte Skill hat bisher *alles* übersehen.
 
 **Empfehlung, umgesetzt.** Der Exporter ermittelt die benötigten Bibliotheken jetzt selbst, als
-transitive Hülle der Importe seiner Vorlagen. Mitkommen darf nur, was auf seiner Liste geprüfter
-lesender Bibliotheken steht. Jedes andere Modul lehnt er mit Namen ab, denn Pflegewerkzeuge und
-schreibende Bibliotheken dürfen nie in einen Export. Ein neuer Import wird so laut abgelehnt
-statt still vergessen. Vor dem Paketbau führt er jedes mitgelieferte Werkzeug einmal im
-erzeugten Ordner aus, auch die Suche. Dabei steht nur die Standardbibliothek zur Verfügung: ohne
-`PYTHONPATH`, ohne Site-Pakete, ohne Bytecode-Schreiben. Scheitert das, entfernt er den Ordner
-und baut kein Paket. Interpreter-Caches neben den Werkzeugen kommen nie ins Paket. Neue Tests in
-`tests/test_export.py` prüfen das, und `tests/test_packaging.py` prüft jetzt auch die Vorlagen
-(Abschnitt „Umsetzungsstand").
+transitive Hülle der Importe seiner Vorlagen. Jeder Import muss auf einer von zwei geprüften
+Listen stehen: lesende Bibliotheken des Skills oder Standardbibliotheksmodule, die es ab Python
+3.9 auf allen Plattformen gibt und die selbst nichts schreiben. Alles andere lehnt er mit Namen
+ab, ebenso relative und dynamische Importe, bevor er irgendetwas schreibt. Pflegewerkzeuge und
+schreibende Bibliotheken kommen so nie in einen Export, und ein neuer Import wird laut abgelehnt
+statt still vergessen. Vor dem Paketbau führt er jedes mitgelieferte Werkzeug im erzeugten Ordner
+aus, die Suche auch mit Metadatenfilter. Weder `PYTHONPATH` noch installierte Pakete können dabei
+einen fehlenden Import ersetzen. Scheitert irgendetwas nach Beginn des Schreibens, auch durch
+Abbruch, entfernt er Ordner und Paket wieder. Interpreter-Caches neben den Werkzeugen kommen nie
+ins Paket. Neue Tests in `tests/test_export.py` prüfen das, und `tests/test_packaging.py` prüft
+jetzt auch die Vorlagen (Abschnitt „Umsetzungsstand").
 
 ### Befund 1 — Verluste sind stumm
 
 **Beobachtung.** Die Suchausgabe nennt weder die Gesamtzahl der Treffer noch, ob abgeschnitten
 wurde. Claims sind auf 8 pro Seite gekappt, ohne Zählung. Suchwörter ohne jeden Treffer werden
 nicht gemeldet. Das Stoppwort „für" wird nie entfernt: Der Tokenizer macht daraus „fur", die
-Liste enthält aber „für". Generierte Indexseiten belegen 90 von 781 Ergebnisplätzen. Dass eine
+Liste enthält aber „für". Navigationsseiten belegen 90 von 781 Ergebnisplätzen (78-mal eine
+Indexseite, 9-mal `meta/questions.md`, 3-mal `WIKI.md`). Dass eine
 nicht durchsuchte Quelle das Suchwort enthält, erfährt der Agent nicht. Ein leeres Ergebnis
 sieht gleich aus, ob das Thema fehlt oder nur ein anderes Wort verwendet wird.
 
@@ -225,7 +229,8 @@ ersten 12):
 Ergebnis je Kategorie unter den ersten 12: Flexion 3 → 7 von 8, Komposita 4 → 8 von 8,
 Tippfehler 1 → 8 von 8, Umlaut-Umschrift 6 → 7 von 7. Ein zweiter, aggressiverer Regelsatz aus
 einem anderen Entwurf kam allein auf 83 / 91. Dort lieferten aber alle 7 Negativfragen Treffer
-statt 5, im Mittel 7,1 statt 2,3 pro Frage, vor allem durch lockerere Kompositumregeln.
+statt 5, im Mittel 7,1 pro Frage statt 4,4 beim empfohlenen Regelsatz (heute 2,3), vor allem
+durch lockerere Kompositumregeln.
 
 Die Gegenprüfung fand fünf Konstruktionsfehler, die ein naiver Einbau hätte. Jeder davon
 verschlechtert heute korrekte Antworten:
@@ -246,8 +251,11 @@ verschlechtert heute korrekte Antworten:
    bei 75 bis 104 korrekten, im Wiki fehlenden Wörtern.
 
 Dazu kommen: keine Teile von Funktionswörtern („werden" ≠ „wer" + „den"); Kompositumteile nicht
-auf Begriffswelt-Aliase anwenden (sonst steigt eine Negativfrage von 5 auf 32 Treffer); kein
-Abschneiden von „-er" bei Substantiven (Zähler ≠ zahlen).
+auf Begriffswelt-Aliase anwenden (sonst verliert die bestätigte Begriffsseite Rang 1, etwa
+`grundversorgung.md` bei „Basisversorgung kündigen"); das Suchwort selbst nur in Kopfposition und
+gegen echte Korpuswörter zerlegen (die freie Zerlegung von „Gastarif" in „gas" + „tarif" hob eine
+Negativfrage von 5 auf 32 Treffer); kein Abschneiden von „-er" bei Substantiven (Zähler ≠
+zahlen).
 
 Was die Schicht nicht kann: Synonyme, Umschreibungen und andere Sprachen. Fremdsprachige Fragen
 bleiben bei 1 von 8. Unregelmäßige Formen fehlen ebenfalls: „umgezogene" findet „Umzug" nicht,
@@ -301,7 +309,8 @@ als Prosa in der `SKILL.md` steht, würde gerade in diesem Fall übersprungen.
 
 Ein Katalog aller Seitenbeschreibungen als Vollständigkeitsnachweis wurde gemessen und taugt nur
 eingeschränkt. Auf dem Test-Wiki fand eine blinde Auswahl aus 56 Katalogzeilen (10.472 Zeichen)
-104 von 107 Pflichtseiten, Suche und Katalog zusammen 107 von 107. Aber der Katalog deckt
+für 104 von 107 Fragen alle Pflichtseiten (121 von 124 Pflichtseiten). Suche unter den ersten 12
+und Katalog zusammen deckten 107 von 107 Fragen ab. Aber der Katalog deckt
 *Seiten* ab, nicht *Fakten*. „Kündigung" auf der Seite Grundversorgung steht nur in einem Claim,
 nicht in der Beschreibung. Quellen haben gar keine Beschreibung. Und er wächst mit dem Wiki:
 11.900 Zeichen bei 50 Seiten, 121.000 bei 492 und 1,15 Millionen bei 4.628 Seiten. Das kann
@@ -326,11 +335,11 @@ Seite, die die Antwort ganz anders formuliert, kann fehlen. Das gehört in die A
 
 ### Befund 5 — Der exportierte Skill ist eine abgedriftete Kopie
 
-**Beobachtung.** Der Export sucht mit einer eigenen additiven Heuristik und kennt weder BM25,
-Historie, Vertrauensstufen noch Ablaufdaten. Seine `assess_quality.py` ist eine getrennte Kopie,
-der die Offenlegung von Vertrauensstufe und Ablauf fehlt. Seine `SKILL.md` entsteht aus einem
-Python-f-String: Ein JSON-Beispiel darin löst `ValueError` aus. Seine Befehle hängen vom
-aktuellen Verzeichnis ab.
+**Beobachtung.** Der Export sucht mit einer eigenen additiven Heuristik, kennt weder BM25, Historie
+noch Ablaufdaten und weist die Vertrauensstufe eines Treffers nicht aus. Seine `assess_quality.py`
+ist eine getrennte Kopie, der die Offenlegung von Vertrauensstufe und Ablauf fehlt. Seine `SKILL.md`
+entsteht aus einem Python-f-String: Ein JSON-Beispiel darin löst `ValueError` aus. Seine Befehle
+hängen vom aktuellen Verzeichnis ab.
 
 **Das Problem.** Jede Verbesserung der Suche müsste zweimal gebaut werden, und die zweite Kopie
 driftet nachweislich ab. Befund 0 war genau so entstanden.
@@ -373,11 +382,16 @@ schon ein Hinweis jedes aktualisierte Wiki auf „Prüfung fällig" setzen
 Alle Helfer geben JSON mit `ensure_ascii=False` aus. Ein einziges Zeichen außerhalb von cp1252
 in einer Seite, etwa „≥", bricht die Suche mit leerer Ausgabe ab (simuliert mit
 `PYTHONIOENCODING=cp1252`). Die Suche nimmt außerdem kein `--expect-manifest-sha256` an. Mehrere
-Aufrufe einer Antwort können also unbemerkt zwei Releases mischen.
+Aufrufe einer Antwort können also unbemerkt zwei Releases mischen. Und alle Werkzeuge, die
+Geschwistermodule importieren, scheitern unter `python -I`, `-P` oder `PYTHONSAFEPATH=1`, weil
+dann ihr eigenes Verzeichnis nicht auf dem Suchpfad liegt. Sicherheitsleitfäden empfehlen `-I`
+ausgerechnet für Code aus entpackten Archiven.
 
 **Empfehlung.** `sys.stdout.reconfigure(encoding="utf-8")` in jedem Einstieg beider Skills und
 der Vorlagen, mit einem cp1252-Regressionstest. `--expect-manifest-sha256` an der Suche, mit
-Ergebnis `snapshot_changed`. Die Prüfung der Python-3.9-Grammatik ist in diesem Branch umgesetzt.
+Ergebnis `snapshot_changed`. Jeder Einstieg setzt sein eigenes Verzeichnis selbst an den Anfang
+des Suchpfads, damit `-I` funktioniert. Die Prüfung gegen Python 3.9 ist in diesem Branch
+umgesetzt.
 
 ---
 
@@ -420,7 +434,8 @@ Exporttests, statische Prüfungen für die Vorlagen und Python-3.9-Grammatikprü
    wie der Lese-Skill. Das ist eine gewollte Verhaltensänderung des Exports und gehört in die
    Release-Notiz.
 2. Das Zählwerk aus Befund 1, nur zusätzliche Schlüssel.
-3. `--expect-manifest-sha256` an der Suche, UTF-8-Ausgabe in allen Einstiegen.
+3. `--expect-manifest-sha256` an der Suche, UTF-8-Ausgabe und eigener Suchpfad (für `-I`) in allen
+   Einstiegen.
 4. Die Testfragen-Batterie als Messinstrument ins Repository, siehe Entscheidung E4. Dazu ein
    **Präzisionstor** als Test:
    - Keine Pflichtseite, die heute unter den ersten 3 steht, verlässt sie.
@@ -518,32 +533,46 @@ hinter dem Präzisionstor freischalten.
 
 Stufe 0 ist in diesem Branch umgesetzt:
 
-- `maintain-llm-wiki/scripts/export_wiki_skill.py`: `library_closure()` ermittelt die
-  Bibliotheken aus den Importen der Vorlagen und lässt nur Module der Positivliste
-  `EXPORTABLE_LIBRARIES` zu (heute `frontmatter_contract.py`, `trust_contract.py`,
-  `wiki_filters.py`). `run_self_check()` führt Verifikation, Identitätsstatus,
-  Qualitätsbewertung und Suche im erzeugten Ordner aus, mit `-B -S -s` und ohne `PYTHONPATH`.
-  Bei Fehlschlag wird der Ordner entfernt. `packaged_files()` hält Caches unter `scripts/` aus
-  dem Paket, lässt aber jede Datei unter `references/knowledge/` darin, weil das Manifest sie
-  bindet.
-- `tests/test_export.py` (neu, 13 Tests): Export gelingt; jedes Werkzeug läuft im installierten
-  Ordner allein und aus dem entpackten `.skill`-Paket; eine veröffentlichte Datei namens
-  `graph/legacy.pyc` kommt mit ins Paket; nur geprüfte Bibliotheken, darunter
-  `trust_contract.py`, und kein Pflegewerkzeug; kein Cache neben den Werkzeugen; zwei Exporte
-  eines Release sind byte-identisch; der Paketfilter wirkt nur unter `scripts/`. Abgelehnt
-  werden: ein unerfüllbarer Import, auch wenn `PYTHONPATH` oder eine `.pth`-Datei in den
-  Site-Paketen ihn bereitstellen würde; eine ungeprüfte neue Bibliothek; `release_wiki`,
-  `navigation` und `portable_io` als Importe. Nach einer Ablehnung bleibt kein Ordner zurück.
-- `tests/test_packaging.py`: Die Vorlagen unter `assets/knowledge-skill` werden auf auflösbare
-  Importe geprüft. Jede Bibliothek der Positivliste muss frei von Schreibaufrufen bleiben. Alle
-  Helfer und Vorlagen müssen mit der Grammatik von Python 3.9 parsen.
-- Gegenproben: Gegen den Exporter vor diesem Branch schlug der Kerntest fehl. Eine unabhängige
-  Prüfung meiner ersten Korrektur fand vier weitere Fehler: Bytecode-benannte Release-Dateien
-  fehlten im Paket; schreibende Bibliotheken ohne Einstieg wären mitgekommen; ein umgedrehter
-  `__main__`-Vergleich blieb unerkannt; über `.pth`-Dateien bestand der Selbsttest fälschlich.
-  Die Tests oben schlagen gegen diese erste Korrektur 11-mal an.
-- `maintain-llm-wiki/SKILL.md`, `references/wiki-contract.md` und README Abschnitt 4.16
-  beschreiben Importhülle und Selbsttest. Beide Pakete sind neu gebaut.
+- `maintain-llm-wiki/scripts/export_wiki_skill.py`:
+  - `library_closure()` ermittelt die Bibliotheken aus den Importen der Vorlagen. Jeder Import
+    muss auf `EXPORTABLE_LIBRARIES` (heute `frontmatter_contract.py`, `trust_contract.py`,
+    `wiki_filters.py`) oder `EXPORTED_STDLIB` stehen. Relative und dynamische Importe sowie
+    Vorlagenmodule, die kein Einstieg sind, werden abgelehnt, bevor etwas geschrieben wird.
+  - `run_self_check()` führt Verifikation, Identitätsstatus, Qualitätsbewertung und die Suche im
+    erzeugten Ordner aus, die Suche einmal mit Quellen und einmal mit `__trust_tier`-Filter. Der
+    Aufruf erfolgt mit `-B -S -s`, ohne `PYTHONPATH`; `PYTHONHOME` bleibt erhalten.
+  - Der Exporter beansprucht den Ordnernamen atomar. Danach entfernt er bei jedem Fehlschlag Ordner,
+    Paket und Prüfsumme: Ablehnung, Fehler oder Abbruch.
+  - `packaged_files()` hält Caches unter `scripts/` aus dem Paket, lässt aber jede Datei unter
+    `references/knowledge/` darin, weil das Manifest sie bindet.
+- `tests/test_export.py` (neu, 21 Tests):
+  - Export gelingt.
+  - Jedes Werkzeug läuft im installierten Ordner allein und aus dem entpackten Paket.
+  - `graph/legacy.pyc` aus dem Release kommt mit.
+  - Nur geprüfte Bibliotheken kommen mit, kein Pflegewerkzeug.
+  - Zeitstempel kommen aus dem Release, nicht von der Uhr. Zwei Exporte sind byte-identisch.
+  - Abgelehnt werden: unbekannte Module, ungeprüfte Standardmodule (`tomllib`, `os`, `shutil`,
+    `importlib`), relative und dynamische Importe, Vorlagenmodule ohne Einstieg, ungeprüfte
+    Bibliotheken sowie `release_wiki`, `navigation` und `portable_io`.
+  - Als zweite Verteidigungslinie fängt der Selbsttest ab: ein fälschlich gelistetes Modul, das
+    fehlt, auch wenn `PYTHONPATH` oder eine `.pth`-Datei es bereitstellen würde, und einen
+    defekten Filterpfad.
+  - Eine Ablehnung nach Beginn des Schreibens (Pfadleck) hinterlässt nichts, und der nächste
+    Export wird nicht blockiert.
+- `tests/test_packaging.py`:
+  - Die Vorlagen werden auf auflösbare Importe geprüft.
+  - Exportierter Code wird per Syntaxbaum auf Schreibaufrufe und auf ungeprüfte Importe geprüft.
+  - Die Positivliste darf nicht größer sein als die tatsächliche Importhülle.
+  - Alle Helfer und Vorlagen müssen mit der Grammatik von Python 3.9 parsen und mit dem ältesten
+    verfügbaren Python 3.9 bis 3.11 kompilieren. Hier lief das mit 3.9.
+- Gegenproben:
+  - Gegen den Exporter vor diesem Branch schlug der Kerntest fehl.
+  - Zwei unabhängige Prüfrunden fanden in meinen Korrekturen 4 und dann 8 weitere Code- und
+    Testfehler sowie 10 Fehler in diesem Dokument. Alle sind behoben, die Code-Fehler durch Tests
+    abgedeckt.
+  - Sechs gezielte Mutationen werden von den Tests erkannt: kein Aufräumen, kein Filterpfad im
+    Selbsttest, `PYTHONHOME` verworfen, Zeitstempel von der Uhr, Standardbibliotheksprüfung
+    abgeschaltet und ein PEP-701-f-String.
 
 Stufen 1 bis 5 sind offen.
 

@@ -407,8 +407,8 @@ Der Pflege-Skill kann einen verifizierten Release als eigenständigen Wissens-Sk
 - enthält genau einen veröffentlichten Wiki-Stand;
 - ist unveränderlich und nicht selbstpflegend;
 - besitzt keinen Ingest-, Pflege-, Release-, Lock- oder Restore-Code;
-- enthält nur Verifikation, Suche und Qualitätsbewertung sowie benötigte read-only Bibliotheken; welche das sind, ermittelt der Exporter aus den Importen selbst; mitkommen darf nur, was auf seiner Liste geprüfter lesender Bibliotheken steht, sodass weder ein Pflegewerkzeug noch eine schreibende Bibliothek in einen Export gelangt, und ein neuer Import ohne Prüfung wird mit Namen abgelehnt statt stillschweigend vergessen;
-- wird erst gemeldet, wenn jedes mitgelieferte Werkzeug im erzeugten Ordner einmal fehlerfrei gelaufen ist, auch die Suche; scheitert das, wird der Ordner wieder entfernt und kein Paket erzeugt;
+- enthält nur Verifikation, Suche und Qualitätsbewertung sowie benötigte read-only Bibliotheken; welche das sind, ermittelt der Exporter aus den Importen selbst; mitkommen darf nur, was auf seiner Liste geprüfter lesender Bibliotheken steht, und jeder Import der Standardbibliothek muss auf einer zweiten geprüften Liste stehen, sodass weder ein Pflegewerkzeug noch schreibender Code in einen Export gelangt; ein neuer Import ohne Prüfung wird mit Namen abgelehnt statt stillschweigend vergessen;
+- wird erst gemeldet, wenn jedes mitgelieferte Werkzeug im erzeugten Ordner fehlerfrei gelaufen ist, auch die Suche mit Metadatenfilter; scheitert das oder irgendein späterer Schritt, werden Ordner und Paket wieder entfernt;
 - bindet alle Inhalte über das ursprüngliche Release-Manifest;
 - enthält keine absoluten Quellpfade, Tokens oder transienten Locks;
 - wird als Skill-Ordner und `.skill`-Paket erzeugt.
@@ -976,7 +976,7 @@ Die Skills sind absichtlich konservativ:
 - OneDrive- und SharePoint-Synchronisation ersetzen keine globale Transaktions- oder Lock-Datenbank.
 - Ein eingefrorener Wissens-Skill kennt nur seinen enthaltenen Release und kann nicht feststellen, ob das kanonische Wiki inzwischen weiterentwickelt wurde.
 - Metadatenfilter grenzen Suchmengen ein, beweisen aber weder Wahrheit noch Vollständigkeit.
-- Die Suche ist lexikalisch: Sie findet Wörter, keine Bedeutungen. Andere Wortformen, Synonyme, Umschreibungen und andere Sprachen gehen heute verloren, und ein leeres Ergebnis beweist nicht, dass ein Thema fehlt. Gemessene Lücken und ein Stufenplan ohne Embedding-Suche stehen in [docs/bedeutungssuche-und-vollstaendigkeit.md](docs/bedeutungssuche-und-vollstaendigkeit.md).
+- Die Suche ist lexikalisch: Sie findet Wörter, keine Bedeutungen. Andere Wortformen, Synonyme, die weder als Seiten-Alias noch in einer Begriffswelt hinterlegt sind, Umschreibungen und andere Sprachen gehen heute meist verloren, und ein leeres Ergebnis beweist nicht, dass ein Thema fehlt. Gemessene Lücken und ein Stufenplan ohne Embedding-Suche stehen in [docs/bedeutungssuche-und-vollstaendigkeit.md](docs/bedeutungssuche-und-vollstaendigkeit.md).
 - Automatische Strukturprüfungen ersetzen kein fachliches Review durch einen zuständigen Menschen.
 - Die Erkennung einer synchronisierten Ablage ist eine Heuristik auf Pfadnamen und Umgebungsvariablen; es gibt keine unterstützte Schnittstelle zum Zustand eines Sync-Clients.
 - Ob eine veröffentlichte Datei die Ablage erreicht hat, kann der Skill nicht feststellen — nur prüfen und warnen.
