@@ -14,6 +14,16 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 SKILLS = ("maintain-llm-wiki", "query-llm-wiki")
 STANDARD_LIBRARY_ALLOWED = True
+# Helpers the exporter copies into every frozen knowledge skill. They resolve
+# their imports against themselves plus the maintenance skill's library modules.
+KNOWLEDGE_TEMPLATES = REPO / "maintain-llm-wiki" / "assets" / "knowledge-skill"
+# The README promises Python 3.9 or newer.
+OLDEST_PYTHON = (3, 9)
+
+
+def every_helper() -> list[Path]:
+    paths = [path for skill in SKILLS for path in sorted((REPO / skill / "scripts").glob("*.py"))]
+    return paths + sorted(KNOWLEDGE_TEMPLATES.glob("*.py"))
 
 
 def local_imports(path: Path) -> set[str]:
@@ -57,12 +67,33 @@ class ImportIntegrity(unittest.TestCase):
                             f"bundled with this skill nor in the standard library",
                         )
 
+    def test_every_knowledge_skill_template_resolves_its_imports(self) -> None:
+        """The exported skill's helpers were outside every static check before."""
+        available = {path.stem for path in KNOWLEDGE_TEMPLATES.glob("*.py")}
+        available |= {path.stem for path in (REPO / "maintain-llm-wiki" / "scripts").glob("*.py")}
+        for path in sorted(KNOWLEDGE_TEMPLATES.glob("*.py")):
+            for name in local_imports(path):
+                if name in available:
+                    continue
+                with self.subTest(template=path.name, imports=name):
+                    result = subprocess.run([sys.executable, "-c", f"import {name}"], capture_output=True)
+                    self.assertEqual(
+                        result.returncode,
+                        0,
+                        f"knowledge-skill template {path.name} imports {name!r}, which is neither a "
+                        f"bundled template or library module nor in the standard library",
+                    )
+
+    def test_every_helper_parses_with_the_oldest_supported_grammar(self) -> None:
+        for path in every_helper():
+            with self.subTest(path=str(path.relative_to(REPO))):
+                ast.parse(path.read_text(encoding="utf-8"), str(path), feature_version=OLDEST_PYTHON)
+
     def test_no_helper_depends_on_a_third_party_package(self) -> None:
         forbidden = {"yaml", "requests", "pydantic", "numpy", "frontmatter", "markdown"}
-        for skill in SKILLS:
-            for path in sorted((REPO / skill / "scripts").glob("*.py")):
-                with self.subTest(path=path.name):
-                    self.assertEqual(local_imports(path) & forbidden, set())
+        for path in every_helper():
+            with self.subTest(path=str(path.relative_to(REPO))):
+                self.assertEqual(local_imports(path) & forbidden, set())
 
 
 class SharedModuleParity(unittest.TestCase):

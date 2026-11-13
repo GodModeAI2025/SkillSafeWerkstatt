@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -26,6 +28,17 @@ DEFAULT_DESCRIPTION = (
     "answer with claim-level source citations. Never maintain or modify it."
 )
 RESERVED_SKILL_WORDS = {"anthropic", "claude"}
+# The exported skill's executable helpers. Every bundled library module they
+# import, directly or transitively, is computed from the source and copied, so
+# a new import can never again leave the exported search unable to start.
+TEMPLATE_ENTRYPOINTS = ("verify_knowledge.py", "search_knowledge.py", "assess_quality.py", "identity_status.py")
+# The self-check runs every entrypoint once inside the generated skill.
+SELF_CHECK_CALLS = (
+    ("verify_knowledge.py",),
+    ("identity_status.py",),
+    ("assess_quality.py",),
+    ("search_knowledge.py", "--query", "wiki", "--include-sources"),
+)
 
 
 def fail(message: str) -> None:
@@ -136,6 +149,116 @@ def validate_skill_text(skill_dir: Path, name: str, description: str, source_tar
             fail(f"Generated skill leaks the absolute source path in {path.relative_to(skill_dir).as_posix()}")
 
 
+def bare_imports(path: Path) -> set[str]:
+    """Top-level module names a helper imports without a package prefix."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            found.add(node.module.split(".")[0])
+    return found
+
+
+def is_executable_helper(path: Path) -> bool:
+    """True for a module with a `__main__` entrypoint, i.e. a helper rather than a library."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Compare) and isinstance(node.left, ast.Name) and node.left.id == "__name__":
+            if any(isinstance(item, ast.Constant) and item.value == "__main__" for item in node.comparators):
+                return True
+    return False
+
+
+def library_closure(template_root: Path, library_root: Path, entrypoints: tuple[str, ...]) -> list[Path]:
+    """Every bundled library module the template entrypoints import, transitively.
+
+    A name that resolves neither to a template nor to a module in `library_root`
+    is left to the standard library; the self-check proves it imports. A library
+    module that is itself an executable helper is refused: the exported skill
+    ships only its own read-only entrypoints plus non-executable libraries.
+    """
+    templates = {name[:-3] for name in entrypoints}
+    pending: list[Path] = []
+    for name in entrypoints:
+        template = template_root / name
+        if not template.is_file():
+            fail(f"Knowledge-skill template is missing: {name}")
+        pending.append(template)
+    needed: dict[str, Path] = {}
+    while pending:
+        current = pending.pop()
+        for name in sorted(bare_imports(current)):
+            if name in templates or name in needed:
+                continue
+            candidate = library_root / f"{name}.py"
+            if not candidate.is_file():
+                continue
+            if is_executable_helper(candidate):
+                fail(
+                    f"Knowledge-skill templates import {candidate.name}, which is an executable helper "
+                    "and must never be copied into an exported skill"
+                )
+            needed[name] = candidate
+            pending.append(candidate)
+    return [needed[name] for name in sorted(needed)]
+
+
+def self_check_environment() -> dict[str, str]:
+    """A clean interpreter environment: nothing outside the skill can satisfy an import."""
+    environment = {key: value for key, value in os.environ.items() if not key.upper().startswith("PYTHON")}
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    environment["PYTHONIOENCODING"] = "utf-8"
+    environment["PYTHONNOUSERSITE"] = "1"
+    return environment
+
+
+def run_self_check(skill_dir: Path) -> None:
+    """Run every bundled entrypoint once inside the generated skill.
+
+    Verification alone does not import the search, so a missing library module
+    would otherwise surface only when an end user asks the first question.
+    """
+    environment = self_check_environment()
+    for call in SELF_CHECK_CALLS:
+        script, *arguments = call
+        result = subprocess.run(
+            [sys.executable, "-B", "-s", str(skill_dir / "scripts" / script), *arguments],
+            capture_output=True,
+            cwd=str(skill_dir),
+            env=environment,
+            check=False,
+        )
+        failure = ""
+        if result.returncode != 0:
+            failure = f"exited with {result.returncode}"
+        else:
+            try:
+                json.loads(result.stdout.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                failure = "did not print one JSON document"
+        if failure:
+            for stream in (result.stdout, result.stderr):
+                if stream:
+                    print(stream.decode("utf-8", errors="replace"), end="", file=sys.stderr)
+            fail(f"Generated knowledge skill failed its self-check: scripts/{script} {failure}")
+
+
+def packaged_files(skill_dir: Path) -> list[Path]:
+    """Files that belong in the package; interpreter caches never do."""
+    return sorted(
+        (
+            item
+            for item in skill_dir.rglob("*")
+            if item.is_file()
+            and "__pycache__" not in item.relative_to(skill_dir).parts
+            and item.suffix not in {".pyc", ".pyo"}
+        ),
+        key=lambda item: item.relative_to(skill_dir).as_posix(),
+    )
+
+
 def zip_datetime(released_at: str) -> tuple[int, int, int, int, int, int]:
     try:
         parsed = datetime.fromisoformat(released_at.replace("Z", "+00:00"))
@@ -149,7 +272,7 @@ def zip_datetime(released_at: str) -> tuple[int, int, int, int, int, int]:
 def deterministic_skill_package(skill_dir: Path, package_path: Path, released_at: str) -> None:
     timestamp = zip_datetime(released_at)
     with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-        for path in sorted((item for item in skill_dir.rglob("*") if item.is_file()), key=lambda item: item.relative_to(skill_dir).as_posix()):
+        for path in packaged_files(skill_dir):
             archive_name = f"{skill_dir.name}/{path.relative_to(skill_dir).as_posix()}"
             info = zipfile.ZipInfo(archive_name, date_time=timestamp)
             info.compress_type = zipfile.ZIP_DEFLATED
@@ -204,6 +327,11 @@ def main() -> int:
     if not isinstance(entries, list) or not entries:
         fail("Release manifest contains no files")
 
+    # Resolve the helper set before anything is written, so a refused template
+    # change leaves no partial skill folder behind.
+    template_root = Path(__file__).resolve().parent.parent / "assets" / "knowledge-skill"
+    libraries = library_closure(template_root, Path(__file__).resolve().parent, TEMPLATE_ENTRYPOINTS)
+
     output_dir.mkdir(parents=True, exist_ok=True)
     knowledge_dir = skill_dir / "references" / "knowledge"
     scripts_dir = skill_dir / "scripts"
@@ -231,17 +359,10 @@ def main() -> int:
         copied += 1
     shutil.copyfile(manifest_path, knowledge_dir / "meta" / "manifest.json")
 
-    template_root = Path(__file__).resolve().parent.parent / "assets" / "knowledge-skill"
-    for script_name in ("verify_knowledge.py", "search_knowledge.py", "assess_quality.py", "identity_status.py"):
-        template = template_root / script_name
-        if not template.is_file():
-            fail(f"Knowledge-skill template is missing: {script_name}")
-        shutil.copyfile(template, scripts_dir / script_name)
-    for module_name in ("frontmatter_contract.py", "wiki_filters.py"):
-        module = Path(__file__).resolve().parent / module_name
-        if not module.is_file():
-            fail(f"Knowledge-skill library is missing: {module_name}")
-        shutil.copyfile(module, scripts_dir / module_name)
+    for script_name in TEMPLATE_ENTRYPOINTS:
+        shutil.copyfile(template_root / script_name, scripts_dir / script_name)
+    for module in libraries:
+        shutil.copyfile(module, scripts_dir / module.name)
 
     title = wiki_title(target)
     (skill_dir / "SKILL.md").write_text(skill_markdown(name, description), encoding="utf-8")
@@ -267,19 +388,13 @@ def main() -> int:
         print(json.dumps({"state": "export_refused", "release": final}, ensure_ascii=False, indent=2))
         return {"wiki_busy": 2, "snapshot_changed": 3}.get(str(final.get("state")), 4)
     validate_skill_text(skill_dir, name, description, target)
-
-    verification = subprocess.run(
-        [sys.executable, str(scripts_dir / "verify_knowledge.py")],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if verification.returncode != 0:
-        if verification.stdout:
-            print(verification.stdout, end="", file=sys.stderr)
-        if verification.stderr:
-            print(verification.stderr, end="", file=sys.stderr)
-        fail("Generated knowledge skill failed its bundled integrity verification")
+    try:
+        run_self_check(skill_dir)
+    except SystemExit:
+        # Never leave a skill folder that cannot answer: hosts install unpacked
+        # folders too. This run created it after checking it did not exist.
+        shutil.rmtree(skill_dir, ignore_errors=True)
+        raise
 
     deterministic_skill_package(skill_dir, package_path, str(initial.get("released_at") or ""))
     package_sha256 = sha256_file(package_path)

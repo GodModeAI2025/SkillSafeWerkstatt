@@ -407,7 +407,8 @@ Der Pflege-Skill kann einen verifizierten Release als eigenständigen Wissens-Sk
 - enthält genau einen veröffentlichten Wiki-Stand;
 - ist unveränderlich und nicht selbstpflegend;
 - besitzt keinen Ingest-, Pflege-, Release-, Lock- oder Restore-Code;
-- enthält nur Verifikation, Suche und Qualitätsbewertung sowie benötigte read-only Bibliotheken;
+- enthält nur Verifikation, Suche und Qualitätsbewertung sowie benötigte read-only Bibliotheken; welche Bibliotheken das sind, ermittelt der Exporter aus den Importen selbst, statt einer handgepflegten Liste zu folgen, und er verweigert jedes Pflegewerkzeug darunter;
+- wird erst gemeldet, wenn jedes mitgelieferte Werkzeug im erzeugten Ordner einmal fehlerfrei gelaufen ist, auch die Suche; scheitert das, wird der Ordner wieder entfernt und kein Paket erzeugt;
 - bindet alle Inhalte über das ursprüngliche Release-Manifest;
 - enthält keine absoluten Quellpfade, Tokens oder transienten Locks;
 - wird als Skill-Ordner und `.skill`-Paket erzeugt.
@@ -919,7 +920,7 @@ Beispiele für den Lese-Skill:
 | Review aufzeichnen | Tatsächliche Qualitäts-/Cleaning-Prüfung dokumentieren | Kein erfundener Zeitstempel |
 | Release | Version, Protokoll, Qualität und Manifest veröffentlichen | Strikter Lint, Manifest zuletzt |
 | Release verifizieren | Hash-Grenze prüfen | Read-only |
-| Wissens-Skill exportieren | Unveränderlichen Release-Abzug erzeugen | Doppelte Manifestprüfung |
+| Wissens-Skill exportieren | Unveränderlichen Release-Abzug erzeugen | Doppelte Manifestprüfung, Selbsttest aller mitgelieferten Werkzeuge |
 | Seiten als geprüft aufzeichnen | Vertrauensstufe pro Seite | Plan/Apply, Snapshot, Extra-Bestätigung für `human:` |
 | Konfliktkopie auflösen | Sync-Konflikt entscheiden | Beide Seiten im Vergleich, Bestätigung, Snapshot |
 | OKF berichten | Kompatibilität mit v0.2 bewerten | Read-only, keine erfundenen Werte |
@@ -975,6 +976,7 @@ Die Skills sind absichtlich konservativ:
 - OneDrive- und SharePoint-Synchronisation ersetzen keine globale Transaktions- oder Lock-Datenbank.
 - Ein eingefrorener Wissens-Skill kennt nur seinen enthaltenen Release und kann nicht feststellen, ob das kanonische Wiki inzwischen weiterentwickelt wurde.
 - Metadatenfilter grenzen Suchmengen ein, beweisen aber weder Wahrheit noch Vollständigkeit.
+- Die Suche ist lexikalisch: Sie findet Wörter, keine Bedeutungen. Andere Wortformen, Synonyme, Umschreibungen und andere Sprachen gehen heute verloren, und ein leeres Ergebnis beweist nicht, dass ein Thema fehlt. Gemessene Lücken und ein Stufenplan ohne Embedding-Suche stehen in [docs/bedeutungssuche-und-vollstaendigkeit.md](docs/bedeutungssuche-und-vollstaendigkeit.md).
 - Automatische Strukturprüfungen ersetzen kein fachliches Review durch einen zuständigen Menschen.
 - Die Erkennung einer synchronisierten Ablage ist eine Heuristik auf Pfadnamen und Umgebungsvariablen; es gibt keine unterstützte Schnittstelle zum Zustand eines Sync-Clients.
 - Ob eine veröffentlichte Datei die Ablage erreicht hat, kann der Skill nicht feststellen — nur prüfen und warnen.
