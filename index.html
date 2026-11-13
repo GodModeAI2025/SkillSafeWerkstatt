@@ -366,6 +366,105 @@
     .cta p { max-width: 680px; margin: 0; color: var(--muted); }
     .cta .actions { justify-content: flex-end; }
 
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 22px; }
+    .stat {
+      padding: 26px 28px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+    }
+    .stat-label { margin: 0 0 6px; color: var(--muted); font-size: .92rem; font-weight: 650; }
+    .stat-value { margin: 0 0 6px; font-size: clamp(2rem, 4vw, 2.8rem); font-weight: 750; line-height: 1.1; letter-spacing: -.03em; }
+    .stat-note { margin: 0; color: var(--muted); font-size: .92rem; }
+
+    .chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+    .chart {
+      margin: 0;
+      padding: 30px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+    }
+    .chart h3 { margin-bottom: 6px; font-size: 1.3rem; letter-spacing: -.02em; }
+    .chart figcaption p { margin: 0 0 22px; color: var(--muted); font-size: .94rem; }
+    .bars { margin: 0; padding: 0; display: grid; gap: 16px; list-style: none; }
+    .bar-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 3.4em; column-gap: 12px; row-gap: 6px; align-items: center; border-radius: 8px; outline-offset: 6px; }
+    .bar-label { grid-column: 1 / -1; font-size: .95rem; font-weight: 650; }
+    .tag {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: .74rem;
+      font-weight: 700;
+      white-space: nowrap;
+      vertical-align: 1px;
+    }
+    .bar-track { position: relative; height: 16px; border-radius: 0 4px 4px 0; background: var(--surface-soft); }
+    .bar-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: calc(var(--value) / var(--max) * 100%);
+      border-radius: 0 4px 4px 0;
+      background: var(--sky);
+      transition: filter .15s ease;
+    }
+    .bar-value { font-weight: 750; font-variant-numeric: tabular-nums; text-align: right; }
+    .bar-tip {
+      position: absolute;
+      z-index: 3;
+      right: 0;
+      bottom: calc(100% + 6px);
+      max-width: min(320px, 100%);
+      padding: 8px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      background: var(--surface);
+      box-shadow: 0 12px 30px rgba(0, 0, 102, .16);
+      color: var(--muted);
+      font-size: .86rem;
+      line-height: 1.4;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .15s ease;
+    }
+    .bar-tip strong { color: var(--text); }
+    .bar-row:hover .bar-tip, .bar-row:focus .bar-tip { opacity: 1; }
+    .bar-row:hover .bar-fill, .bar-row:focus .bar-fill { filter: brightness(1.12); }
+    .chart-note { margin: 22px 0 0; color: var(--muted); font-size: .92rem; }
+    .measure-notes {
+      margin-top: 22px;
+      padding: 26px 30px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+    }
+    .measure-notes h3 { margin-bottom: 10px; font-size: 1.1rem; letter-spacing: -.02em; }
+    .measure-notes ul { margin: 0 0 16px; padding-left: 1.2em; color: var(--muted); }
+    .measure-notes li { margin-bottom: 6px; }
+    .measure-notes summary { cursor: pointer; font-weight: 750; }
+    .table-wrap { overflow-x: auto; margin-top: 14px; }
+    .measure-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+    .measure-table th, .measure-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+    .measure-table th:first-child, .measure-table td:first-child { text-align: left; white-space: normal; }
+    .measure-table td { font-variant-numeric: tabular-nums; }
+    .measure-table thead th { color: var(--muted); font-weight: 700; white-space: normal; vertical-align: bottom; }
+    @media (forced-colors: active) {
+      .bar-fill { forced-color-adjust: none; background: CanvasText; }
+      .bar-track { border: 1px solid CanvasText; }
+    }
+
     footer { margin-top: 112px; border-top: 1px solid var(--line); }
     .footer-inner {
       width: min(calc(100% - 40px), var(--content));
@@ -392,6 +491,7 @@
       .process::before { display: none; }
       .feature-grid { grid-template-columns: repeat(2, 1fr); }
       .identity-panel { grid-template-columns: 1fr; }
+      .chart-grid { grid-template-columns: 1fr; }
       .cta { grid-template-columns: 1fr; }
       .cta .actions { justify-content: flex-start; }
     }
@@ -405,7 +505,10 @@
       .actions { display: grid; }
       .button { width: 100%; }
       .hero-visual { border-radius: 26px; }
-      .trust-strip, .split-grid, .process, .feature-grid { grid-template-columns: 1fr; }
+      .trust-strip, .split-grid, .process, .feature-grid, .stat-row { grid-template-columns: 1fr; }
+      .chart, .measure-notes { padding: 24px 20px; }
+      .measure-table { font-size: .84rem; }
+      .measure-table th, .measure-table td { padding: 7px 6px; }
       .trust-item { border-right: 0; border-bottom: 1px solid var(--line); }
       .trust-item:last-child { border-bottom: 0; }
       section { padding: 78px 0; }
@@ -434,6 +537,7 @@
         <a href="#skills">Zwei Skills</a>
         <a href="#workflow">Ablauf</a>
         <a href="#features">Prinzipien</a>
+        <a href="#suche">Suche</a>
         <a href="#export">Export</a>
         <a href="#download">Download</a>
       </div>
@@ -534,6 +638,131 @@
           <article class="feature"><div class="feature-dot"></div><h3>Übernahme statt Abtippen</h3><p>Ein bestehender Vault wird als Evidenz übernommen, nicht als Wissen: registrierte Quellen, keine Seite ohne Beleg.</p></article>
           <article class="feature"><div class="feature-dot"></div><h3>Skill-only</h3><p>Kein Server, kein Dienst, kein Hintergrundprozess. Ein Verzeichnis aus Markdown bleibt lesbar, auch wenn nichts läuft.</p></article>
           <article class="feature"><div class="feature-dot"></div><h3>Ehrliche Aussagen</h3><p>Lokal geschrieben heißt nicht hochgeladen. Der Skill sagt, was er weiß, und benennt, was er nicht wissen kann.</p></article>
+        </div>
+      </section>
+
+      <section id="suche" aria-labelledby="search-title">
+        <div class="section-heading">
+          <p class="eyebrow">Gemessen, nicht behauptet</p>
+          <h2 id="search-title">Bedeutung finden – ohne Vektordatenbank.</h2>
+          <p>Wer ein Wiki fragt, benutzt selten dessen Wörter. Wir haben gemessen, was dagegen hilft: an einem Test-Wiki mit 114 Fragen, davon 7 zu Themen, die gar nicht darin stehen. Das Ergebnis spricht für Bedeutung, die beim Pflegen kuratiert wird, statt für eine Vektorsuche.</p>
+        </div>
+
+        <div class="stat-row">
+          <article class="stat">
+            <p class="stat-label">Allein durch Seiten-Aliase in Nutzersprache</p>
+            <p class="stat-value">+17 Fragen</p>
+            <p class="stat-note">57 → 74 von 107 gefunden. Das Feld gibt es schon, es braucht nur Pflege.</p>
+          </article>
+          <article class="stat">
+            <p class="stat-label">Englische Fragen an ein deutsches Wiki</p>
+            <p class="stat-value">1 → 7 von 8</p>
+            <p class="stat-note">gefunden, weil englische Begriffe in denselben Aliasen stehen.</p>
+          </article>
+          <article class="stat">
+            <p class="stat-label">Zusatznutzen einer Embedding-Tabelle</p>
+            <p class="stat-value">+0</p>
+            <p class="stat-note">auf kuratierten Begriffen und Wortformen: 93 gefundene Fragen bleiben 93.</p>
+          </article>
+        </div>
+
+        <div class="chart-grid">
+          <figure class="chart" aria-labelledby="chart-found-title">
+            <figcaption>
+              <h3 id="chart-found-title">Gefunden</h3>
+              <p>Fragen, deren Fundstellen alle unter den ersten 12 Treffern stehen, von 107 beantwortbaren. Mehr ist besser.</p>
+            </figcaption>
+            <ol class="bars">
+              <li class="bar-row" tabindex="0" style="--value: 57; --max: 107">
+                <span class="bar-label">Wortsuche heute <span class="tag">im Lese-Skill</span></span>
+                <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
+                <span class="bar-value">57</span>
+                <span class="bar-tip" role="tooltip"><strong>57 von 107</strong> · BM25F über Titel, Aliase, Überschriften, Beschreibung und Text</span>
+              </li>
+              <li class="bar-row" tabindex="0" style="--value: 74; --max: 107">
+                <span class="bar-label">+ Seiten-Aliase in Nutzersprache <span class="tag">im Lese-Skill · Pflege</span></span>
+                <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
+                <span class="bar-value">74</span>
+                <span class="bar-tip" role="tooltip"><strong>74 von 107</strong> · Synonyme und englische Begriffe im vorhandenen Feld <code>aliases</code>, ohne Codeänderung</span>
+              </li>
+              <li class="bar-row" tabindex="0" style="--value: 81; --max: 107">
+                <span class="bar-label">Statische Embedding-Tabelle <span class="tag">Vergleich</span></span>
+                <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
+                <span class="bar-value">81</span>
+                <span class="bar-tip" role="tooltip"><strong>81 von 107</strong> · Vektorvergleich mit einer englisch trainierten Tabelle von 16 MB</span>
+              </li>
+              <li class="bar-row" tabindex="0" style="--value: 93; --max: 107">
+                <span class="bar-label">Aliase + Wortformen <span class="tag">Prototyp</span></span>
+                <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
+                <span class="bar-value">93</span>
+                <span class="bar-tip" role="tooltip"><strong>93 von 107</strong> · zusätzlich Umlaut-Schreibweisen, Flexion, Wortteile und Tippfehler</span>
+              </li>
+            </ol>
+            <p class="chart-note">Der günstigste Hebel sind Aliase: 17 Fragen mehr, ohne eine Zeile Code. Die Embedding-Tabelle findet mehr als die Wortsuche allein, aber weniger als Aliase plus Wortformen, und auf diesen beiden zusammen bringt sie nichts mehr dazu.</p>
+          </figure>
+
+          <figure class="chart" aria-labelledby="chart-false-title">
+            <figcaption>
+              <h3 id="chart-false-title">Fehltreffer</h3>
+              <p>Treffer für die 7 Fragen, die das Wiki nicht beantworten kann, höchstens 12 je Frage. Weniger ist besser.</p>
+            </figcaption>
+            <ol class="bars">
+              <li class="bar-row" tabindex="0" style="--value: 16; --max: 84">
+                <span class="bar-label">Wortsuche heute <span class="tag">im Lese-Skill</span></span>
+                <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
+                <span class="bar-value">16</span>
+                <span class="bar-tip" role="tooltip"><strong>16 Treffer</strong> · 2,3 je Frage, 2 der 7 Fragen bleiben leer</span>
+              </li>
+              <li class="bar-row" tabindex="0" style="--value: 18; --max: 84">
+                <span class="bar-label">+ Seiten-Aliase in Nutzersprache <span class="tag">im Lese-Skill · Pflege</span></span>
+                <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
+                <span class="bar-value">18</span>
+                <span class="bar-tip" role="tooltip"><strong>18 Treffer</strong> · 2,6 je Frage, weiterhin 2 der 7 Fragen leer</span>
+              </li>
+              <li class="bar-row" tabindex="0" style="--value: 84; --max: 84">
+                <span class="bar-label">Statische Embedding-Tabelle <span class="tag">Vergleich</span></span>
+                <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
+                <span class="bar-value">84</span>
+                <span class="bar-tip" role="tooltip"><strong>84 Treffer</strong> · jede der 7 Fragen bekommt die vollen 12</span>
+              </li>
+              <li class="bar-row" tabindex="0" style="--value: 50; --max: 84">
+                <span class="bar-label">Aliase + Wortformen <span class="tag">Prototyp</span></span>
+                <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
+                <span class="bar-value">50</span>
+                <span class="bar-tip" role="tooltip"><strong>50 Treffer</strong> · 7,1 je Frage, vor allem über Wortteile</span>
+              </li>
+            </ol>
+            <p class="chart-note">Aliase kosten fast nichts. Eine Vektorsuche liefert dagegen immer die nächsten Nachbarn, auch wenn nichts passt. „Nicht gefunden“ gibt es dann nicht mehr. Wortformen helfen viel, kosten aber Präzision und kommen deshalb erst mit einer eigenen Präzisionsprüfung.</p>
+          </figure>
+        </div>
+
+        <div class="measure-notes">
+          <h3>So wurde gemessen – und was die Zahlen nicht sagen</h3>
+          <ul>
+            <li>Ein synthetisches, deutschsprachiges Test-Wiki eines fiktiven Stadtwerks: 45 Inhaltsseiten, 11 Quellen, 114 Fragen in 15 Kategorien. „Gefunden“ heißt: alle Pflichtseiten einer Frage stehen unter den ersten 12 Treffern.</li>
+            <li>Die Aliase wurden geschrieben, ohne die Testfragen zu kennen. Die Wortform-Regeln wurden an diesen Fragen entwickelt; sie sind ein Prototyp und noch nicht im Skill.</li>
+            <li>Die Embedding-Tabelle ist englisch trainiert und lief lokal ohne Fremdbibliothek. Ein neuronales Modell wurde nicht gemessen: Es bräuchte einen Dienst oder Fremdbibliotheken, die der Skill bewusst nicht hat.</li>
+            <li>Ein einzelnes Test-Wiki ist keine Zusage für jedes Wiki. Und ein leeres Ergebnis beweist nie, dass ein Thema fehlt.</li>
+          </ul>
+          <details>
+            <summary>Alle Messwerte als Tabelle</summary>
+            <div class="table-wrap">
+              <table class="measure-table">
+                <caption class="visually-hidden">Messwerte der Suchvarianten auf dem Test-Wiki</caption>
+                <thead>
+                  <tr><th scope="col">Variante</th><th scope="col">Top 3</th><th scope="col">Top 12</th><th scope="col">Top 100</th><th scope="col">Fehltreffer</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Wortsuche heute</td><td>47</td><td>57</td><td>62</td><td>16</td></tr>
+                  <tr><td>+ Seiten-Aliase in Nutzersprache</td><td>64</td><td>74</td><td>79</td><td>18</td></tr>
+                  <tr><td>Statische Embedding-Tabelle</td><td>68</td><td>81</td><td>99</td><td>84</td></tr>
+                  <tr><td>Aliase + Wortformen</td><td>82</td><td>93</td><td>97</td><td>50</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="chart-note">Top 3, 12 und 100: gefundene Fragen von 107, deren Fundstellen alle unter den ersten 3, 12 oder 100 Treffern stehen. Fehltreffer: Treffer für 7 Fragen ohne Antwort im Wiki, bei höchstens 12 je Frage. Bei 100 Plätzen liefert eine Vektorsuche fast jede der 52 durchsuchten Dateien, der Wert in dieser Spalte sagt dort wenig.</p>
+          </details>
+          <p class="chart-note"><a class="text-link" href="https://github.com/GodModeAI2025/SkillSafeWerkstatt/blob/main/docs/bedeutungssuche-und-vollstaendigkeit.md">Analyse und Stufenplan lesen →</a></p>
         </div>
       </section>
 
