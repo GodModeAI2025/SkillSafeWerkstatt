@@ -397,7 +397,7 @@
     .chart h3 { margin-bottom: 6px; font-size: 1.3rem; letter-spacing: -.02em; }
     .chart figcaption p { margin: 0 0 22px; color: var(--muted); font-size: .94rem; }
     .bars { margin: 0; padding: 0; display: grid; gap: 16px; list-style: none; }
-    .bar-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 3.4em; column-gap: 12px; row-gap: 6px; align-items: center; border-radius: 8px; outline-offset: 6px; }
+    .bar-row { display: grid; grid-template-columns: minmax(0, 1fr) 3.4em; column-gap: 12px; row-gap: 6px; align-items: center; }
     .bar-label { grid-column: 1 / -1; font-size: .95rem; font-weight: 650; }
     .tag {
       display: inline-block;
@@ -421,27 +421,8 @@
       transition: filter .15s ease;
     }
     .bar-value { font-weight: 750; font-variant-numeric: tabular-nums; text-align: right; }
-    .bar-tip {
-      position: absolute;
-      z-index: 3;
-      right: 0;
-      bottom: calc(100% + 6px);
-      max-width: min(320px, 100%);
-      padding: 8px 12px;
-      border: 1px solid var(--line-strong);
-      border-radius: 10px;
-      background: var(--surface);
-      box-shadow: 0 12px 30px rgba(0, 0, 102, .16);
-      color: var(--muted);
-      font-size: .86rem;
-      line-height: 1.4;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity .15s ease;
-    }
-    .bar-tip strong { color: var(--text); }
-    .bar-row:hover .bar-tip, .bar-row:focus .bar-tip { opacity: 1; }
-    .bar-row:hover .bar-fill, .bar-row:focus .bar-fill { filter: brightness(1.12); }
+    .bar-note { grid-column: 1 / -1; color: var(--muted); font-size: .84rem; line-height: 1.4; }
+    .bar-row:hover .bar-fill { filter: brightness(1.12); }
     .chart-note { margin: 22px 0 0; color: var(--muted); font-size: .92rem; }
     .measure-notes {
       margin-top: 22px;
@@ -644,25 +625,25 @@
       <section id="suche" aria-labelledby="search-title">
         <div class="section-heading">
           <p class="eyebrow">Aus der Messung</p>
-          <h2 id="search-title">Bedeutung finden ohne Vektordatenbank.</h2>
-          <p>Wer ein Wiki fragt, benutzt selten dessen Wörter. Wir wollten wissen, was dagegen hilft, und haben es an einem Test-Wiki mit 114 Fragen gemessen. Sieben davon fragen nach Themen, die gar nicht drinstehen. Unser Ergebnis: Mit Bedeutung, die beim Pflegen ins Wiki geschrieben wird, findest du mehr und behältst ein ehrliches „nicht gefunden“. Die getestete Embedding-Tabelle verliert genau das.</p>
+          <h2 id="search-title">Mehr finden ohne Vektordatenbank.</h2>
+          <p>Wer ein Wiki fragt, benutzt nicht immer dessen Wörter. Wir wollten wissen, was dagegen hilft, und haben es an einem Test-Wiki mit 114 Fragen gemessen. Sieben davon fragen nach Themen, die gar nicht drinstehen. Auf diesem Test-Wiki brachten Aliase, die beim Pflegen ins Wiki geschrieben werden, 17 gefundene Fragen mehr, bei zwei zusätzlichen Fehltreffern. Eine Embedding-Tabelle war mit Schwelle etwas schwächer und ohne Schwelle voller Fehltreffer. Und sie bräuchte ein Modell, das der Skill bewusst nicht mitbringt.</p>
         </div>
 
         <div class="stat-row">
           <article class="stat">
             <p class="stat-label">Allein durch Seiten-Aliase in Nutzersprache</p>
             <p class="stat-value">+17 Fragen</p>
-            <p class="stat-note">57 → 74 von 107 gefunden. Das Feld gibt es schon, gefüllt wird es bei der Pflege.</p>
+            <p class="stat-note">57 → 74 von 107 gefunden, bei 2 zusätzlichen Fehltreffern. Das Feld gibt es schon, gefüllt wird es bei der Pflege.</p>
           </article>
           <article class="stat">
             <p class="stat-label">Englische Fragen an ein deutsches Wiki</p>
             <p class="stat-value">1 → 7 von 8</p>
-            <p class="stat-note">gefunden, weil englische Begriffe in denselben Aliasen stehen.</p>
+            <p class="stat-note">mit englischen Begriffen in den Aliasen. Die Embedding-Tabelle mit Schwelle fand 1 von 8.</p>
           </article>
           <article class="stat">
-            <p class="stat-label">Zusatznutzen einer Embedding-Tabelle</p>
+            <p class="stat-label">Zusatznutzen der getesteten Embedding-Tabelle</p>
             <p class="stat-value">+0</p>
-            <p class="stat-note">auf kuratierten Begriffen und Wortformen: 93 gefundene Fragen bleiben 93.</p>
+            <p class="stat-note">mit Schwelle auf Aliasen, Beispielfragen und Wortformen: 93 gefundene Fragen bleiben 93.</p>
           </article>
         </div>
 
@@ -670,35 +651,41 @@
           <figure class="chart" aria-labelledby="chart-found-title">
             <figcaption>
               <h3 id="chart-found-title">Gefunden</h3>
-              <p>Fragen, deren Fundstellen alle unter den ersten 12 Treffern stehen, von 107 beantwortbaren. Mehr ist besser.</p>
+              <p>Fragen, bei denen alle nötigen Seiten unter den ersten 12 Treffern stehen, von 107 beantwortbaren. Mehr ist besser.</p>
             </figcaption>
             <ol class="bars">
-              <li class="bar-row" tabindex="0" style="--value: 57; --max: 107">
+              <li class="bar-row" style="--value: 57; --max: 107">
                 <span class="bar-label">Wortsuche heute <span class="tag">im Lese-Skill</span></span>
                 <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
                 <span class="bar-value">57</span>
-                <span class="bar-tip" role="tooltip"><strong>57 von 107</strong> · BM25F über Titel, Aliase, Überschriften, Beschreibung und Text</span>
+                <span class="bar-note">BM25F über Titel, Aliase, Überschriften, Beschreibung und Text</span>
               </li>
-              <li class="bar-row" tabindex="0" style="--value: 74; --max: 107">
+              <li class="bar-row" style="--value: 74; --max: 107">
                 <span class="bar-label">+ Seiten-Aliase in Nutzersprache <span class="tag">im Lese-Skill · Pflege</span></span>
                 <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
                 <span class="bar-value">74</span>
-                <span class="bar-tip" role="tooltip"><strong>74 von 107</strong> · Synonyme und englische Begriffe im vorhandenen Feld <code>aliases</code>, ohne Codeänderung</span>
+                <span class="bar-note">Synonyme und englische Begriffe im vorhandenen Feld <code>aliases</code>, ohne Codeänderung</span>
               </li>
-              <li class="bar-row" tabindex="0" style="--value: 81; --max: 107">
-                <span class="bar-label">Statische Embedding-Tabelle <span class="tag">Vergleich</span></span>
+              <li class="bar-row" style="--value: 71; --max: 107">
+                <span class="bar-label">Embedding-Tabelle mit Schwelle <span class="tag">Vergleich · nicht im Skill</span></span>
+                <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
+                <span class="bar-value">71</span>
+                <span class="bar-note">hinter der Wortsuche, Nachbarn erst ab einer Ähnlichkeit von 0,55</span>
+              </li>
+              <li class="bar-row" style="--value: 81; --max: 107">
+                <span class="bar-label">Embedding-Tabelle ohne Schwelle <span class="tag">Vergleich · nicht im Skill</span></span>
                 <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
                 <span class="bar-value">81</span>
-                <span class="bar-tip" role="tooltip"><strong>81 von 107</strong> · Vektorvergleich mit einer englisch trainierten Tabelle von 16 MB</span>
+                <span class="bar-note">englisch trainiert, 16 MB, gibt immer die nächsten Nachbarn zurück</span>
               </li>
-              <li class="bar-row" tabindex="0" style="--value: 93; --max: 107">
-                <span class="bar-label">Aliase + Wortformen <span class="tag">Selbstversuch</span></span>
+              <li class="bar-row" style="--value: 93; --max: 107">
+                <span class="bar-label">Aliase + Wortformen <span class="tag">Selbstversuch · nicht im Skill</span></span>
                 <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
                 <span class="bar-value">93</span>
-                <span class="bar-tip" role="tooltip"><strong>93 von 107</strong> · zusätzlich Umlaut-Schreibweisen, Flexion, Wortteile und Tippfehler</span>
+                <span class="bar-note">lockerer Regelsatz, an diesen Fragen entwickelt</span>
               </li>
             </ol>
-            <p class="chart-note">Am billigsten sind Aliase: 17 Fragen mehr, ohne eine Zeile Code. Die Embedding-Tabelle findet mehr als die Wortsuche allein. Gegen Aliase plus Wortformen verliert sie, und obendrauf gesetzt bringt sie keine einzige Frage dazu.</p>
+            <p class="chart-note">Aliase brauchen keine Zeile Code und brachten hier 17 Fragen mehr. Ihren Pflegeaufwand haben wir nicht gemessen. Die Embedding-Tabelle ohne Schwelle fand mehr als die Aliase. Auf Aliase, Beispielfragen und Wortformen gesetzt brachte sie keine einzige Frage dazu.</p>
           </figure>
 
           <figure class="chart" aria-labelledby="chart-false-title">
@@ -707,41 +694,49 @@
               <p>Treffer für die 7 Fragen, auf die das Wiki keine Antwort hat, höchstens 12 je Frage. Weniger ist besser.</p>
             </figcaption>
             <ol class="bars">
-              <li class="bar-row" tabindex="0" style="--value: 16; --max: 84">
+              <li class="bar-row" style="--value: 16; --max: 84">
                 <span class="bar-label">Wortsuche heute <span class="tag">im Lese-Skill</span></span>
                 <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
                 <span class="bar-value">16</span>
-                <span class="bar-tip" role="tooltip"><strong>16 Treffer</strong> · 2,3 je Frage, 2 der 7 Fragen bleiben leer</span>
+                <span class="bar-note">2,3 je Frage, 2 der 7 Fragen bleiben leer</span>
               </li>
-              <li class="bar-row" tabindex="0" style="--value: 18; --max: 84">
+              <li class="bar-row" style="--value: 18; --max: 84">
                 <span class="bar-label">+ Seiten-Aliase in Nutzersprache <span class="tag">im Lese-Skill · Pflege</span></span>
                 <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
                 <span class="bar-value">18</span>
-                <span class="bar-tip" role="tooltip"><strong>18 Treffer</strong> · 2,6 je Frage, weiterhin 2 der 7 Fragen leer</span>
+                <span class="bar-note">2,6 je Frage, weiterhin 2 der 7 leer</span>
               </li>
-              <li class="bar-row" tabindex="0" style="--value: 84; --max: 84">
-                <span class="bar-label">Statische Embedding-Tabelle <span class="tag">Vergleich</span></span>
+              <li class="bar-row" style="--value: 16; --max: 84">
+                <span class="bar-label">Embedding-Tabelle mit Schwelle <span class="tag">Vergleich · nicht im Skill</span></span>
+                <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
+                <span class="bar-value">16</span>
+                <span class="bar-note">wie heute, 2 der 7 Fragen bleiben leer</span>
+              </li>
+              <li class="bar-row" style="--value: 84; --max: 84">
+                <span class="bar-label">Embedding-Tabelle ohne Schwelle <span class="tag">Vergleich · nicht im Skill</span></span>
                 <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
                 <span class="bar-value">84</span>
-                <span class="bar-tip" role="tooltip"><strong>84 Treffer</strong> · jede der 7 Fragen bekommt die vollen 12</span>
+                <span class="bar-note">jede der 7 Fragen bekommt die vollen 12</span>
               </li>
-              <li class="bar-row" tabindex="0" style="--value: 50; --max: 84">
-                <span class="bar-label">Aliase + Wortformen <span class="tag">Selbstversuch</span></span>
+              <li class="bar-row" style="--value: 50; --max: 84">
+                <span class="bar-label">Aliase + Wortformen <span class="tag">Selbstversuch · nicht im Skill</span></span>
                 <span class="bar-track" aria-hidden="true"><span class="bar-fill"></span></span>
                 <span class="bar-value">50</span>
-                <span class="bar-tip" role="tooltip"><strong>50 Treffer</strong> · 7,1 je Frage, vor allem über Wortteile</span>
+                <span class="bar-note">7,1 je Frage, keine der 7 bleibt leer, vor allem über Wortteile</span>
               </li>
             </ol>
-            <p class="chart-note">Aliase kosten zwei Fehltreffer, mehr nicht. Die Embedding-Tabelle gibt immer die nächsten Nachbarn zurück, auch wenn keiner passt. „Nicht gefunden“ kommt bei ihr nie vor. Wortformen helfen viel und kosten Präzision. Deshalb bauen wir sie erst ein, wenn eine eigene Präzisionsprüfung steht.</p>
+            <p class="chart-note">Aliase kosteten hier zwei Fehltreffer mehr, und eine Frage rutschte von Platz 2 auf Platz 4. Mit Schwelle hielt die Embedding-Tabelle die Fehltreffer auf dem heutigen Stand, ohne Schwelle bekam jede Frage die vollen 12. Wortformen halfen auf diesen Fragen viel und kosten Präzision. Ob sie in den Skill kommen, ist offen. Vorher bräuchte es eine eigene Präzisionsprüfung.</p>
           </figure>
         </div>
 
         <div class="measure-notes">
           <h3>Wie wir gemessen haben und was die Zahlen nicht sagen</h3>
           <ul>
-            <li>Ein synthetisches, deutschsprachiges Test-Wiki eines erfundenen Stadtwerks: 45 Inhaltsseiten, 11 Quellen, 114 Fragen in 15 Kategorien. „Gefunden“ heißt: Alle Pflichtseiten einer Frage stehen unter den ersten 12 Treffern.</li>
-            <li>Wer die Aliase schrieb, kannte die Testfragen nicht. Die Wortform-Regeln haben wir an genau diesen Fragen entwickelt. Sie sind ein Selbstversuch und stecken noch nicht im Skill.</li>
-            <li>Die Embedding-Tabelle ist englisch trainiert und lief lokal ohne fremde Bibliothek. Ein neuronales Modell haben wir nicht gemessen. Es bräuchte einen Dienst oder fremde Bibliotheken, und beides lässt der Skill mit Absicht weg.</li>
+            <li>Ein synthetisches, deutschsprachiges Test-Wiki eines erfundenen Stadtwerks: 45 Inhaltsseiten, 11 Quellen, 114 Fragen in 15 Kategorien. „Gefunden“ heißt: Alle Seiten, die eine Frage zur Antwort braucht, stehen unter den ersten 12 Treffern.</li>
+            <li>Die Fragen sind gezielt nach Schwierigkeiten gebaut, 5 bis 11 je Kategorie, etwa Tippfehler, Flexion, Synonyme und englische Fragen. Wie oft echte Nutzer so fragen, sagen die Zahlen nicht.</li>
+            <li>Die Aliase schrieb ein Sprachmodell in der Rolle des Pflegers, bevor es die Testfragen sah. Es kannte sieben Beispielwörter aus einer Voranalyse, keines davon steht in den Aliasen.</li>
+            <li>Die Zeile „Aliase + Wortformen“ stammt aus einem lockeren Regelsatz, den wir an genau diesen Fragen entwickelt haben. Der vorsichtigere Regelsatz, den unsere Analyse empfiehlt, kam allein auf 81 gefundene Fragen und 31 Fehltreffer. Zusammen mit Aliasen haben wir ihn nicht gemessen. Beide sind ein Selbstversuch und stecken nicht im Skill.</li>
+            <li>Die Embedding-Tabelle ist englisch trainiert und lief lokal ohne fremde Bibliothek. Ein neuronales Modell konnten wir nicht messen, weil der Modell-Download in der Testumgebung gesperrt war. Für den Skill käme es ohnehin nicht infrage: Es bräuchte einen Dienst oder fremde Bibliotheken, und beides lässt der Skill mit Absicht weg.</li>
             <li>Ein einzelnes Test-Wiki ist keine Zusage für jedes Wiki. Und ein leeres Ergebnis beweist nie das Fehlen eines Themas.</li>
           </ul>
           <details>
@@ -755,12 +750,13 @@
                 <tbody>
                   <tr><td>Wortsuche heute</td><td>47</td><td>57</td><td>62</td><td>16</td></tr>
                   <tr><td>+ Seiten-Aliase in Nutzersprache</td><td>64</td><td>74</td><td>79</td><td>18</td></tr>
-                  <tr><td>Statische Embedding-Tabelle</td><td>68</td><td>81</td><td>99</td><td>84</td></tr>
+                  <tr><td>Embedding-Tabelle mit Schwelle</td><td>58</td><td>71</td><td>76</td><td>16</td></tr>
+                  <tr><td>Embedding-Tabelle ohne Schwelle</td><td>68</td><td>81</td><td>99</td><td>84</td></tr>
                   <tr><td>Aliase + Wortformen (Selbstversuch)</td><td>82</td><td>93</td><td>97</td><td>50</td></tr>
                 </tbody>
               </table>
             </div>
-            <p class="chart-note">Top 3, 12 und 100 zählen die Fragen von 107, deren Fundstellen alle unter den ersten 3, 12 oder 100 Treffern stehen. Fehltreffer zählen die Treffer für 7 Fragen ohne Antwort im Wiki, höchstens 12 je Frage. Bei 100 Plätzen liefert die Embedding-Tabelle fast jede der 52 durchsuchten Dateien. Ihr Wert in dieser Spalte sagt deshalb wenig.</p>
+            <p class="chart-note">Top 3, 12 und 100 zählen die Fragen von 107, bei denen alle nötigen Seiten unter den ersten 3, 12 oder 100 Treffern stehen. Fehltreffer zählen die Treffer für 7 Fragen ohne Antwort im Wiki, höchstens 12 je Frage. Ohne Schwelle liefert die Embedding-Tabelle bei 100 Plätzen für jede Frage alle 52 durchsuchten Dateien, also die 45 Inhaltsseiten plus Index- und Navigationsseiten. Quellen werden standardmäßig nicht durchsucht. Ihre 99 sind deshalb das erreichbare Maximum: Es fehlen genau die 8 Fragen, deren Antwort allein in Quellen steht.</p>
           </details>
           <p class="chart-note"><a class="text-link" href="https://github.com/GodModeAI2025/SkillSafeWerkstatt/blob/main/docs/bedeutungssuche-und-vollstaendigkeit.md">Analyse und Stufenplan lesen →</a></p>
         </div>

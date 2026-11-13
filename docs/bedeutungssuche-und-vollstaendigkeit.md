@@ -104,7 +104,7 @@ Untersucht und, wo möglich, gemessen wurden fünf Familien:
 | Option | Ergebnis (3 / 12 / 100 von 107) | Urteil |
 |---|---|---|
 | A Neuronale Embeddings (Modell, Vektorindex) | nicht gemessen | bricht vier Regeln; `onnxruntime` braucht Python ≥ 3.11, das Modell muss heruntergeladen werden |
-| B Statische Embedding-Tabelle im Skill | 68 / 81 / 99 allein, **+0** auf dem empfohlenen Stapel | liefert für *jede* Negativfrage 12 Treffer und zerstört damit jedes Fehlanzeige-Signal |
+| B Statische Embedding-Tabelle im Skill | ohne Schwelle 68 / 81 / 99, mit Ähnlichkeitsschwelle hinter der Wortsuche 58 / 71 / 76; **+0** auf dem Stapel | ohne Schwelle 12 Treffer für *jede* Negativfrage; mit Schwelle Fehltreffer wie heute (16), aber weniger gefunden als mit Aliasen (71 statt 74) und bei englischen Fragen 1 von 8 statt 7 von 8 |
 | C1 Zeichen-n-Gramm-Kosinus (3–5) | 76 / 88 / 99, aber 12 Treffer für jede Negativfrage | nicht als Ranker; **übernehmen** nur als erklärbare Wortform-Schicht (67–71 / 81–83 / 88–91, Befund 2) |
 | C2–C5 LSA, Random Indexing, Kookkurrenz, Pseudo-Relevanz-Feedback | – / 59–67 / – | schlechter als die Wortform-Schicht, nicht erklärbar |
 | D Kuratierte Erweiterung (Aliase, eingefroren im Release) | 70 / 79 / 85 | **übernehmen**, wirkt teilweise schon heute |
@@ -120,8 +120,9 @@ Die Regelkonflikte im Einzelnen:
   „Search may expand a query only through confirmed preferred terms and aliases." Eine
   Ähnlichkeitssuche wäre eine unbestätigte Erweiterung.
 
-Der Host-Agent ist bereits ein Sprachmodell. Ein zweites Modell im Skill wäre teurer, schlechter
-prüfbar und bei den Negativfragen gemessen schädlich.
+Der Host-Agent ist bereits ein Sprachmodell. Ein zweites Modell im Skill wäre teurer und
+schlechter prüfbar. Ohne Schwelle war es bei den Negativfragen gemessen schädlich, mit Schwelle
+brachte es weniger als Aliase und auf dem Stapel nichts.
 
 ---
 
@@ -398,8 +399,9 @@ umgesetzt.
 ## 5. Was bewusst nicht übernommen werden sollte
 
 - **Neuronale Embeddings, Vektorindex, Suchdienst.** Gründe in Abschnitt 3.
-- **Statische Embedding-Tabelle.** Gemessen +0 auf dem Stapel, und sie macht jede Negativfrage
-  zu 12 Treffern.
+- **Statische Embedding-Tabelle.** Gemessen +0 auf dem Stapel. Ohne Schwelle macht sie jede
+  Negativfrage zu 12 Treffern. Mit Schwelle hält sie die Fehltreffer auf dem heutigen Stand,
+  findet aber weniger als Aliase und bei englischen Fragen 1 von 8.
 - **LSA, Kookkurrenz, Pseudo-Relevanz-Feedback.** Schlechter als die Wortform-Schicht und nicht
   erklärbar.
 - **Ein Score-Schwellenwert als Fehlanzeige.** Scores sind ungeeicht (Befund 4).
