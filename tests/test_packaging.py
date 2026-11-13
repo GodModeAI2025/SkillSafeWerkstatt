@@ -5,15 +5,44 @@ from __future__ import annotations
 
 import ast
 import json
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from typing import Optional
 
 REPO = Path(__file__).resolve().parent.parent
 SKILLS = ("maintain-llm-wiki", "query-llm-wiki")
 STANDARD_LIBRARY_ALLOWED = True
+# Helpers the exporter copies into every frozen knowledge skill. They resolve
+# their imports against themselves plus the maintenance skill's library modules.
+KNOWLEDGE_TEMPLATES = REPO / "maintain-llm-wiki" / "assets" / "knowledge-skill"
+# The README promises Python 3.9 or newer.
+OLDEST_PYTHON = (3, 9)
+
+
+def oldest_available_python() -> Optional[str]:
+    """The oldest interpreter between 3.9 and 3.11 on PATH, verified by asking it."""
+    for minor in (9, 10, 11):
+        candidate = shutil.which(f"python3.{minor}")
+        if not candidate:
+            continue
+        probe = subprocess.run(
+            [candidate, "-I", "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+            capture_output=True,
+            text=True,
+        )
+        if probe.returncode == 0 and probe.stdout.split() == ["3", str(minor)]:
+            return candidate
+    return None
+
+
+def every_helper() -> list[Path]:
+    paths = [path for skill in SKILLS for path in sorted((REPO / skill / "scripts").glob("*.py"))]
+    return paths + sorted(KNOWLEDGE_TEMPLATES.glob("*.py"))
 
 
 def local_imports(path: Path) -> set[str]:
@@ -57,12 +86,162 @@ class ImportIntegrity(unittest.TestCase):
                             f"bundled with this skill nor in the standard library",
                         )
 
+    def test_every_knowledge_skill_template_resolves_its_imports(self) -> None:
+        """The exported skill's helpers were outside every static check before."""
+        available = {path.stem for path in KNOWLEDGE_TEMPLATES.glob("*.py")}
+        available |= {path.stem for path in (REPO / "maintain-llm-wiki" / "scripts").glob("*.py")}
+        for path in sorted(KNOWLEDGE_TEMPLATES.glob("*.py")):
+            for name in local_imports(path):
+                if name in available:
+                    continue
+                with self.subTest(template=path.name, imports=name):
+                    result = subprocess.run([sys.executable, "-c", f"import {name}"], capture_output=True)
+                    self.assertEqual(
+                        result.returncode,
+                        0,
+                        f"knowledge-skill template {path.name} imports {name!r}, which is neither a "
+                        f"bundled template or library module nor in the standard library",
+                    )
+
+    def test_every_helper_parses_with_the_oldest_supported_grammar(self) -> None:
+        """Catches what `feature_version` detects (match, except*, type statements).
+
+        It does not catch PEP 701 f-strings or star-unpacking in subscripts on a
+        newer parser; the compile test below does, where an old Python exists.
+        """
+        for path in every_helper():
+            with self.subTest(path=str(path.relative_to(REPO))):
+                ast.parse(path.read_text(encoding="utf-8"), str(path), feature_version=OLDEST_PYTHON)
+
+    def test_every_helper_compiles_on_the_oldest_available_python(self) -> None:
+        interpreter = oldest_available_python()
+        if interpreter is None:
+            self.skipTest("no Python 3.9 to 3.11 on PATH; newer-only grammar such as PEP 701 f-strings is unchecked")
+        program = "import sys\nfor p in sys.argv[1:]:\n    compile(open(p, encoding='utf-8').read(), p, 'exec')\n"
+        result = subprocess.run(
+            [interpreter, "-I", "-c", program, *map(str, every_helper())], capture_output=True, text=True
+        )
+        self.assertEqual(result.returncode, 0, f"{interpreter}: {result.stderr}")
+
     def test_no_helper_depends_on_a_third_party_package(self) -> None:
         forbidden = {"yaml", "requests", "pydantic", "numpy", "frontmatter", "markdown"}
-        for skill in SKILLS:
-            for path in sorted((REPO / skill / "scripts").glob("*.py")):
-                with self.subTest(path=path.name):
-                    self.assertEqual(local_imports(path) & forbidden, set())
+        for path in every_helper():
+            with self.subTest(path=str(path.relative_to(REPO))):
+                self.assertEqual(local_imports(path) & forbidden, set())
+
+
+class ExportableLibraries(unittest.TestCase):
+    """Code the exporter copies into a frozen skill stays read-only.
+
+    The exporter itself refuses imports outside its reviewed lists; this test
+    keeps the reviewed files honest. It reads the lists the way the exporter
+    uses them, at runtime, and scans the templates as well as the libraries.
+    """
+
+    # Names whose mere presence means file writing, processes, or sockets.
+    FORBIDDEN_NAMES = ("shutil", "tempfile", "subprocess", "socket", "portable_io", "atomic_write")
+    # pathlib and file-object methods that create, change, or delete files.
+    WRITE_METHODS = {
+        "write_text", "write_bytes", "write", "writelines", "mkdir", "makedirs", "touch", "unlink",
+        "rmdir", "remove", "symlink_to", "hardlink_to", "link_to", "chmod", "lchmod", "truncate",
+    }
+    # Path.replace(target) and Path.rename(target) take exactly one argument;
+    # str.replace and datetime.replace do not, so they stay allowed.
+    ONE_ARGUMENT_WRITES = {"replace", "rename"}
+
+    def write_calls(self, path: Path) -> list[str]:
+        found = [name for name in self.FORBIDDEN_NAMES if name in path.read_text(encoding="utf-8")]
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"), str(path))):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            name = function.id if isinstance(function, ast.Name) else getattr(function, "attr", "")
+            if isinstance(function, ast.Name) and name in {"exec", "eval", "compile", "__import__"}:
+                found.append(f"{name}() at line {node.lineno}")
+            if name == "open":
+                position = 1 if isinstance(function, ast.Name) else 0
+                mode_nodes = [keyword.value for keyword in node.keywords if keyword.arg == "mode"]
+                if len(node.args) > position:
+                    mode_nodes.append(node.args[position])
+                for mode in mode_nodes:
+                    if not (isinstance(mode, ast.Constant) and isinstance(mode.value, str)) or set(mode.value) & set("wax+"):
+                        found.append(f"open() for writing at line {node.lineno}")
+            if isinstance(function, ast.Attribute):
+                if name in self.WRITE_METHODS:
+                    found.append(f".{name}() at line {node.lineno}")
+                if name in self.ONE_ARGUMENT_WRITES and len(node.args) == 1 and not node.keywords:
+                    found.append(f".{name}(target) at line {node.lineno}")
+        return found
+
+    @staticmethod
+    def exporter():
+        sys.path.insert(0, str(REPO / "maintain-llm-wiki" / "scripts"))
+        import export_wiki_skill
+
+        return export_wiki_skill
+
+    def exported_files(self) -> list[Path]:
+        exporter = self.exporter()
+        libraries = [REPO / "maintain-llm-wiki" / "scripts" / name for name in exporter.EXPORTABLE_LIBRARIES]
+        templates = [KNOWLEDGE_TEMPLATES / name for name in exporter.TEMPLATE_ENTRYPOINTS]
+        return templates + libraries
+
+    def test_the_exporter_uses_its_reviewed_lists_unchanged(self) -> None:
+        source = (REPO / "maintain-llm-wiki" / "scripts" / "export_wiki_skill.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
+                self.assertNotIn(node.target.id, {"EXPORTABLE_LIBRARIES", "EXPORTED_STDLIB", "TEMPLATE_ENTRYPOINTS"})
+            if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "library_closure":
+                self.assertEqual([keyword.arg for keyword in node.keywords], [], "main() must use the default lists")
+
+    def test_every_exported_file_exists_and_writes_nothing(self) -> None:
+        files = self.exported_files()
+        self.assertTrue(files)
+        for path in files:
+            with self.subTest(file=str(path.relative_to(REPO))):
+                self.assertTrue(path.is_file(), path.name)
+                self.assertEqual(
+                    self.write_calls(path), [], f"{path.name} is copied into exported skills and must stay read-only"
+                )
+
+    def test_the_write_scan_recognises_ordinary_write_idioms(self) -> None:
+        """The scan must flag the idioms an earlier substring check missed."""
+        sample = (
+            "from pathlib import Path\n"
+            "def save(path, text):\n"
+            "    Path(path).write_text(text)\n"
+            "    Path(path).replace(path + '.bak')\n"
+            "    open(path, 'a').write(text)\n"
+            "    Path(path).parent.mkdir()\n"
+            "    Path(path).touch()\n"
+            "def harmless(value, moment):\n"
+            "    return value.replace('a', 'b'), moment.replace(microsecond=0), Path(value).read_text()\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            probe = Path(directory) / "probe.py"
+            probe.write_text(sample, encoding="utf-8")
+            found = self.write_calls(probe)
+        self.assertEqual(
+            sorted(item.split(" at ")[0] for item in found),
+            sorted([".write_text()", ".replace(target)", "open() for writing", ".write()", ".mkdir()", ".touch()"]),
+        )
+
+    def test_exported_code_imports_only_reviewed_modules(self) -> None:
+        exporter = self.exporter()
+        local = {name[:-3] for name in exporter.TEMPLATE_ENTRYPOINTS + exporter.EXPORTABLE_LIBRARIES}
+        allowed = set(exporter.EXPORTED_STDLIB) | local
+        for path in self.exported_files():
+            with self.subTest(file=path.name):
+                self.assertEqual(local_imports(path) - allowed, set())
+
+    def test_no_libraries_beyond_the_closure_are_listed(self) -> None:
+        """An allowlist entry nothing imports is a stale review that could hide a writer later."""
+        exporter = self.exporter()
+        closure = exporter.library_closure(
+            KNOWLEDGE_TEMPLATES, REPO / "maintain-llm-wiki" / "scripts", exporter.TEMPLATE_ENTRYPOINTS
+        )
+        self.assertEqual(sorted(path.name for path in closure), sorted(exporter.EXPORTABLE_LIBRARIES))
 
 
 class SharedModuleParity(unittest.TestCase):
