@@ -432,9 +432,13 @@ class Fusion(unittest.TestCase):
             list(report),
             [
                 "searched_files", "filtered_out", "formulations", "dropped_formulations", "matched_concepts",
-                "expanded_terms", "facets", "results", "reformulation_results", "coverage", "parser_errors",
+                "expanded_terms", "facets", "results", "reformulation_results", "coverage", "absence_check",
+                "exhaustive_hits", "parser_errors",
             ],
         )
+        # Since Stufe 4 every report carries the absence check; without --exhaustive it is not evaluated.
+        self.assertEqual(report["absence_check"]["reasons"], ["not_exhaustive"])
+        self.assertIsNone(report["exhaustive_hits"])
         self.assertEqual(list(report["results"][0])[-1], "found_by")
         assert_reformulation_identities(self, report, limit=12)
 

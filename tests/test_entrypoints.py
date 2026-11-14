@@ -21,6 +21,7 @@ locale encoding, or the switch would turn into mojibake one pipe later.
 from __future__ import annotations
 
 import ast
+import itertools
 import json
 import os
 import shutil
@@ -361,10 +362,10 @@ class IsolatedAndLegacyCodePageHosts(unittest.TestCase):
             "query skill": [str(QUERY / "search_wiki.py"), "--target", str(self.wiki.path), "--query", QUERY_WORD],
             "exported skill": [str(self.skill / "scripts" / "search_knowledge.py"), "--query", QUERY_WORD],
         }
-        for label, command in calls.items():
-            with self.subTest(search=label):
+        for (label, command), extra in itertools.product(calls.items(), ((), ("--exhaustive",))):
+            with self.subTest(search=label, flags=extra):
                 result = subprocess.run(
-                    [sys.executable, "-B", *command],
+                    [sys.executable, "-B", *command, *extra],
                     capture_output=True,
                     cwd=str(self.elsewhere),
                     env=subprocess_environment(PYTHONIOENCODING="cp1252"),
@@ -375,6 +376,11 @@ class IsolatedAndLegacyCodePageHosts(unittest.TestCase):
                 self.assertTrue(report["results"])
                 for character in OUTSIDE_CP1252:
                     self.assertIn(character, text)
+                if extra:
+                    # The passage with the characters comes back as an exhaustive hit, printed as UTF-8.
+                    hits = json.dumps(report["exhaustive_hits"], ensure_ascii=False)
+                    for character in OUTSIDE_CP1252:
+                        self.assertIn(character, hits)
 
     def test_a_request_on_stdin_survives_a_cp1252_environment(self) -> None:
         """--request - reads bytes: a legacy code page on the text layer changes nothing."""

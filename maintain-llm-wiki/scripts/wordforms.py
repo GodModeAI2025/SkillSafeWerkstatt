@@ -101,6 +101,8 @@ S_ENDING = frozenset("bdfghklmnrt")
 
 #: Characters that hide inside a word without being part of it.
 _INVISIBLE = {ord(character): None for character in "­​‌‍⁠﻿"}
+#: The same characters as one pattern: a single pass finds whether a text holds any of them.
+_HAS_INVISIBLE = re.compile("[­​‌‍⁠﻿]")
 #: Hyphen characters other than the ASCII hyphen-minus.
 _HYPHENS = {ord("‐"): "-", ord("‑"): "-"}
 #: A hyphen at a line end before a letter. It breaks a word when a letter
@@ -154,7 +156,7 @@ def repair_text(text: str) -> str:
 
     Never drops a letter. Text without such artefacts comes back unchanged.
     """
-    if any(character in text for character in "­​‌‍⁠﻿"):
+    if _HAS_INVISIBLE.search(text):
         text = text.translate(_INVISIBLE)
     if "‐" in text or "‑" in text:
         text = text.translate(_HYPHENS)

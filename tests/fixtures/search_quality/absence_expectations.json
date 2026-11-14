@@ -1,0 +1,102 @@
+{
+  "format": "lmwiki-search-quality-absence/1",
+  "about": "Recorded by record_expectations.py --absence from the search as it was at recording time. Every question runs once per set of reformulations.json with --exhaustive at --limit 12, on one release loaded with load(exhaustive=True, include_sources=True). negatives lists, per set, the seven questions about topics the wiki does not hold: complete must stay true with zero word-form hits, and every heuristic hit, identified within its file by path, kind and line, must be one recorded here with a reason, the judgment of a person who read the passage (a newly recorded hit carries the unjudged marker until then). complete_floor and claims_returned_floor are minimums per set: the number of complete checks, and the number of claim-heavy questions whose answering claim is printed in results or reformulation_results or returned as an exhaustive hit. tests/test_search_quality.py (AbsenceGate) also fails when a required page of an answerable question is in none of results, reformulation_results and the returned exhaustive_hits unless accepted lists it (set, id, path, reason), when an answering claim is not reachable (printed, a hit, or on a printed page with withheld claims), when a navigation file appears as a hit page, or when the exhaustive call changes anything the same call with include_sources returns. Caveats: the sets come from the same model family that is evaluated with them, so the numbers are optimistic; they are a regression gate, never a tuning target, and are never edited to make the gate pass. Changing this file is a deliberate act: state the change and its reason in the commit message.",
+  "default_limit": 12,
+  "sets": {
+    "A": {
+      "negatives": {
+        "ne-01": {
+          "complete": true,
+          "heuristic_hits": [
+            {
+              "path": "sources/src-8ecc834a628d29bc-erl-uterung-grundversorgung-nach-stromgvv.md",
+              "kind": "paragraph",
+              "line": 50
+            }
+          ],
+          "reason": "Not an answer: the paragraph (source page 3) is about reconnecting supply after an interruption under the StromGVV, not about a district-heating connection; reformulation 1 (Fernwärmeanschluss Kosten) matched it only through the query_part anschlusses and the word kosten. Judged on reading the passage."
+        },
+        "ne-02": {
+          "complete": true,
+          "heuristic_hits": [],
+          "reason": "no heuristic hits"
+        },
+        "ne-03": {
+          "complete": true,
+          "heuristic_hits": [],
+          "reason": "no heuristic hits"
+        },
+        "ne-04": {
+          "complete": true,
+          "heuristic_hits": [],
+          "reason": "no heuristic hits"
+        },
+        "ne-05": {
+          "complete": true,
+          "heuristic_hits": [],
+          "reason": "no heuristic hits"
+        },
+        "ne-06": {
+          "complete": true,
+          "heuristic_hits": [],
+          "reason": "no heuristic hits"
+        },
+        "ne-07": {
+          "complete": true,
+          "heuristic_hits": [],
+          "reason": "no heuristic hits"
+        }
+      },
+      "complete_floor": 112,
+      "claims_returned_floor": 8
+    },
+    "B": {
+      "negatives": {
+        "ne-01": {
+          "complete": true,
+          "heuristic_hits": [
+            {
+              "path": "sources/src-8ecc834a628d29bc-erl-uterung-grundversorgung-nach-stromgvv.md",
+              "kind": "paragraph",
+              "line": 50
+            }
+          ],
+          "reason": "Not an answer: the paragraph (source page 3) is about reconnecting supply after an interruption under the StromGVV, not about a district-heating connection; reformulation 1 (Fernwärmeanschluss Kosten) matched it only through the query_part anschlusses and the word kosten. Judged on reading the passage."
+        },
+        "ne-02": {
+          "complete": true,
+          "heuristic_hits": [],
+          "reason": "no heuristic hits"
+        },
+        "ne-03": {
+          "complete": true,
+          "heuristic_hits": [],
+          "reason": "no heuristic hits"
+        },
+        "ne-04": {
+          "complete": true,
+          "heuristic_hits": [],
+          "reason": "no heuristic hits"
+        },
+        "ne-05": {
+          "complete": true,
+          "heuristic_hits": [],
+          "reason": "no heuristic hits"
+        },
+        "ne-06": {
+          "complete": true,
+          "heuristic_hits": [],
+          "reason": "no heuristic hits"
+        },
+        "ne-07": {
+          "complete": true,
+          "heuristic_hits": [],
+          "reason": "no heuristic hits"
+        }
+      },
+      "complete_floor": 113,
+      "claims_returned_floor": 8
+    }
+  },
+  "accepted": []
+}

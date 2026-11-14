@@ -32,6 +32,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -448,4 +449,231 @@ def reformulation_regressions(expected: dict[str, Any], measured: dict[str, Any]
                                 f"merged rank {rank} -> {where}"
                             )
                             break
+    return problems
+
+
+# -- third gate: the guarded absence finding (Stufe 4) ------------------------------
+
+ABSENCE_EXPECTATIONS = HERE / "absence_expectations.json"
+ABSENCE_FORMAT = "lmwiki-search-quality-absence/1"
+#: The reason a freshly recorded heuristic hit carries until a person has judged it.
+UNJUDGED = "unjudged: read the passage and replace this with the judgment"
+ABSENCE_ABOUT = (
+    "Recorded by record_expectations.py --absence from the search as it was at recording time. Every question "
+    "runs once per set of reformulations.json with --exhaustive at --limit 12, on one release loaded with "
+    "load(exhaustive=True, include_sources=True). negatives lists, per set, the seven questions about topics the "
+    "wiki does not hold: complete must stay true with zero word-form hits, and every heuristic hit, identified "
+    "within its file by path, kind and line, must be one recorded here with a reason, the judgment of a person "
+    "who read the passage (a newly recorded hit carries the unjudged marker until then). complete_floor and "
+    "claims_returned_floor are minimums per set: the number of complete checks, and the number of claim-heavy "
+    "questions whose answering claim is printed in results or reformulation_results or returned as an exhaustive "
+    "hit. tests/test_search_quality.py (AbsenceGate) also fails when a required page of an answerable question is "
+    "in none of results, reformulation_results and the returned exhaustive_hits unless accepted lists it (set, id, "
+    "path, reason), when an answering claim is not reachable (printed, a hit, or on a printed page with withheld "
+    "claims), when a navigation file appears as a hit page, or when the exhaustive call changes anything the same "
+    "call with include_sources returns. Caveats: the sets come from the same model family that is evaluated with "
+    "them, so the numbers are optimistic; they are a regression gate, never a tuning target, and are never edited "
+    "to make the gate pass. Changing this file is a deliberate act: state the change and its reason in the commit "
+    "message."
+)
+#: What the exhaustive scan may add to a report; everything else must equal the call with include_sources.
+ABSENCE_INVARIANT_KEYS = (
+    "results", "reformulation_results", "formulations", "dropped_formulations", "matched_concepts",
+    "expanded_terms", "facets", "coverage", "searched_files", "filtered_out",
+)
+
+
+def navigation_file(path: str) -> bool:
+    """WIKI.md or an index.md, also inside a history snapshot: decided here, independent of the core under test."""
+    parts = path.split("/")
+    inner = parts[3:] if len(parts) > 3 and parts[:2] == ["meta", "history"] else parts
+    return parts[-1] == "index.md" or inner == ["WIKI.md"]
+
+
+def answer_claim(wiki: Path, page: str, ordinal: int, core: Any) -> dict[str, Any]:
+    """The claim a claim-heavy question asks about: the `ordinal`-th claim block of its page."""
+    body = core.frontmatter((wiki / page).read_text(encoding="utf-8"), page)[1]
+    return core.claims_in(body)[ordinal - 1]
+
+
+def measure_absence(
+    wiki: Path, ground_truth: list[dict[str, Any]], sets: dict[str, dict[str, list[str]]], core: Any = None
+) -> dict[str, Any]:
+    """Run every question once per set with --exhaustive; compare each run with the same call without the scan.
+
+    The release is loaded twice, once with the scan index and once with
+    include_sources only, and every question is searched over both loads.
+    """
+    core = core or load_core()
+    started = time.perf_counter()
+    exhaustive = core.load(wiki, include_sources=True, exhaustive=True)
+    plain = core.load(wiki, include_sources=True)
+    measured: dict[str, Any] = {}
+    for name in sorted(sets):
+        queries: dict[str, dict[str, Any]] = {}
+        for item in ground_truth:
+            also = list(sets[name].get(item["id"], []))
+            report = core.search_loaded(exhaustive, item["query"], also=also, limit=DEFAULT_LIMIT, exhaustive=True)
+            baseline = core.search_loaded(plain, item["query"], also=also, limit=DEFAULT_LIMIT)
+            check = report["absence_check"]
+            hits = report["exhaustive_hits"]
+            printed = report["results"] + report["reformulation_results"]
+            visible = {entry["path"] for entry in printed} | {entry["path"] for entry in hits}
+            entry: dict[str, Any] = {
+                "category": item["category"],
+                "query": item["query"],
+                "identical": all(report[key] == baseline[key] for key in ABSENCE_INVARIANT_KEYS),
+                "complete": check["complete"],
+                "reasons": check["reasons"],
+                "next_steps": check["next_steps"],
+                "reformulations_kept": len(report["formulations"]) - 1,
+                "reformulations_counted": check["reformulations_counted"],
+                "counts": check["counts"],
+                "budget": check["budget"],
+                "absent_terms": check["absent_terms"],
+                "results": len(report["results"]),
+                "matched": report["coverage"]["matched"],
+                "block": len(report["reformulation_results"]),
+                "navigation_hit_pages": [page["path"] for page in hits if navigation_file(page["path"])],
+                "heuristic_hits": [
+                    {
+                        "path": page["path"],
+                        "kind": hit["kind"],
+                        "line": hit["line"],
+                        "locator": hit["locator"],
+                        "formulations": hit["formulations"],
+                        "matched": hit.get("matched"),
+                        "text": str(hit.get("text") or "")[:200],
+                    }
+                    for page in hits
+                    for hit in page["hits"]
+                    if hit["strength"] == "heuristic"
+                ],
+                "visible": {path: path in visible for path in item["must_find"]},
+            }
+            if item.get("answer_claim_ordinal"):
+                page = item["must_find"][0]
+                claim = answer_claim(wiki, page, item["answer_claim_ordinal"], core)
+                shown = any(
+                    result["path"] == page and any(found.get("id") == claim["id"] for found in result["claims"])
+                    for result in printed
+                )
+                hit = any(
+                    found["kind"] == "claim" and found["locator"] == claim["id"]
+                    for result in hits
+                    if result["path"] == page
+                    for found in result["hits"]
+                )
+                withheld = any(
+                    result["path"] == page and result["claims_returned"] < result["claims_total"] for result in printed
+                )
+                entry["claim"] = {"id": claim["id"], "printed": shown, "hit": hit, "withheld_on_printed_page": withheld}
+            queries[item["id"]] = entry
+        measured[name] = {"queries": queries, "aggregates": absence_aggregates(queries)}
+    return {"sets": measured, "seconds": round(time.perf_counter() - started, 2)}
+
+
+def absence_aggregates(queries: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    answerable = {key: entry for key, entry in queries.items() if entry["category"] != "negative"}
+    claims = [entry["claim"] for entry in answerable.values() if "claim" in entry]
+    needed = sorted(entry["budget"]["needed_chars"] for entry in queries.values())
+    return {
+        "questions": len(queries),
+        "complete": sum(1 for entry in queries.values() if entry["complete"]),
+        "incomplete": {key: entry["reasons"] for key, entry in queries.items() if not entry["complete"]},
+        "identity_failures": sum(1 for entry in queries.values() if not entry["identical"]),
+        "visible_all": sum(1 for entry in answerable.values() if all(entry["visible"].values())),
+        "answerable": len(answerable),
+        "claims_returned": sum(1 for claim in claims if claim["printed"] or claim["hit"]),
+        "claims_reachable": sum(
+            1 for claim in claims if claim["printed"] or claim["hit"] or claim["withheld_on_printed_page"]
+        ),
+        "claim_questions": len(claims),
+        "navigation_hit_pages": sum(len(entry["navigation_hit_pages"]) for entry in queries.values()),
+        "needed_chars_median": needed[len(needed) // 2] if needed else 0,
+        "needed_chars_max": needed[-1] if needed else 0,
+    }
+
+
+def absence_expectations(measurement: dict[str, Any], previous: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    """The third gate's expectations; a negative keeps its reason when its heuristic hits did not change."""
+    sets: dict[str, Any] = {}
+    for name, measured in measurement["sets"].items():
+        before = ((previous or {}).get("sets", {}).get(name, {}) or {}).get("negatives", {})
+        negatives: dict[str, Any] = {}
+        for query_id, entry in measured["queries"].items():
+            if entry["category"] != "negative":
+                continue
+            recorded = [{"path": hit["path"], "kind": hit["kind"], "line": hit["line"]} for hit in entry["heuristic_hits"]]
+            old = before.get(query_id, {})
+            if not recorded:
+                reason = "no heuristic hits"
+            elif old.get("heuristic_hits") == recorded and str(old.get("reason") or "").strip():
+                reason = old["reason"]
+            else:
+                reason = UNJUDGED
+            negatives[query_id] = {"complete": entry["complete"], "heuristic_hits": recorded, "reason": reason}
+        totals = measured["aggregates"]
+        sets[name] = {
+            "negatives": negatives,
+            "complete_floor": totals["complete"],
+            "claims_returned_floor": totals["claims_returned"],
+        }
+    return {
+        "format": ABSENCE_FORMAT,
+        "about": ABSENCE_ABOUT,
+        "default_limit": DEFAULT_LIMIT,
+        "sets": sets,
+        "accepted": list((previous or {}).get("accepted", [])),
+    }
+
+
+def absence_problems(expected: dict[str, Any], measured: dict[str, Any]) -> dict[str, list[str]]:
+    """Every breach of the third gate's rules, grouped by rule; empty lists when the gate holds."""
+    problems: dict[str, list[str]] = {
+        "negatives": [], "heuristic_hits": [], "visibility": [], "floors": [], "navigation": [], "invariant": [],
+        "claims": [],
+    }
+    accepted = {(item.get("set"), item.get("id"), item.get("path")) for item in expected.get("accepted", [])}
+    for name, recorded in expected["sets"].items():
+        queries = measured["sets"][name]["queries"]
+        totals = measured["sets"][name]["aggregates"]
+        for query_id, negative in recorded["negatives"].items():
+            entry = queries[query_id]
+            if not entry["complete"] or entry["counts"]["hits_word_form"]:
+                problems["negatives"].append(
+                    f"set {name}, {query_id}: complete={entry['complete']} reasons={entry['reasons']} "
+                    f"word-form hits={entry['counts']['hits_word_form']}"
+                )
+            allowed = {(hit["path"], hit["kind"], hit["line"]) for hit in negative["heuristic_hits"]}
+            for hit in entry["heuristic_hits"]:
+                if (hit["path"], hit["kind"], hit["line"]) not in allowed:
+                    problems["heuristic_hits"].append(
+                        f"set {name}, {query_id}: new heuristic hit {hit['path']} {hit['kind']} line {hit['line']} "
+                        f"matched={json.dumps(hit['matched'], ensure_ascii=False)} text={hit['text']!r}"
+                    )
+        for query_id, entry in queries.items():
+            for path, seen in entry["visible"].items():
+                if not seen and (name, query_id, path) not in accepted:
+                    problems["visibility"].append(
+                        f"set {name}, {query_id}: required page {path} is in none of results, reformulation_results "
+                        "and the returned exhaustive_hits"
+                    )
+            for path in entry["navigation_hit_pages"]:
+                problems["navigation"].append(f"set {name}, {query_id}: navigation file {path} is a hit page")
+            if not entry["identical"]:
+                problems["invariant"].append(f"set {name}, {query_id}: the exhaustive call changed the ranking output")
+            claim = entry.get("claim")
+            if claim and not (claim["printed"] or claim["hit"] or claim["withheld_on_printed_page"]):
+                problems["claims"].append(f"set {name}, {query_id}: answering claim {claim['id']} is not reachable")
+        if totals["complete"] < recorded["complete_floor"]:
+            problems["floors"].append(
+                f"set {name}: complete checks {totals['complete']} < floor {recorded['complete_floor']}: "
+                f"{totals['incomplete']}"
+            )
+        if totals["claims_returned"] < recorded["claims_returned_floor"]:
+            problems["floors"].append(
+                f"set {name}: answering claims returned {totals['claims_returned']} < floor "
+                f"{recorded['claims_returned_floor']}"
+            )
     return problems

@@ -25,7 +25,7 @@ CATALOG = {
         {
             "id": "search",
             "helper": "search_wiki.py",
-            "description": "Search claims and sources with concept expansion, word forms and disclosed compound and typo heuristics (match_rules per result), optional agent reformulations searched in the same call (pages only they return come back separately in reformulation_results; each result names the searches that found it in found_by), and an optional validated metadata selector; a coverage block counts truncated matches, withheld claims, word forms, and unmatched terms per search.",
+            "description": "Search claims and sources with concept expansion, word forms and disclosed compound and typo heuristics (match_rules per result), optional agent reformulations searched in the same call (pages only they return come back separately in reformulation_results; each result names the searches that found it in found_by), and an optional validated metadata selector; a coverage block counts truncated matches, withheld claims, word forms, and unmatched terms per search; with exhaustive, the same call also ranks sources and scans every passage of the wiki pages, meta/questions.md and the source Markdown within a fixed 100,000-character evidence budget, and every report carries absence_check (complete, reasons, next_steps) and search_record.",
             "writes": False,
             "destructive": False,
             "requires_one_of": ["query", "request"],
@@ -37,6 +37,7 @@ CATALOG = {
                 {"name": "filter_json", "type": "selector", "required": False},
                 {"name": "include_sources", "type": "boolean", "required": False},
                 {"name": "include_history", "type": "boolean", "required": False},
+                {"name": "exhaustive", "type": "boolean; also ranks sources and scans every passage of the wiki pages, meta/questions.md and the source Markdown (with include_history also the snapshots) for all words of all searches (at most 100,000 printed characters of hits); required before stating that the wiki holds nothing on a question", "required": False},
                 {"name": "expect_manifest_sha256", "type": "sha256", "required": False},
             ],
         },

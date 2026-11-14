@@ -33,6 +33,16 @@ reformulations; each result only names the searches that found it in
 `found_by`. Pages that only reformulations return within the limit come back
 separately in `reformulation_results`, taken in turn by rank from each
 reformulation and never mixed into the query's ranking.
+
+Every report also carries `absence_check`, the verdict on whether an absence
+statement is allowed. With `exhaustive`, one call also ranks the sources and
+scans every passage of the ranked files except navigation (page headers,
+headings, claims, paragraphs, list items, tables, open questions) for all
+content words of all formulations, in the members the ranking resolved plus
+two scan-only additions: hyphen parts (`hyphen_part`) and the identifiers of
+claim and page metadata. The hits come back under `exhaustive_hits`, cut to a
+fixed budget of printed characters. The scan only adds keys: everything else equals the same
+call with `include_sources`. Nothing is indexed or cached on disk.
 """
 
 from __future__ import annotations
@@ -41,7 +51,7 @@ import json
 import re
 import unicodedata
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, NamedTuple, Optional
 
 import bm25
 import freshness
@@ -147,6 +157,88 @@ def normalized(value: str) -> str:
 FORM_STOPWORDS = frozenset(normalized(word) for word in STOPWORDS)
 #: Words that match only literally: the stopwords and the closed word classes.
 CLOSED_CLASS = FORM_STOPWORDS | wordforms.closed_class(normalized)
+
+
+# -- constants of the exhaustive scan and the absence check (Stufe 4) ----------
+
+#: The most printed characters `exhaustive_hits` may take (owner decision E2),
+#: counted exactly as the wrappers print the value, with REPORT_INDENT.
+EXHAUSTIVE_BUDGET_CHARS = 100_000
+#: The indent both wrappers print a report with; the budget is counted in it.
+REPORT_INDENT = 2
+#: A hit prints at most this many characters of its passage, cut around the first match.
+EXCERPT_CHARS = 400
+#: A passage ends once its text reaches this many characters, so a PDF
+#: extraction without blank lines cannot become one passage per page.
+PASSAGE_MAX_CHARS = 1_500
+#: How many pages without a returned hit absence_check names.
+OMITTED_PAGES_LISTED = 20
+#: Counted reformulations a complete absence check needs.
+MIN_EXHAUSTIVE_REFORMULATIONS = 2
+#: The longest query the search record quotes before it is cut.
+SEARCH_RECORD_QUERY_CHARS = 200
+#: The kinds of passage the scan cuts a file into; hits on one line sort in this order.
+PASSAGE_KINDS = ("header", "heading", "claim", "paragraph", "open_question")
+#: Prepositions and contractions the closed class lacks, and the light verbs
+#: of a question ("Gibt es ...?", "Wie geht ...?", "Was gilt ...?", "Was
+#: passiert ...?"), which name no topic. A passage need not hold them; the
+#: scan only. The ranking and the precision gate never use them.
+SCAN_FUNCTION_WORDS = frozenset(normalized(word) for word in (
+    "ab ans aufs außer binnen durchs fürs gegenüber hinter hinters innerhalb außerhalb neben samt statt "
+    "trotz übers ums unters vors während wegen zwischen "
+    "about after before between into over under via within without "
+    "gibt gibts geben gab gegeben geht gehen ging gegangen gilt gelten galt gegolten passiert passieren "
+    "funktioniert funktionieren steht stehen "
+    "get gets got happen happens happened exist exists existed").split())
+#: Words a passage never has to hold for a formulation to hit it.
+SCAN_EXCLUDED = CLOSED_CLASS | SCAN_FUNCTION_WORDS
+#: A page or slide marker of an extracted source, the grammar of validate_extraction.py.
+PAGE_MARKER = re.compile(r"<!--\s*(page|slide)\s*:\s*([^>]+?)\s*-->", re.IGNORECASE)
+#: Why an absence check is not complete, in the order they are listed.
+ABSENCE_REASONS = ("not_exhaustive", "too_few_reformulations", "no_content_words", "budget_exhausted")
+#: What to do before an absence statement, in the order they are listed.
+ABSENCE_STEPS = (
+    "read_withheld_claims", "read_results_without_claims", "read_reformulation_results", "read_exhaustive_hits",
+    "add_reformulations", "narrow_formulations",
+)
+ABSENCE_CHECK_FORMAT = "lmwiki-absence-check/1"
+SEARCH_RECORD_FORMAT = "lmwiki-search-record/1"
+#: The fixed sentence every absence check carries: what a complete check shows, and what it does not.
+ABSENCE_BOUNDARY = (
+    "A complete check means that every passage of the scanned files that holds all content words "
+    "of at least one searched formulation, in the forms listed under terms, itself or in its context, "
+    "was returned under exhaustive_hits. Context is the page header, the headings and label lines above "
+    "the passage, its parent list items and the first row of a split table, nothing else: a passage that "
+    "needs a neighbouring paragraph, or that words the answer differently, with other words, an irregular "
+    "form or another language, is not a hit, and layers marked scanned: false were not checked."
+)
+#: Order of the layers among pages with otherwise equal hits.
+SCOPE_RANK = {"wiki": 0, "sources": 1, "history": 2}
+#: A code fence: inside it no line is a heading or a marker.
+FENCE = re.compile(r"^ {0,3}(```|~~~)")
+#: A heading at column 0, as the ranking's HEADING counts it.
+SCAN_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+#: A list item starts a passage of its own.
+LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d{1,9}[.)])\s+")
+#: Where an overlong line may be split.
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+#: A setext heading underline under a one-line paragraph: = for level 1, - for level 2.
+SETEXT_UNDERLINE = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
+#: A line that is only bold text, with an optional colon: a label that heads the passages after it.
+BOLD_LABEL = re.compile(r"^(\*\*|__)(?=\S)(.+?)(?<=\S)\1:?$")
+#: The longest one-line paragraph that may act as a label or a setext heading.
+LABEL_MAX_CHARS = 100
+#: A label's level on the heading stack: below every Markdown heading, so any heading or the next label ends it.
+LABEL_LEVEL = 7
+#: The scan's rule for a token that holds the word as one of its hyphen-separated parts
+#: ("SMS" in "SMS-Warndienst"), and for the parts of a hyphenated search word written apart.
+HYPHEN_PART_RULE = "hyphen_part"
+#: Its weight, as low as a compound modifier; it only orders the listed forms and `matched`.
+HYPHEN_PART_WEIGHT = 0.35
+#: A source ID inside a wiki link or path, as the wiki contract names source files (`src-<hash>-<slug>.md`).
+SOURCE_ID_IN_TEXT = re.compile(r"\bsrc-[0-9a-f]{16}(?![0-9a-z])")
+#: A wiki link without a label; its target is an address, not text.
+UNLABELLED_WIKILINK = re.compile(r"\[\[([^\[\]|]*)\]\]")
 
 
 def tokens(value: str, drop_stopwords: bool = True, forms: bool = False) -> list[str]:
@@ -332,27 +424,27 @@ def query_terms(
     return terms, dropped
 
 
+def claim_fields(match: "re.Match[str]") -> dict[str, Any]:
+    """One claim block matched by CLAIM_BLOCK: its metadata and its text with whitespace collapsed."""
+    metadata: dict[str, str] = {}
+    for raw_line in match.group("meta").splitlines():
+        if ":" not in raw_line:
+            continue
+        key, value = raw_line.split(":", 1)
+        metadata[key.strip().casefold()] = value.strip()
+    return {
+        "id": metadata.get("id", ""),
+        "kind": metadata.get("kind", ""),
+        "status": metadata.get("status", ""),
+        "sources": split_pipe(metadata.get("sources", "")),
+        "replaces": split_pipe(metadata.get("replaces", "")),
+        "contradicts": split_pipe(metadata.get("contradicts", "")),
+        "text": " ".join(match.group("text").split()),
+    }
+
+
 def claims_in(body: str) -> list[dict[str, Any]]:
-    claims: list[dict[str, Any]] = []
-    for match in CLAIM_BLOCK.finditer(body):
-        metadata: dict[str, str] = {}
-        for raw_line in match.group("meta").splitlines():
-            if ":" not in raw_line:
-                continue
-            key, value = raw_line.split(":", 1)
-            metadata[key.strip().casefold()] = value.strip()
-        claims.append(
-            {
-                "id": metadata.get("id", ""),
-                "kind": metadata.get("kind", ""),
-                "status": metadata.get("status", ""),
-                "sources": split_pipe(metadata.get("sources", "")),
-                "replaces": split_pipe(metadata.get("replaces", "")),
-                "contradicts": split_pipe(metadata.get("contradicts", "")),
-                "text": " ".join(match.group("text").split()),
-            }
-        )
-    return claims
+    return [claim_fields(match) for match in CLAIM_BLOCK.finditer(body)]
 
 
 #: A wiki link with a label, and a Markdown link: the label is what a reader sees.
@@ -721,7 +813,9 @@ def read_request(raw: bytes) -> dict[str, Any]:
         raise _invalid_request("the top level must be a JSON object")
     for key in value:
         if key not in REQUEST_KEYS:
-            raise _invalid_request(f"unknown key '{key}'; allowed keys are {', '.join(REQUEST_KEYS)}")
+            # The exhaustive scan is a command-line switch; the request keeps its three keys.
+            hint = "; pass --exhaustive on the command line" if key == "exhaustive" else ""
+            raise _invalid_request(f"unknown key '{key}'; allowed keys are {', '.join(REQUEST_KEYS)}{hint}")
     query = value.get("query")
     if not isinstance(query, str) or not query.strip():
         raise _invalid_request("query must be a non-empty string")
@@ -837,10 +931,22 @@ def load(
     history_shipped: bool = True,
     path_prefix: str = "",
     word_forms: bool = True,
+    exhaustive: bool = False,
 ) -> LoadedRelease:
-    """Read the release under `root` once for every query a call ranks (see `search` for the options)."""
+    """Read the release under `root` once for every query a call ranks (see `search` for the options).
+
+    With `exhaustive`, which needs `include_sources`, every ranked file is also
+    cut into passages and indexed for the exhaustive scan, from the same text
+    the ranking parses: each file is still read once. The scan index is not
+    built when any file is outside the frontmatter contract, because the
+    wrappers refuse the results then.
+    """
     if include_history and not history_shipped:
         raise ValueError("this release ships no history layer to search")
+    if exhaustive and not include_sources:
+        raise ValueError("an exhaustive search also ranks the sources; pass include_sources=True")
+    if exhaustive and not word_forms:
+        raise ValueError("an exhaustive search needs the word-form layer")
     selector = selector if selector is not None else {"kind": "all"}
     forms = bool(word_forms)
     concept_definitions = controlled_concepts(root / "schema/CONCEPTS.md")
@@ -859,13 +965,17 @@ def load(
     # file is read before any of them is scored or counted.
     searched_words: list[tuple[str, set[str], bool]] = []
     candidates: list[dict[str, Any]] = []
+    scanned_files: list[tuple[str, str, str, dict[str, Any], bool]] = []
     for path in candidate_paths(root, include_sources, include_history):
         searched += 1
         relative = path.relative_to(root).as_posix()
         scope = scope_of(relative)
         scope_files[scope] += 1
+        # The exhaustive scan segments the very text the ranking parses, so
+        # the file is read here, once, exactly as read_document reads it.
+        text = path.read_text(encoding="utf-8") if exhaustive else None
         try:
-            document = read_document(path, relative, forms=forms)
+            document = read_document(path, relative, text, forms=forms)
         except FrontmatterError as exc:
             parser_errors.append({"path": path_prefix + relative, "error": str(exc)})
             continue
@@ -873,7 +983,10 @@ def load(
         # the results, but must not make an existing term look absent.
         navigation = is_navigation(relative)
         searched_words.append((scope, document["words"], navigation))
-        if not matches_selector(document["data"], relative, selector):
+        selected = matches_selector(document["data"], relative, selector)
+        if exhaustive and not parser_errors:
+            scanned_files.append((relative, scope, str(text), document, selected))
+        if not selected:
             filtered_out += 1
             continue
         candidates.append(
@@ -912,7 +1025,15 @@ def load(
         root=root,
         forms=forms,
         include_sources=include_sources,
+        include_history=include_history,
         history_shipped=history_shipped,
+        exhaustive=exhaustive,
+        # The scan index; None without `exhaustive` and after a parser error.
+        scan=(
+            ScanIndex(scanned_files, include_history, history_shipped, path_prefix, selector != {"kind": "all"})
+            if exhaustive and not parser_errors
+            else None
+        ),
         path_prefix=path_prefix,
         concept_definitions=concept_definitions,
         searched_scopes=searched_scopes,
@@ -956,7 +1077,11 @@ class Ranking:
     whose `snippet`, `claims`, `claims_total` and `claims_returned` are still
     empty; `full(i)` returns entry i completed. `rank_of` maps each matched
     path to its 1-based rank. `coverage`, `facets`, `matched_concepts` and
-    `expanded_terms` describe this query alone.
+    `expanded_terms` describe this query alone. `terms` (the ordered term
+    dicts) and `members` (term -> list of (token, rule, weight)) are internal:
+    the exhaustive scan matches every term in these members, so a report
+    never lists different word forms for one word in two places; it only adds
+    its own `hyphen_part` tokens and identifiers (see `scan_members`).
     """
 
     def __init__(
@@ -967,7 +1092,11 @@ class Ranking:
         coverage: dict[str, Any],
         matched_concepts: list[str],
         expanded_terms: list[str],
+        terms: Optional[list[dict[str, str]]] = None,
+        members: Optional[dict[str, list[wordforms.Member]]] = None,
     ) -> None:
+        self.terms = list(terms or [])
+        self.members = dict(members or {})
         self.ordered = [result for result, _, _ in matches]
         self._pending = [(candidate, concept_match) for _, candidate, concept_match in matches]
         self._highlight = highlight
@@ -1196,7 +1325,7 @@ def rank(loaded: LoadedRelease, query: str, *, limit: int) -> Ranking:
         },
         "boundary": COVERAGE_BOUNDARY,
     }
-    return Ranking(matches, highlight, forms, coverage, matched_concepts, expanded_terms)
+    return Ranking(matches, highlight, forms, coverage, matched_concepts, expanded_terms, ordered_terms, members_of)
 
 
 def found_by(rankings: list[Ranking], path: str) -> list[dict[str, int]]:
@@ -1208,59 +1337,1180 @@ def found_by(rankings: list[Ranking], path: str) -> list[dict[str, int]]:
     ]
 
 
-def search(
-    root: Path,
+# -- the exhaustive scan (Stufe 4) -------------------------------------------------
+
+
+class Passage(NamedTuple):
+    """One unit of the exhaustive scan: a page header, heading, claim, paragraph, list item, table or open question.
+
+    `line` is the 1-based file line where it starts, `locator` the claim ID or
+    the source page or slide (`page=3`), `status` the claim status, `tokens`
+    its own normalised words and identifiers, and `section` the path of its
+    context, outermost first: the headings and labels above it, then its
+    parent list items, then the first row of the table it continues (for a
+    heading passage: its ancestors only). `opens` is the path this passage
+    heads for the passages after it (a heading, a label, a list item, the
+    first chunk of a split table), with the tokens that path holds in
+    `opens_tokens`. `identifiers` are the tokens taken from metadata (claim,
+    source and page IDs); they match only as whole tokens.
+    """
+
+    kind: str
+    line: int
+    locator: str
+    status: str
+    text: str
+    tokens: frozenset
+    section: tuple
+    opens: tuple = ()
+    opens_tokens: frozenset = frozenset()
+    identifiers: frozenset = frozenset()
+
+
+def link_labels(text: str) -> str:
+    """A text with every labelled wiki link and Markdown link replaced by its label, as `visible_body` does."""
+    if "[" not in text:
+        return text
+    text = LABELLED_WIKILINK.sub(lambda match: match.group(1), text)
+    return MARKDOWN_LINK.sub(lambda match: match.group(1), text)
+
+
+def inner_path(relative: str) -> str:
+    """The path inside a history snapshot (after `meta/history/<snapshot-id>/`), otherwise the path itself."""
+    if relative.startswith("meta/history/"):
+        parts = relative.split("/", 3)
+        return parts[3] if len(parts) == 4 else ""
+    return relative
+
+
+def scan_navigation(relative: str) -> bool:
+    """True for WIKI.md and every index.md, decided inside a history snapshot on the inner path.
+
+    Unlike the ranking, the scan reads `meta/questions.md`: an open question
+    that names the asked word is exactly what an absence answer must disclose.
+    """
+    return inner_path(relative) == "WIKI.md" or PurePosixPath(relative).name == "index.md"
+
+
+def sentence_chunks(line: str) -> list[str]:
+    """An overlong line split at sentence ends into chunks of at most PASSAGE_MAX_CHARS where possible."""
+    chunks: list[str] = []
+    current = ""
+    for sentence in SENTENCE_END.split(line):
+        if current and len(current) + 1 + len(sentence) > PASSAGE_MAX_CHARS:
+            chunks.append(current)
+            current = sentence
+        else:
+            current = f"{current} {sentence}" if current else sentence
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def identifier_tokens(*values: Any) -> frozenset:
+    """The normalised whole tokens of identifier values: claim, source and page IDs (pure)."""
+    joined = " ".join(str(value) for value in values if value)
+    if not joined:
+        return frozenset()
+    # IDs are almost always ASCII, where casefolding is all that normalized() does.
+    return frozenset(TOKEN.findall(joined.lower() if joined.isascii() else normalized(joined)))
+
+
+def link_addresses(text: str) -> frozenset:
+    """The tokens of unlabelled wiki-link targets and the source IDs they name (pure).
+
+    A link target is an address: it matches only as a whole token and is
+    never split at its hyphens, so "[[wiki/entities/tarif-lindenstrom-fix12]]"
+    never stands for the word "Tarif".
+    """
+    if "[[" not in text:
+        return frozenset()
+    found: set[str] = set()
+    for target in UNLABELLED_WIKILINK.findall(text):
+        target = normalized(target)
+        found.update(TOKEN.findall(target))
+        found.update(SOURCE_ID_IN_TEXT.findall(target))
+    return frozenset(found)
+
+
+def claim_identifiers(claim: dict[str, Any]) -> frozenset:
+    """The IDs a claim block's metadata names: its own, its sources' (before the @ locator), replaced and contradicted claims."""
+    return identifier_tokens(
+        claim["id"],
+        *(entry.split("@", 1)[0] for entry in claim["sources"]),
+        *claim["replaces"],
+        *claim["contradicts"],
+    )
+
+
+def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Passage]:
+    """Cut one file into the passages the exhaustive scan matches (pure).
+
+    `document` is what `read_document` returned for `text`, so the frontmatter
+    is parsed once. Lines are 1-based file lines, split on "\\n" only: a form
+    feed from a PDF extraction must not shift them. Trailing whitespace is
+    stripped from every line, so a CRLF file yields the same passages.
+
+    Context reaches a passage from the headings above it (Markdown and setext
+    headings, and labels: a one-line paragraph of at most LABEL_MAX_CHARS
+    characters that is only bold text or ends in a colon, which lasts until
+    the next heading or label), from its parent list items, and, in a table
+    cut at the size cap, from the table's first row. The page header and every
+    claim also carry the identifiers of their metadata as whole tokens: page
+    and source IDs, and the claim, source, replaced and contradicted claim IDs.
+    The targets of unlabelled wiki links are identifiers too (`link_addresses`).
+    """
+    data = document["data"]
+    body = document["raw_body"]
+    body_line = text.count("\n", 0, len(text) - len(body)) + 1
+    title = str(document["title"])
+    aliases = alias_values(data.get("aliases"))
+    description = str(data.get("description") or data.get("extraction_notes") or "")
+    header_text = title + (" — " + ", ".join(aliases) if aliases else "") + (" — " + description if description else "")
+    listed_sources = " ".join(as_list(data.get("sources")))
+    header_ids = identifier_tokens(data.get("id"), data.get("source_id"))
+    if "src-" in listed_sources:
+        header_ids = header_ids.union(SOURCE_ID_IN_TEXT.findall(normalized(listed_sources)))
+    header_tokens = frozenset(tokens(title, False, True)).union(
+        tokens(", ".join(aliases), False, True), tokens(description, False, True), header_ids
+    )
+    passages: list[Passage] = [Passage("header", 1, "", "", header_text, header_tokens, (), identifiers=header_ids)]
+    title_tokens = tokens(title, False, True)
+    plain_kind = "open_question" if inner_path(relative) == "meta/questions.md" else "paragraph"
+
+    # The context stacks, each as parallel lists: headings and labels (level,
+    # text) and list items (indent, text). `section` caches their texts.
+    levels: list[int] = []
+    labels: list[str] = []
+    indents: list[int] = []
+    items: list[str] = []
+    section: tuple = ()
+    fenced = False
+    locator = ""
+    lines: list[str] = []
+    first_line = 0
+    length = 0
+    table = False
+    listed = False
+    indent = 0
+    table_row = ""
+    carried: tuple = ()
+
+    def refresh() -> None:
+        nonlocal section
+        section = tuple(labels) + tuple(items) if items else tuple(labels)
+
+    def pop_headings(level: int) -> None:
+        while levels and levels[-1] >= level:
+            levels.pop()
+            labels.pop()
+
+    def heading(level: int, label: str, number: int) -> None:
+        indents.clear()
+        items.clear()
+        pop_headings(level)
+        refresh()
+        words = tokens(label, False, True)
+        # An H1 that repeats the title is carried by the header passage.
+        if words and not (level == 1 and words == title_tokens):
+            found = frozenset(words)
+            passages.append(Passage("heading", number, locator, "", label, found, section, section + (label,), found))
+        levels.append(level)
+        labels.append(label)
+        refresh()
+
+    def finish(cut: bool = False) -> None:
+        nonlocal lines, length, table, listed, carried
+        if not lines:
+            # Most calls come from a blank line after a passage that already ended.
+            carried = ()
+            listed = False
+            return
+        if lines:
+            raw = "\n".join(lines)
+            # tokens(raw, False, True) repairs and then splits; the repaired text is also the display text.
+            repaired = wordforms.repair_text(link_labels(raw))
+            found = frozenset(TOKEN.findall(normalized(repaired)))
+            addresses = link_addresses(raw)
+            if addresses:
+                found = found | addresses
+            if found:
+                shown = " ".join(repaired.split())
+                label = (
+                    len(lines) == 1 and not listed and not table and not items and len(shown) <= LABEL_MAX_CHARS
+                    and (shown.endswith(":") or BOLD_LABEL.match(shown) is not None)
+                )
+                if label:
+                    pop_headings(LABEL_LEVEL)
+                    refresh()
+                where = section + carried if carried else section
+                opens: tuple = ()
+                opens_tokens: frozenset = frozenset()
+                if listed or label:
+                    opens, opens_tokens = where + (shown,), found
+                elif table and cut and not carried:
+                    repaired_row = wordforms.repair_text(link_labels(table_row))
+                    row_tokens = frozenset(TOKEN.findall(normalized(repaired_row)))
+                    if row_tokens:
+                        opens, opens_tokens = where + (" ".join(repaired_row.split()),), row_tokens
+                passages.append(Passage(plain_kind, first_line, locator, "", shown, found, where, opens, opens_tokens, addresses))
+                if label:
+                    levels.append(LABEL_LEVEL)
+                    labels.append(shown)
+                    refresh()
+                elif listed:
+                    indents.append(indent)
+                    items.append(shown)
+                    refresh()
+                if table and cut and opens:
+                    carried = (opens[-1],)
+        if not (cut and table):
+            carried = ()
+        lines = []
+        length = 0
+        table = False
+        listed = False
+
+    def append(line: str, number: int, is_table: bool = False) -> None:
+        nonlocal first_line, length, table, table_row
+        if len(line) > PASSAGE_MAX_CHARS:
+            finish()
+            for chunk in sentence_chunks(line):
+                lines.append(chunk)
+                first_line = number
+                finish()
+            return
+        if not lines:
+            first_line = number
+            table = is_table
+            length = len(line)
+            if is_table and not carried:
+                table_row = line
+        else:
+            length += 1 + len(line)
+        lines.append(line)
+        if length >= PASSAGE_MAX_CHARS:
+            finish(cut=True)
+
+    def enter(depth: int) -> None:
+        # A new passage that is no list item leaves every list item indented as deep or deeper.
+        nonlocal indent
+        indent = depth
+        if indents and indents[-1] >= depth:
+            while indents and indents[-1] >= depth:
+                indents.pop()
+                items.pop()
+            refresh()
+
+    def handle(line: str, number: int) -> None:
+        nonlocal fenced, locator, lines, length, listed
+        line = line.rstrip()
+        left = line.lstrip()
+        # Each pattern runs only where its first characters can match: the scan reads every line.
+        if left[:1] in ("`", "~") and FENCE.match(line):
+            finish()
+            fenced = not fenced
+            return
+        if not fenced:
+            marker = PAGE_MARKER.search(line) if "<!--" in line else None
+            if marker:
+                finish()
+                locator = f"{marker.group(1).lower()}={marker.group(2)}"
+                rest = line[: marker.start()] + line[marker.end():]
+                if rest.strip():
+                    handle(rest, number)
+                return
+            atx = SCAN_HEADING.match(line) if line[:1] == "#" else None
+            if atx:
+                finish()
+                heading(len(atx.group(1)), " ".join(wordforms.repair_text(link_labels(atx.group(2))).split()), number)
+                return
+            if (
+                left[:1] in ("=", "-") and len(lines) == 1 and not table and not listed
+                and SETEXT_UNDERLINE.match(line)
+            ):
+                label = " ".join(wordforms.repair_text(link_labels(lines[0])).split())
+                if label and len(label) <= LABEL_MAX_CHARS:
+                    number = first_line
+                    lines = []
+                    length = 0
+                    heading(1 if left[0] == "=" else 2, label, number)
+                    return
+        if not left:
+            finish()
+            return
+        first = left[0]
+        if (first in "-*+" or first.isdigit()) and LIST_ITEM.match(line):
+            finish()
+            enter(len(line) - len(left))
+            listed = True
+            append(line, number)
+            return
+        if first == "|":  # a table row; consecutive rows form one passage
+            if lines and not table:
+                finish()
+            if not lines:
+                enter(len(line) - len(left))
+            append(line, number, True)
+            return
+        if table:
+            finish()
+        if not lines:
+            enter(len(line) - len(left))
+        append(line, number)
+
+    position = 0
+    line_at = body_line
+
+    def walk(segment: str, start: int) -> None:
+        for offset, line in enumerate(segment.split("\n")):
+            handle(line, start + offset)
+
+    for match in CLAIM_BLOCK.finditer(body):
+        walk(body[position:match.start()], line_at)
+        finish()
+        # A claim block stands at column 0: it ends every list.
+        if items:
+            indents.clear()
+            items.clear()
+            refresh()
+        claim_line = line_at + body.count("\n", position, match.start())
+        claim = claim_fields(match)
+        identifiers = claim_identifiers(claim)
+        addresses = link_addresses(match.group("text"))
+        if addresses:
+            identifiers = identifiers | addresses
+        # Tokens come from the text with its line breaks, so a hyphen at a line end is repaired as the ranking does.
+        found = frozenset(tokens(link_labels(match.group("text")), False, True)).union(identifiers)
+        if found:
+            passages.append(
+                Passage("claim", claim_line, claim["id"], claim["status"], claim["text"], found, section, identifiers=identifiers)
+            )
+        line_at = claim_line + body.count("\n", match.start(), match.end())
+        position = match.end()
+    walk(body[position:], line_at)
+    finish()
+    return passages
+
+
+def concept_runs(query: str, definitions: dict[str, dict[str, Any]]) -> dict[str, list[str]]:
+    """For each concept the query triggers, the query words of its first matching run (pure).
+
+    Iterates exactly as `expand_query(query, definitions, forms=True)`: concept
+    ids sorted, terms in definition order, the first term that matches, and its
+    first start position where every word is the same word.
+    """
+    query_words = tokens(query, drop_stopwords=False, forms=True)
+    runs: dict[str, list[str]] = {}
+    for concept_id, definition in sorted(definitions.items()):
+        terms = [str(term) for term in definition.get("terms", []) if str(term).strip()]
+        for term in terms:
+            term_words = tokens(term, drop_stopwords=False, forms=True)
+            if not term_words:
+                continue
+            width = len(term_words)
+            start = next(
+                (
+                    start
+                    for start in range(len(query_words) - width + 1)
+                    if all(
+                        wordforms.same_word(query_words[start + offset], term_words[offset], CLOSED_CLASS)
+                        for offset in range(width)
+                    )
+                ),
+                None,
+            )
+            if start is not None:
+                runs[concept_id] = query_words[start:start + width]
+                break
+    return runs
+
+
+def content_words(terms: list[dict[str, str]]) -> list[str]:
+    """The words a passage must hold for a formulation: its query words without closed-class and function words."""
+    return [item["term"] for item in terms if item["origin"] == "query" and item["term"] not in SCAN_EXCLUDED]
+
+
+def alternatives(
+    words: list[str], runs: dict[str, list[str]], definitions: dict[str, dict[str, Any]]
+) -> dict[str, list[tuple[Optional[str], tuple]]]:
+    """Per content word, the word itself and then every confirmed concept term that may stand in for it."""
+    found: dict[str, list[tuple[Optional[str], tuple]]] = {}
+    for word in words:
+        options: list[tuple[Optional[str], tuple]] = [(None, (word,))]
+        listed = {(word,)}
+        for concept_id in sorted(runs):
+            if word not in runs[concept_id]:
+                continue
+            for term in definitions[concept_id].get("terms", []):
+                if not str(term).strip():
+                    continue
+                option = tuple(token for token in tokens(str(term), False, True) if token not in SCAN_EXCLUDED)
+                if option and option not in listed:
+                    listed.add(option)
+                    options.append((concept_id, option))
+        found[word] = options
+    return found
+
+
+def hyphen_units(word: str) -> tuple:
+    """The parts of a hyphenated content word that a passage may write apart, or () (pure).
+
+    Closed-class and function words among them are dropped; at least two
+    distinct parts of two or more characters must remain, so "E-Mobilität"
+    never stands for "Mobilität" alone.
+    """
+    if "-" not in word and "_" not in word:
+        return ()
+    units = tuple(dict.fromkeys(unit for unit in wordforms.units_of(word) if unit not in SCAN_EXCLUDED))
+    if len(units) < 2 or any(len(unit) < 2 for unit in units):
+        return ()
+    return units
+
+
+def scan_members(ranking: Ranking, scan: "ScanIndex") -> dict[Any, list[wordforms.Member]]:
+    """The members the scan matches per term: the ranking's, plus what only the scan can see.
+
+    Two additions, both for terms outside the closed class and function words:
+
+    - a term that is itself a scanned token but not one of the ranking's
+      members gets it as `exact`; that only happens for an identifier from
+      claim metadata or the frontmatter, which the ranking never reads;
+    - every joined text token that holds the term as a hyphen-separated part
+      of the same stem key ("sms" in "sms-warndienst") is added under the
+      heuristic rule `hyphen_part`, which the ranking does not know.
+    """
+    parts = scan.hyphen_parts()
+    members: dict[Any, list[wordforms.Member]] = {}
+    for item in ranking.terms:
+        term = item["term"]
+        listed = list(ranking.members.get(term, ()))
+        if term not in SCAN_EXCLUDED:
+            known = {token for token, _, _ in listed}
+            if term not in known and term in scan.own:
+                listed.insert(0, (term, "exact", wordforms.WEIGHTS["exact"]))
+                known.add(term)
+            for token in sorted(parts.get(wordforms.stem_key(term), ())):
+                if token not in known:
+                    listed.append((token, HYPHEN_PART_RULE, HYPHEN_PART_WEIGHT))
+        members[term] = listed
+    return members
+
+
+def counted_reformulations(formulations: list[dict[str, Any]], contents: list[list[str]]) -> list[bool]:
+    """Which kept formulations count as reformulations for a complete absence check (pure).
+
+    The question never counts. A reformulation counts when it has a content
+    word and its set of content-word stem keys is neither equal to nor a
+    superset of the question's set or of any earlier counted reformulation's
+    set: the same words in another order, another spelling or another
+    inflection are no new search, and neither are added words, which under
+    the hit rule can only narrow what the scan finds. A hyphenated word
+    counts as its parts (`hyphen_units`), because the scan matches
+    "SMS-Warndienst" and "SMS Warndienst" against each other.
+    """
+
+    def stem_keys(words: list[str]) -> frozenset:
+        return frozenset(wordforms.stem_key(unit) for word in words for unit in (hyphen_units(word) or (word,)))
+
+    question = stem_keys(contents[0]) if contents else frozenset()
+    seen = [question] if question else []
+    counted: list[bool] = []
+    for index, (entry, words) in enumerate(zip(formulations, contents)):
+        keys = stem_keys(words)
+        counts = (
+            index > 0 and entry.get("origin") == "also" and bool(words) and not any(keys >= earlier for earlier in seen)
+        )
+        if counts:
+            seen.append(keys)
+        counted.append(counts)
+    return counted
+
+
+def printed_chars(value: Any, depth: int) -> int:
+    """The characters `value` takes when a wrapper prints it nested `depth` levels deep with REPORT_INDENT."""
+    text = json.dumps(value, ensure_ascii=False, indent=REPORT_INDENT)
+    return len(text) + REPORT_INDENT * depth * text.count("\n")
+
+
+def excerpt(text: str, wanted: frozenset) -> tuple[str, bool]:
+    """A passage text, or a window of at most EXCERPT_CHARS characters around its first word in `wanted`."""
+    if len(text) <= EXCERPT_CHARS:
+        return text, False
+    room = EXCERPT_CHARS - 4
+    words = text.split(" ")
+    starts: list[int] = []
+    offset = 0
+    for word in words:
+        starts.append(offset)
+        offset += len(word) + 1
+    first = next((index for index, word in enumerate(words) if not wanted.isdisjoint(tokens(word, False, True))), 0)
+
+    def window(start: int) -> list[str]:
+        taken: list[str] = []
+        size = 0
+        for word in words[start:]:
+            grown = size + len(word) + (1 if taken else 0)
+            if grown > room:
+                break
+            taken.append(word)
+            size = grown
+        return taken
+
+    start = first
+    while start > 0 and starts[first] - starts[start - 1] <= 100:
+        start -= 1
+    taken = window(start)
+    if start + len(taken) <= first:
+        start = first
+        taken = window(start)
+    cut = False
+    if not taken:
+        taken = [words[start][:room]]
+        cut = True
+    remaining = cut or start + len(taken) < len(words)
+    return ("… " if start > 0 else "") + " ".join(taken) + (" …" if remaining else ""), True
+
+
+class ScanIndex:
+    """The passages of every scanned file and the posting lists the hit rule needs, built once per call."""
+
+    def __init__(
+        self,
+        files: list[tuple[str, str, str, dict[str, Any], bool]],
+        include_history: bool,
+        history_shipped: bool,
+        path_prefix: str,
+        mark_selected: bool,
+    ) -> None:
+        self.path_prefix = path_prefix
+        self.mark_selected = mark_selected
+        self.scanned = {"wiki": True, "sources": True, "history": include_history}
+        self.shipped = {"wiki": True, "sources": True, "history": history_shipped}
+        self.counts = {
+            scope: {"files": 0, "navigation_skipped": 0, "passages": 0, "chars": 0} for scope in SCOPES
+        }
+        self.passages: list[Passage] = []
+        self.passage_page: list[int] = []
+        self.pages: list[dict[str, Any]] = []
+        self.page_passages: list[range] = []
+        self.own: dict[str, set[int]] = {}
+        self.header_pages: dict[str, set[int]] = {}
+        self.section_index: dict[str, set[tuple[int, tuple]]] = {}
+        self.section_passages: dict[tuple[int, tuple], set[int]] = {}
+        # Tokens that came from metadata or link targets: never split for the hyphen_part rule.
+        self.identifiers: set[str] = set()
+        self._parts: Optional[dict[str, frozenset]] = None
+        self._stems: Optional[dict[str, frozenset]] = None
+        for relative, scope, text, document, selected in files:
+            if scan_navigation(relative):
+                self.counts[scope]["navigation_skipped"] += 1
+                continue
+            self.counts[scope]["files"] += 1
+            self.counts[scope]["chars"] += len(text)
+            self.add_page(relative, scope, document, selected, scan_passages(relative, text, document))
+
+    def add_page(
+        self, relative: str, scope: str, document: dict[str, Any], selected: bool, passages: list[Passage]
+    ) -> None:
+        page = len(self.pages)
+        self.pages.append(
+            {
+                "relative": relative,
+                "scope": scope,
+                "title": str(document["title"]),
+                "status": str(document["data"].get("status") or ""),
+                "selected": selected,
+            }
+        )
+        first = len(self.passages)
+        self.counts[scope]["passages"] += len(passages)
+        own = self.own
+        section_passages = self.section_passages
+        # Consecutive passages share their section; its prefixes are computed once per section.
+        prefixes: dict[tuple, list[tuple[int, tuple]]] = {}
+        openers: list[Passage] = []
+        for pid, passage in enumerate(passages, first):
+            if passage.identifiers:
+                self.identifiers.update(passage.identifiers)
+            for token in passage.tokens:
+                holders = own.get(token)
+                if holders is None:
+                    own[token] = {pid}
+                else:
+                    holders.add(pid)
+            keys = prefixes.get(passage.section)
+            if keys is None:
+                keys = prefixes[passage.section] = [
+                    (page, passage.section[:depth]) for depth in range(1, len(passage.section) + 1)
+                ]
+            for key in keys:
+                holders = section_passages.get(key)
+                if holders is None:
+                    section_passages[key] = {pid}
+                else:
+                    holders.add(pid)
+            if passage.kind == "header":
+                for token in passage.tokens:
+                    self.header_pages.setdefault(token, set()).add(page)
+            if passage.opens:
+                openers.append(passage)
+        # A heading, label, list item or table row is context only for the
+        # passages under it; one with nothing under it is not indexed.
+        for passage in openers:
+            key = (page, passage.opens)
+            if key in section_passages:
+                for token in passage.opens_tokens:
+                    self.section_index.setdefault(token, set()).add(key)
+        self.passages.extend(passages)
+        self.passage_page.extend([page] * len(passages))
+        # A heading that is not emitted (an H1 repeating the title) still
+        # leads its section: its words are the title's, held by the header.
+        self.page_passages.append(range(first, len(self.passages)))
+
+    def hyphen_parts(self) -> dict[str, frozenset]:
+        """Per stem key, the joined text tokens with a part of that key ("sms" -> "sms-warndienst"), built once.
+
+        Identifiers and link targets are left out, even where the same token
+        also stands in text: an address is never split at its hyphens.
+        """
+        if self._parts is None:
+            parts: dict[str, set[str]] = {}
+            for token in self.own:
+                if ("-" not in token and "_" not in token) or token in self.identifiers:
+                    continue
+                for unit in wordforms.units_of(token):
+                    if len(unit) >= 2 and unit not in SCAN_EXCLUDED:
+                        parts.setdefault(wordforms.stem_key(unit), set()).add(token)
+            self._parts = {key: frozenset(found) for key, found in parts.items()}
+        return self._parts
+
+    def stems(self) -> dict[str, frozenset]:
+        """Per stem key, every scanned token with that key, built once and only for a hyphenated search word."""
+        if self._stems is None:
+            stems: dict[str, set[str]] = {}
+            for token in self.own:
+                stems.setdefault(wordforms.stem_key(token), set()).add(token)
+            self._stems = {key: frozenset(found) for key, found in stems.items()}
+        return self._stems
+
+    def unit_members(self, unit: str) -> list[wordforms.Member]:
+        """The members of one part of a hyphenated search word written apart: its stem key alone or as a part."""
+        key = wordforms.stem_key(unit)
+        found = self.stems().get(key, frozenset()) | self.hyphen_parts().get(key, frozenset())
+        return [(token, HYPHEN_PART_RULE, HYPHEN_PART_WEIGHT) for token in sorted(found)]
+
+
+class _Matcher:
+    """The set algebra of the hit rule over one ScanIndex, with posting unions cached for one call."""
+
+    def __init__(self, scan: ScanIndex) -> None:
+        self.scan = scan
+        self._own: dict[frozenset, set[int]] = {}
+        self._context: dict[frozenset, set[int]] = {}
+
+    def own(self, members: frozenset) -> set[int]:
+        found = self._own.get(members)
+        if found is None:
+            found = set()
+            for token in members:
+                found.update(self.scan.own.get(token, ()))
+            self._own[members] = found
+        return found
+
+    def context(self, members: frozenset) -> set[int]:
+        """Passages that hold a member themselves, under a heading holding one, or on a page whose header holds one."""
+        found = self._context.get(members)
+        if found is None:
+            scan = self.scan
+            found = set(self.own(members))
+            for token in members:
+                for page in scan.header_pages.get(token, ()):
+                    found.update(scan.page_passages[page])
+                for key in scan.section_index.get(token, ()):
+                    found.update(scan.section_passages.get(key, ()))
+            self._context[members] = found
+        return found
+
+
+class _Formulation:
+    """What the scan needs of one kept formulation: content words, alternatives and their members.
+
+    The members are the ranking's (see `scan_members`). A hyphenated content
+    word also gets the alternative of its parts written apart (`hyphen_units`),
+    each part matched in its stem key, alone or as a part of a joined token;
+    `splits` maps the word to the keys of those parts.
+    """
+
+    def __init__(self, text: str, ranking: Ranking, definitions: dict[str, dict[str, Any]], scan: ScanIndex) -> None:
+        self.text = text
+        self.terms = ranking.terms
+        self.members: dict[Any, list[wordforms.Member]] = scan_members(ranking, scan)
+        self.content = content_words(ranking.terms)
+        self.alternatives = alternatives(self.content, concept_runs(text, definitions), definitions)
+        self.splits: dict[str, tuple] = {}
+        for word in self.content:
+            units = hyphen_units(word)
+            if not units:
+                continue
+            # Keys of their own, so a part never takes the members of a term with the same spelling.
+            keys = tuple((HYPHEN_PART_RULE, unit) for unit in units)
+            for key, unit in zip(keys, units):
+                self.members[key] = scan.unit_members(unit)
+            self.splits[word] = keys
+            self.alternatives[word] = self.alternatives[word] + [(None, keys)]
+
+    def tokens_of(self, token: Any, word_forms_only: bool) -> frozenset:
+        return frozenset(
+            member
+            for member, rule, _ in self.members.get(token, ())
+            if not word_forms_only or rule in wordforms.WORD_FORM_RULES
+        )
+
+    def hits(self, matcher: _Matcher, word_forms_only: bool) -> set[int]:
+        """H_i: passages inside the context of every content word that hold at least one of them themselves."""
+        if not self.content:
+            return set()
+        contexts: list[set[int]] = []
+        owned: set[int] = set()
+        for word in self.content:
+            word_context: set[int] = set()
+            for _concept, option in self.alternatives[word]:
+                option_context: Optional[set[int]] = None
+                option_own: set[int] = set()
+                for token in option:
+                    members = self.tokens_of(token, word_forms_only)
+                    context = matcher.context(members)
+                    option_context = set(context) if option_context is None else option_context & context
+                    option_own |= matcher.own(members)
+                word_context |= option_context or set()
+                owned |= (option_context or set()) & option_own
+            contexts.append(word_context)
+        contexts.sort(key=len)
+        found = set(contexts[0])
+        for context in contexts[1:]:
+            found &= context
+        return found & owned
+
+    def every_member(self) -> frozenset:
+        """Every member token of every content word and of its alternatives."""
+        return frozenset(
+            member
+            for word in self.content
+            for _concept, option in self.alternatives[word]
+            for token in option
+            for member in self.tokens_of(token, False)
+        )
+
+    def matched(self, matcher: _Matcher, pid: int) -> list[dict[str, Any]]:
+        """Per content word, the member that carried it into a heuristic hit, and where it occurred."""
+        scan = matcher.scan
+        passage = scan.passages[pid]
+        page = scan.passage_page[pid]
+        sections = {(page, passage.section[:depth]) for depth in range(1, len(passage.section) + 1)}
+        entries: list[dict[str, Any]] = []
+        for word in self.content:
+            for concept, option in self.alternatives[word]:
+                # The first alternative whose context holds the passage carried the word.
+                if not all(pid in matcher.context(self.tokens_of(token, False)) for token in option):
+                    continue
+                pool = [member for token in option for member in self.members.get(token, ())]
+                best: Optional[tuple[tuple[int, float, str], str]] = None
+                for token, rule, weight in pool:
+                    if token in passage.tokens:
+                        where = 0
+                    elif not sections.isdisjoint(scan.section_index.get(token, ())):
+                        where = 1
+                    elif page in scan.header_pages.get(token, ()):
+                        where = 2
+                    else:
+                        continue
+                    key = (where, -weight, token)
+                    if best is None or key < best[0]:
+                        best = (key, rule)
+                if best is None:
+                    continue
+                entry: dict[str, Any] = {
+                    "term": word,
+                    "token": best[0][2],
+                    "rule": best[1],
+                    "in": ("text", "heading", "header")[best[0][0]],
+                }
+                if concept is not None:
+                    entry["concept"] = concept
+                entries.append(entry)
+                break
+        return entries
+
+
+def printed_claim_keys(
+    results: list[dict[str, Any]], block: list[dict[str, Any]], path_prefix: str
+) -> dict[tuple[str, str], str]:
+    """Every claim already printed, keyed by (release-relative path, claim ID or text), with where it is printed."""
+    printed: dict[tuple[str, str], str] = {}
+    for where, entries in (("results", results), ("reformulation_results", block)):
+        for entry in entries:
+            path = str(entry["path"])
+            relative = path[len(path_prefix):] if path_prefix and path.startswith(path_prefix) else path
+            for claim in entry.get("claims") or []:
+                key = (relative, str(claim.get("id") or "") or str(claim.get("text") or ""))
+                printed.setdefault(key, where)
+    return printed
+
+
+def exhaustive_scan(
+    scan: ScanIndex,
+    rankings: list[Ranking],
+    texts: list[str],
+    definitions: dict[str, dict[str, Any]],
+    vocabulary: dict[str, int],
+    printed: dict[tuple[str, str], str],
+    counted: list[bool],
+    budget: int,
+) -> dict[str, Any]:
+    """Every passage that holds all content words of a kept formulation, ordered, cut to `budget` printed characters.
+
+    Returns the returned page entries (`hits`), whether the question's own
+    hits fit into the budget (`narrowable`, internal), and the fields of
+    absence_check that describe the scan: per-formulation counts, census,
+    absent terms, counts, budget, omitted pages and scopes.
+    """
+    matcher = _Matcher(scan)
+    formulations = [_Formulation(text, ranking, definitions, scan) for text, ranking in zip(texts, rankings)]
+    by_formulation: list[set[int]] = []
+    word_form_hits: set[int] = set()
+    summary: list[dict[str, Any]] = []
+    for index, formulation in enumerate(formulations):
+        found = formulation.hits(matcher, False)
+        strong = formulation.hits(matcher, True)
+        by_formulation.append(found)
+        word_form_hits |= strong
+        summary.append(
+            {
+                "formulation": index,
+                "content_words": formulation.content,
+                "counted": counted[index],
+                "hits": len(found),
+                "hits_word_form": len(strong),
+            }
+        )
+    all_hits = sorted(set().union(*by_formulation)) if by_formulation else []
+
+    pages: dict[int, list[tuple[tuple[int, int, int], dict[str, Any]]]] = {}
+    references = 0
+    for pid in all_hits:
+        passage = scan.passages[pid]
+        page = scan.passage_page[pid]
+        member_of = [index for index, found in enumerate(by_formulation) if pid in found]
+        hit: dict[str, Any] = {
+            "kind": passage.kind,
+            "line": passage.line,
+            "locator": passage.locator,
+            "status": passage.status,
+            "formulations": member_of,
+            "strength": "word_form" if pid in word_form_hits else "heuristic",
+        }
+        key = (scan.pages[page]["relative"], passage.locator or passage.text)
+        if passage.kind == "claim" and key in printed:
+            hit["shown_in"] = printed[key]
+            references += 1
+        else:
+            if hit["strength"] == "heuristic":
+                hit["matched"] = formulations[member_of[0]].matched(matcher, pid)
+            wanted = frozenset().union(*(formulations[index].every_member() for index in member_of))
+            text, cut = excerpt(passage.text, wanted)
+            hit.update({"text": text, "text_chars": len(passage.text), "excerpt": cut})
+        pages.setdefault(page, []).append(((passage.line, PASSAGE_KINDS.index(passage.kind), pid), hit))
+
+    entries: list[dict[str, Any]] = []
+    for page, items in pages.items():
+        items.sort(key=lambda item: item[0])
+        hits = [hit for _, hit in items]
+        info = scan.pages[page]
+        entry: dict[str, Any] = {
+            "path": scan.path_prefix + info["relative"],
+            "scope": info["scope"],
+            "title": info["title"],
+            "status": info["status"],
+            "hits_total": len(hits),
+        }
+        if scan.mark_selected:
+            entry["selected"] = info["selected"]
+        entry["hits"] = hits
+        entries.append(entry)
+    entries.sort(
+        key=lambda entry: (
+            1 if entry["scope"] == "history" else 0,
+            -max(len(hit["formulations"]) for hit in entry["hits"]),
+            0 if any(0 in hit["formulations"] for hit in entry["hits"]) else 1,
+            0 if any(hit["strength"] == "word_form" for hit in entry["hits"]) else 1,
+            SCOPE_RANK[entry["scope"]],
+            entry["path"],
+        )
+    )
+
+    # Emit a strict prefix: hit by hit while the printed size stays within budget.
+    returned: list[dict[str, Any]] = []
+    used = 2  # "[]"
+    stopped = False
+    for entry in entries:
+        emitted: Optional[dict[str, Any]] = None
+        for hit in entry["hits"]:
+            if emitted is None:
+                cost = (8 if not returned else 6) + printed_chars({**entry, "hits": [hit]}, 2)
+            else:
+                cost = 10 + printed_chars(hit, 4)
+            if used + cost > budget:
+                stopped = True
+                break
+            used += cost
+            if emitted is None:
+                emitted = {**entry, "hits": [hit]}
+                returned.append(emitted)
+            else:
+                emitted["hits"].append(hit)
+        if stopped:
+            break
+    used = printed_chars(returned, 1)
+    needed = printed_chars(entries, 1) if stopped else used
+    # Narrower reformulations can only help while the question's own hits fit:
+    # its hits do not depend on the reformulations.
+    # Counted with the same increments as the emission, and only until the budget is passed.
+    narrowable = True
+    if stopped:
+        size = 2
+        for entry in entries:
+            own_hits = [hit for hit in entry["hits"] if 0 in hit["formulations"]]
+            for position, hit in enumerate(own_hits):
+                if position:
+                    size += 10 + printed_chars(hit, 4)
+                else:
+                    size += (8 if size == 2 else 6) + printed_chars({**entry, "hits_total": len(own_hits), "hits": [hit]}, 2)
+                if size > budget:
+                    break
+            if size > budget:
+                narrowable = False
+                break
+
+    hits_total = len(all_hits)
+    hits_returned = sum(len(entry["hits"]) for entry in returned)
+    returned_paths = {entry["path"] for entry in returned}
+    counts = {
+        "hits_total": hits_total,
+        "hits_returned": hits_returned,
+        "hits_omitted": hits_total - hits_returned,
+        "hits_word_form": len(word_form_hits.intersection(all_hits)),
+        "hits_heuristic": hits_total - len(word_form_hits.intersection(all_hits)),
+        "hits_already_printed": references,
+        "pages_with_hits": len(entries),
+        "pages_returned": len(returned),
+        "pages_partial": sum(1 for entry in returned if len(entry["hits"]) < entry["hits_total"]),
+        "pages_not_returned": len(entries) - len(returned),
+    }
+    omitted_pages = [
+        {"path": entry["path"], "hits": entry["hits_total"]} for entry in entries if entry["path"] not in returned_paths
+    ][:OMITTED_PAGES_LISTED]
+
+    # The census: every term except closed-class and function words, once per (term, origin).
+    census: dict[tuple[str, str], dict[str, Any]] = {}
+    for index, formulation in enumerate(formulations):
+        for item in formulation.terms:
+            term, origin = item["term"], item["origin"]
+            if term in SCAN_EXCLUDED:
+                continue
+            key = (term, origin)
+            if key in census:
+                census[key]["formulations"].append(index)
+                continue
+            members = formulation.members.get(term, [])
+            holders = matcher.own(frozenset(token for token, _, _ in members))
+            split = formulation.splits.get(term) if origin == "query" else None
+            if split:
+                # A hyphenated word also occurs where a passage holds all of its parts.
+                apart: Optional[set[int]] = None
+                for part in split:
+                    owned = matcher.own(formulation.tokens_of(part, False))
+                    apart = set(owned) if apart is None else apart & owned
+                holders = holders | (apart or set())
+            passages = {scope: 0 for scope in SCOPES}
+            files: dict[str, set[int]] = {scope: set() for scope in SCOPES}
+            for pid in holders:
+                page = scan.passage_page[pid]
+                scope = scan.pages[page]["scope"]
+                passages[scope] += 1
+                files[scope].add(page)
+            ordered = sorted(members, key=lambda member: (-member[2], -vocabulary.get(member[0], 0), member[0]))
+            census[key] = {
+                "term": term,
+                "origin": origin,
+                "formulations": [index],
+                "passages": {scope: passages[scope] if scan.scanned[scope] else None for scope in SCOPES},
+                "files": {scope: len(files[scope]) if scan.scanned[scope] else None for scope in SCOPES},
+                "forms": [{"token": token, "rule": rule} for token, rule, _ in ordered[:FORMS_LISTED]],
+                "forms_total": len(members),
+            }
+    absent = sorted(
+        {
+            entry["term"]
+            for entry in census.values()
+            if entry["origin"] == "query" and not any(entry["passages"][scope] for scope in SCOPES if scan.scanned[scope])
+        }
+    )
+    scopes = {
+        scope: {
+            "scanned": scan.scanned[scope],
+            "shipped": scan.shipped[scope],
+            **{
+                field: (scan.counts[scope][field] if scan.scanned[scope] else None)
+                for field in ("files", "navigation_skipped", "passages", "chars")
+            },
+        }
+        for scope in SCOPES
+    }
+    return {
+        "hits": returned,
+        "narrowable": narrowable,
+        "reformulations_counted": sum(counted),
+        "budget": {"limit_chars": budget, "used_chars": used, "needed_chars": needed},
+        "counts": counts,
+        "omitted_pages": omitted_pages,
+        "absent_terms": absent,
+        "formulations": summary,
+        "scopes": scopes,
+        "terms": list(census.values()),
+    }
+
+
+def absence_steps(
+    reasons: list[str],
+    results: list[dict[str, Any]],
+    block: list[dict[str, Any]],
+    hits: list[dict[str, Any]],
+    narrowable: bool = True,
+) -> list[str]:
+    """What to do before an absence statement, from the closed vocabulary ABSENCE_STEPS, in its order.
+
+    `read_results_without_claims` names entries that print no claims (every
+    source, a page without claim blocks): their snippet is all the report
+    shows, and their text can answer in words the scan does not match.
+    `narrow_formulations` is listed only while `narrowable` holds, that is
+    while the question's own hits fit into the budget.
+    """
+    printed = [entry for entry in list(results) + list(block) if not entry.get("navigation")]
+    conditions = {
+        "read_withheld_claims": any(entry["claims_returned"] < entry["claims_total"] for entry in printed),
+        "read_results_without_claims": any(not entry["claims_total"] for entry in printed),
+        "read_reformulation_results": bool(block),
+        "read_exhaustive_hits": any("text" in hit for entry in hits for hit in entry["hits"]),
+        "add_reformulations": "too_few_reformulations" in reasons or "no_content_words" in reasons,
+        "narrow_formulations": "budget_exhausted" in reasons and narrowable,
+    }
+    return [step for step in ABSENCE_STEPS if conditions[step]]
+
+
+def absence_check(
+    scanned: Optional[dict[str, Any]], results: list[dict[str, Any]], block: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """The verdict every report carries: whether an absence statement is allowed, and what is missing if not.
+
+    `scanned` is the return value of `exhaustive_scan`, or None when the call
+    ran without the exhaustive scan; then only `not_exhaustive` is listed and
+    every field that was not evaluated is null rather than zero.
+    """
+    if scanned is None:
+        return {
+            "format": ABSENCE_CHECK_FORMAT,
+            "complete": False,
+            "reasons": ["not_exhaustive"],
+            "next_steps": None,
+            "reformulations_counted": None,
+            "budget": None,
+            "counts": None,
+            "omitted_pages": None,
+            "absent_terms": None,
+            "formulations": None,
+            "scopes": None,
+            "terms": None,
+            "boundary": ABSENCE_BOUNDARY,
+        }
+    applies = {
+        "not_exhaustive": False,
+        "too_few_reformulations": scanned["reformulations_counted"] < MIN_EXHAUSTIVE_REFORMULATIONS,
+        "no_content_words": not any(entry["content_words"] for entry in scanned["formulations"]),
+        "budget_exhausted": scanned["budget"]["needed_chars"] > scanned["budget"]["limit_chars"],
+    }
+    reasons = [reason for reason in ABSENCE_REASONS if applies[reason]]
+    return {
+        "format": ABSENCE_CHECK_FORMAT,
+        "complete": not reasons,
+        "reasons": reasons,
+        "next_steps": absence_steps(reasons, results, block, scanned["hits"], scanned.get("narrowable", True)),
+        "reformulations_counted": scanned["reformulations_counted"],
+        "budget": scanned["budget"],
+        "counts": scanned["counts"],
+        "omitted_pages": scanned["omitted_pages"],
+        "absent_terms": scanned["absent_terms"],
+        "formulations": scanned["formulations"],
+        "scopes": scanned["scopes"],
+        "terms": scanned["terms"],
+        "boundary": ABSENCE_BOUNDARY,
+    }
+
+
+def search_record(found: dict[str, Any], release: dict[str, Any]) -> dict[str, str]:
+    """The one-line record of a search that an answer quotes; `release` is the release the wrapper verified (pure)."""
+    query = str(found["formulations"][0]["text"])
+    if len(query) > SEARCH_RECORD_QUERY_CHARS:
+        query = query[:SEARCH_RECORD_QUERY_CHARS] + "…"
+    scopes = found["coverage"]["scopes"]
+    exhaustive = found["exhaustive_hits"] is not None
+    check = found["absence_check"]
+    hits = f"{check['counts']['hits_returned']}/{check['counts']['hits_total']}" if exhaustive else "none"
+    line = " ".join(
+        [
+            SEARCH_RECORD_FORMAT,
+            f"release={release.get('version', '')}",
+            f"id={release.get('release_id', '')}",
+            f"manifest={str(release.get('manifest_sha256') or '')[:12]}",
+            f"query={json.dumps(query, ensure_ascii=False)}",
+            f"reformulations={len(found['formulations']) - 1}",
+            f"ranked={'+'.join(scope for scope in SCOPES if scopes[scope]['searched'])}",
+            f"exhaustive={'true' if exhaustive else 'false'}",
+            f"results={len(found['results'])}/{found['coverage']['matched']}",
+            f"hits={hits}",
+            f"complete={'true' if check['complete'] else 'false'}",
+        ]
+    )
+    return {"format": SEARCH_RECORD_FORMAT, "line": line}
+
+
+def search_loaded(
+    loaded: LoadedRelease,
     query: str,
     *,
     also: Iterable[str] = (),
     limit: int = 12,
-    include_sources: bool = False,
-    include_history: bool = False,
-    selector: Optional[dict[str, Any]] = None,
-    history_shipped: bool = True,
-    path_prefix: str = "",
-    word_forms: bool = True,
+    exhaustive: bool = False,
+    exhaustive_budget: int = EXHAUSTIVE_BUDGET_CHARS,
 ) -> dict[str, Any]:
-    """Rank the release under `root` for `query` and its reformulations, and account for what is not shown.
+    """Rank `query` and its reformulations over a loaded release, fuse them, and add the absence check.
 
-    `also` holds at most MAX_ALSO reformulations (see `plan_formulations`).
-    `selector` must already be validated by `wiki_filters.validate_selector`.
-    `history_shipped=False` describes a release that carries no history layer,
-    such as an exported knowledge skill. `path_prefix` is prepended to every
-    path the report names; selectors, scopes and navigation are decided on the
-    release-relative path. `word_forms=False` runs the literal search without
-    the word-form layer, for measurement and tests; the helpers never pass it.
-
-    The release is read once and every formulation is ranked over it. The
-    query's `matched_concepts`, `expanded_terms`, `facets` (over every match),
-    `results` (at most `limit`) and `coverage` are exactly those of a search
-    without reformulations, plus `found_by` on each result and the coverage
-    keys `formulations` and `reformulation_results`. `reformulation_results`
-    holds at most `limit` pages that only reformulations returned within the
-    limit, without navigation pages. Also returned: `searched_files`,
-    `filtered_out`, `formulations`, `dropped_formulations` and
-    `parser_errors`. A caller must not report results when `parser_errors` is
-    non-empty. Raises QueryError for a query without a searchable token,
-    RequestError for invalid reformulations and ValueError for an impossible
-    option.
+    The steps after `load`: plan the formulations, rank each kept one, build
+    `results`, `reformulation_results` and `coverage` exactly as without the
+    exhaustive scan, then, with `exhaustive` (which needs `load(exhaustive=True)`),
+    scan every passage for all words of all formulations. `absence_check` is
+    computed in both modes; `exhaustive_hits` is None without the scan.
+    `exhaustive_budget` exists for tests only. Raises QueryError, RequestError
+    and ValueError like `search`.
     """
     if limit < 1:
         raise ValueError("limit must be at least 1")
-    if include_history and not history_shipped:
-        raise ValueError("this release ships no history layer to search")
+    if exhaustive and not getattr(loaded, "exhaustive", False):
+        raise ValueError("an exhaustive search needs a release loaded with exhaustive=True")
     also = list(also)
     kept, dropped = plan_formulations(query, also)
     if not TOKEN.findall(normalized(query)):
         raise QueryError("query must contain at least one searchable token")
-    loaded = load(
-        root,
-        include_sources=include_sources,
-        include_history=include_history,
-        selector=selector,
-        history_shipped=history_shipped,
-        path_prefix=path_prefix,
-        word_forms=word_forms,
-    )
     rankings = [rank(loaded, query, limit=limit)]
     formulations = [kept[0]]
     dropped_positions = {item["position"] for item in dropped}
@@ -1345,6 +2595,20 @@ def search(
         "navigation_skipped": len(navigation_skipped),
         "boundary": REFORMULATION_BOUNDARY,
     }
+
+    scanned: Optional[dict[str, Any]] = None
+    if exhaustive and loaded.scan is not None:
+        contents = [content_words(ranking.terms) for ranking in rankings]
+        scanned = exhaustive_scan(
+            loaded.scan,
+            rankings,
+            [entry["text"] for entry in formulations],
+            loaded.concept_definitions,
+            loaded.vocabulary,
+            printed_claim_keys(results, block, loaded.path_prefix),
+            counted_reformulations(formulations, contents),
+            exhaustive_budget,
+        )
     return {
         "searched_files": loaded.searched,
         "filtered_out": loaded.filtered_out,
@@ -1365,5 +2629,76 @@ def search(
         "results": results,
         "reformulation_results": block,
         "coverage": coverage,
+        "absence_check": absence_check(scanned, results, block),
+        "exhaustive_hits": scanned["hits"] if scanned is not None else None,
         "parser_errors": loaded.parser_errors,
     }
+
+
+def search(
+    root: Path,
+    query: str,
+    *,
+    also: Iterable[str] = (),
+    limit: int = 12,
+    include_sources: bool = False,
+    include_history: bool = False,
+    selector: Optional[dict[str, Any]] = None,
+    history_shipped: bool = True,
+    path_prefix: str = "",
+    word_forms: bool = True,
+    exhaustive: bool = False,
+    exhaustive_budget: int = EXHAUSTIVE_BUDGET_CHARS,
+) -> dict[str, Any]:
+    """Rank the release under `root` for `query` and its reformulations, and account for what is not shown.
+
+    `also` holds at most MAX_ALSO reformulations (see `plan_formulations`).
+    `selector` must already be validated by `wiki_filters.validate_selector`.
+    `history_shipped=False` describes a release that carries no history layer,
+    such as an exported knowledge skill. `path_prefix` is prepended to every
+    path the report names; selectors, scopes and navigation are decided on the
+    release-relative path. `word_forms=False` runs the literal search without
+    the word-form layer, for measurement and tests; the helpers never pass it.
+
+    The release is read once and every formulation is ranked over it. The
+    query's `matched_concepts`, `expanded_terms`, `facets` (over every match),
+    `results` (at most `limit`) and `coverage` are exactly those of a search
+    without reformulations, plus `found_by` on each result and the coverage
+    keys `formulations` and `reformulation_results`. `reformulation_results`
+    holds at most `limit` pages that only reformulations returned within the
+    limit, without navigation pages. Also returned: `searched_files`,
+    `filtered_out`, `formulations`, `dropped_formulations`, `absence_check`,
+    `exhaustive_hits` and `parser_errors`. A caller must not report results
+    when `parser_errors` is non-empty.
+
+    `exhaustive=True` forces `include_sources` and scans every passage of the
+    ranked files except navigation for all words of all formulations, within
+    `exhaustive_budget` printed characters of `exhaustive_hits` (tests only;
+    the helpers never pass it). Everything else in the report stays what the
+    same call without the scan but with `include_sources` returns. Raises
+    QueryError for a query without a searchable token, RequestError for
+    invalid reformulations and ValueError for an impossible option.
+    """
+    if limit < 1:
+        raise ValueError("limit must be at least 1")
+    if include_history and not history_shipped:
+        raise ValueError("this release ships no history layer to search")
+    if exhaustive and not word_forms:
+        raise ValueError("an exhaustive search needs the word-form layer")
+    also = list(also)
+    plan_formulations(query, also)
+    if not TOKEN.findall(normalized(query)):
+        raise QueryError("query must contain at least one searchable token")
+    loaded = load(
+        root,
+        include_sources=include_sources or exhaustive,
+        include_history=include_history,
+        selector=selector,
+        history_shipped=history_shipped,
+        path_prefix=path_prefix,
+        word_forms=word_forms,
+        exhaustive=exhaustive,
+    )
+    return search_loaded(
+        loaded, query, also=also, limit=limit, exhaustive=exhaustive, exhaustive_budget=exhaustive_budget
+    )

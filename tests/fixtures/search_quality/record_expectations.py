@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-"""Regenerate expectations.json (or, with --reformulations, reformulation_expectations.json) from the search as it is now.
+"""Regenerate expectations.json (or reformulation_expectations.json, or absence_expectations.json) from the search as it is now.
 
     python3 tests/fixtures/search_quality/record_expectations.py
     python3 tests/fixtures/search_quality/record_expectations.py --output /tmp/new-expectations.json
     python3 tests/fixtures/search_quality/record_expectations.py --reformulations
+    python3 tests/fixtures/search_quality/record_expectations.py --absence
 
 With --reformulations, every question runs once per set in reformulations.json
 with that set's reformulations, and the second gate's expectations are written
-instead (see quality.REFORMULATION_ABOUT). The sets themselves are never edited
-to make a gate pass; a new set is added instead.
+instead (see quality.REFORMULATION_ABOUT). With --absence, every question runs
+once per set with --exhaustive, and the third gate's expectations are written
+(see quality.ABSENCE_ABOUT): a negative question keeps the reason recorded for
+its heuristic hits while they stay the same; a new hit is written with the
+unjudged marker, and the gate fails until a person has read the passage and
+replaced the marker with the judgment. The sets themselves are never edited to
+make a gate pass; a new set is added instead.
 
 The fixture is built into a temporary directory outside the repository, all
 ground-truth queries run through the query skill's search core, and the result
@@ -66,6 +72,40 @@ def record_reformulations(output: str) -> int:
     return 0
 
 
+def record_absence(output: str) -> int:
+    path = quality.ABSENCE_EXPECTATIONS
+    previous = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+    workspace = Path(tempfile.mkdtemp(prefix="lmwiki-search-quality-"))
+    try:
+        wiki = quality.build(workspace / "fixture")
+        measurement = quality.measure_absence(wiki, quality.load_ground_truth(), quality.load_reformulations())
+    finally:
+        shutil.rmtree(workspace, ignore_errors=True)
+    document = quality.absence_expectations(measurement, previous)
+    Path(output).write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    for name, recorded in document["sets"].items():
+        totals = measurement["sets"][name]["aggregates"]
+        print(json.dumps({
+            "set": name, "complete_floor": recorded["complete_floor"],
+            "claims_returned_floor": recorded["claims_returned_floor"], "incomplete": totals["incomplete"],
+        }, ensure_ascii=False))
+        for query_id, negative in recorded["negatives"].items():
+            if negative["reason"] == quality.UNJUDGED:
+                for hit in measurement["sets"][name]["queries"][query_id]["heuristic_hits"]:
+                    print(f"set {name}, {query_id}: judge {hit['path']} {hit['kind']} line {hit['line']}: {hit['text']!r}")
+        if previous is not None and name in previous.get("sets", {}):
+            before = previous["sets"][name]
+            for key in ("complete_floor", "claims_returned_floor"):
+                if before.get(key) != recorded[key]:
+                    print(f"set {name}: changed {key}: {before.get(key)} -> {recorded[key]}")
+    if previous is not None:
+        for rule, lines in quality.absence_problems(previous, measurement).items():
+            for line in lines:
+                print(f"worse ({rule}):", line)
+    print(f"wrote {output}; state this change and its reason in the commit message")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--output", default=None, help="Where to write (default: the expectations file of the chosen gate)")
@@ -74,7 +114,16 @@ def main() -> int:
         action="store_true",
         help="Record the second gate, reformulation_expectations.json, from the sets in reformulations.json",
     )
+    parser.add_argument(
+        "--absence",
+        action="store_true",
+        help="Record the third gate, absence_expectations.json, from exhaustive searches with the sets in reformulations.json",
+    )
     args = parser.parse_args()
+    if args.reformulations and args.absence:
+        parser.error("choose one of --reformulations and --absence")
+    if args.absence:
+        return record_absence(args.output or str(quality.ABSENCE_EXPECTATIONS))
     if args.reformulations:
         return record_reformulations(args.output or str(quality.REFORMULATION_EXPECTATIONS))
     args.output = args.output or str(quality.EXPECTATIONS)

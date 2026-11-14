@@ -86,6 +86,8 @@ SELF_CHECK_CALLS = (
         '{"kind":"filter","conditions":[{"property":"__trust_tier","operator":"equals","value":"unverified"}]}',
     ),
     SELF_CHECK_REQUEST_CALL,
+    # The exhaustive scan SKILL.md requires before an absence statement.
+    ("search_knowledge.py", "--query", "wiki", "--also", "Übersicht", "--also", "Seite", "--exhaustive"),
 )
 
 

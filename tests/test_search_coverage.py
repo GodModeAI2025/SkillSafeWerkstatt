@@ -10,6 +10,9 @@ omitted, and omitted_top naming at most 20 of the omitted matches. Since format
 also counts per search (`coverage.formulations`) and describes the block of
 reformulation-only pages (`coverage.reformulation_results`), whether or not the
 call carried reformulations (tests/test_search_formulations.py pins the fusion).
+Since Stufe 4 every report also carries `absence_check` and `search_record`;
+`assert_absence_identities` pins the identities of the absence check on every
+report (tests/test_absence_check.py pins the scan itself).
 """
 
 from __future__ import annotations
@@ -195,6 +198,58 @@ def assert_reformulation_identities(test: unittest.TestCase, report: dict, limit
         )
 
 
+def assert_absence_identities(test: unittest.TestCase, report: dict) -> None:
+    """The absence check agrees with itself and with the hits the report prints (spec 3.1)."""
+    check = report["absence_check"]
+    test.assertEqual(check["format"], search_core.ABSENCE_CHECK_FORMAT)
+    test.assertEqual(list(check), [
+        "format", "complete", "reasons", "next_steps", "reformulations_counted", "budget", "counts",
+        "omitted_pages", "absent_terms", "formulations", "scopes", "terms", "boundary",
+    ])
+    test.assertEqual(check["boundary"], search_core.ABSENCE_BOUNDARY)
+    test.assertEqual(check["complete"], check["reasons"] == [])
+    test.assertEqual(check["reasons"], [reason for reason in search_core.ABSENCE_REASONS if reason in check["reasons"]])
+    hits = report["exhaustive_hits"]
+    if hits is None:
+        test.assertEqual(check["reasons"], ["not_exhaustive"])
+        for key in ("next_steps", "reformulations_counted", "budget", "counts", "omitted_pages", "absent_terms",
+                    "formulations", "scopes", "terms"):
+            test.assertIsNone(check[key], key)
+        return
+    test.assertNotIn("not_exhaustive", check["reasons"])
+    test.assertEqual(check["next_steps"], [step for step in search_core.ABSENCE_STEPS if step in check["next_steps"]])
+    counts, budget = check["counts"], check["budget"]
+    test.assertEqual(counts["hits_returned"] + counts["hits_omitted"], counts["hits_total"])
+    test.assertEqual(counts["hits_word_form"] + counts["hits_heuristic"], counts["hits_total"])
+    test.assertEqual(counts["pages_returned"] + counts["pages_not_returned"], counts["pages_with_hits"])
+    test.assertLessEqual(counts["pages_partial"], counts["pages_returned"])
+    test.assertLessEqual(budget["used_chars"], budget["limit_chars"])
+    test.assertEqual(budget["used_chars"], search_core.printed_chars(hits, 1))
+    exhausted = "budget_exhausted" in check["reasons"]
+    test.assertEqual(exhausted, budget["needed_chars"] > budget["limit_chars"])
+    test.assertEqual(exhausted, counts["hits_omitted"] > 0)
+    test.assertEqual(counts["hits_returned"], sum(len(page["hits"]) for page in hits))
+    test.assertEqual(counts["pages_returned"], len(hits))
+    test.assertEqual(
+        counts["pages_partial"], sum(1 for page in hits if len(page["hits"]) < page["hits_total"])
+    )
+    test.assertLessEqual(len(check["omitted_pages"]), search_core.OMITTED_PAGES_LISTED)
+    test.assertEqual(len(check["omitted_pages"]), min(search_core.OMITTED_PAGES_LISTED, counts["pages_not_returned"]))
+    for page in hits:
+        for hit in page["hits"]:
+            test.assertIn(hit["kind"], search_core.PASSAGE_KINDS)
+            if "shown_in" in hit:
+                test.assertEqual(hit["kind"], "claim")
+                test.assertNotIn("text", hit)
+            else:
+                test.assertEqual("matched" in hit, hit["strength"] == "heuristic")
+                test.assertLessEqual(len(hit["text"]), search_core.EXCERPT_CHARS)
+    # References count whether or not they fit into the budget.
+    test.assertGreaterEqual(
+        counts["hits_already_printed"], sum(1 for page in hits for hit in page["hits"] if "shown_in" in hit)
+    )
+
+
 class CoverageOnAReleasedWiki(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -213,6 +268,7 @@ class CoverageOnAReleasedWiki(unittest.TestCase):
         coverage = report["coverage"]
         self.assertEqual(coverage["format"], "lmwiki-search-coverage/3")
         assert_reformulation_identities(self, report)
+        assert_absence_identities(self, report)
         self.assertEqual(coverage["returned"], len(report["results"]))
         self.assertEqual(coverage["returned"] + coverage["omitted_count"], coverage["matched"])
         self.assertEqual(coverage["truncated"], coverage["omitted_count"] > 0)
@@ -500,13 +556,17 @@ class ActionCatalogLists(unittest.TestCase):
         catalog = run_json(QUERY / "describe_actions.py")
         actions = {item["id"]: item for item in catalog["actions"]}
         listed = {"--" + parameter["name"].replace("_", "-") for parameter in actions["search"]["parameters"]}
+        self.assertIn("--exhaustive", listed)
         helptext = run(QUERY / "search_wiki.py", "--help").stdout
         accepted = {word.rstrip(",") for word in helptext.split() if word.startswith("--")} - {"--help", "--target"}
         self.assertEqual(listed, accepted)
         # An agent that discovers the search through the catalog learns every
         # matching rule and every output it has to read.
         description = actions["search"]["description"]
-        for phrase in ("compound and typo heuristics", "match_rules", "reformulation_results", "found_by", "word forms, and unmatched terms"):
+        for phrase in (
+            "compound and typo heuristics", "match_rules", "reformulation_results", "found_by",
+            "word forms, and unmatched terms", "exhaustive", "absence_check", "search_record", "100,000",
+        ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, description)
 

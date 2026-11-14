@@ -6,7 +6,9 @@ bundled snapshot before and after the search; ranking, claims, snippets,
 reformulations and the coverage block come from `search_core.py`, the same core
 the query skill uses. The query and up to four reformulations come from
 `--query` and `--also`, or as one JSON object on standard input with
-`--request -`.
+`--request -`. With `--exhaustive` the same call also ranks the sources and
+scans every passage for all words of all searches before an absence statement;
+every report carries `search_record` and `absence_check`.
 """
 
 from __future__ import annotations
@@ -73,6 +75,14 @@ def main() -> int:
     )
     parser.add_argument("--limit", type=int, default=12, help="Maximum result count (1-100)")
     parser.add_argument("--include-sources", action="store_true", help="Also search faithful source Markdown")
+    parser.add_argument(
+        "--exhaustive",
+        action="store_true",
+        help="Also rank sources and scan every passage of the wiki pages, meta/questions.md and the source "
+        "Markdown for all words of all searches; "
+        "returns at most 100,000 printed characters of matching passages under exhaustive_hits; "
+        "required before stating that the snapshot holds nothing on a question",
+    )
     parser.add_argument("--filter-json", default=None, help="Validated metadata selector as JSON (default: all)")
     parser.add_argument(
         "--expect-manifest-sha256",
@@ -109,16 +119,19 @@ def main() -> int:
         return 4
     if args.expect_manifest_sha256 and release.get("manifest_sha256") != args.expect_manifest_sha256:
         return snapshot_changed(args.expect_manifest_sha256, str(release.get("manifest_sha256") or ""))
+    # The exhaustive scan ranks the sources too; the report prints the effective value.
+    include_sources = args.include_sources or args.exhaustive
     try:
         found = search_core.search(
             knowledge_root(),
             query,
             also=also,
             limit=args.limit,
-            include_sources=args.include_sources,
+            include_sources=include_sources,
             selector=selector,
             history_shipped=False,
             path_prefix=PATH_PREFIX,
+            exhaustive=args.exhaustive,
         )
     except (search_core.QueryError, search_core.RequestError) as exc:
         raise SystemExit(str(exc)) from exc
@@ -134,8 +147,11 @@ def main() -> int:
         "formulations": found["formulations"],
         "dropped_formulations": found["dropped_formulations"],
         "release": release,
+        # The verdict and the record line come first: hosts may cut long output to a preview.
+        "search_record": search_core.search_record(found, release),
+        "absence_check": found["absence_check"],
         "searched_files": found["searched_files"],
-        "include_sources": args.include_sources,
+        "include_sources": include_sources,
         "selector": selector,
         "filtered_out": found["filtered_out"],
         "matched_concepts": found["matched_concepts"],
@@ -144,7 +160,9 @@ def main() -> int:
         "results": found["results"],
         "reformulation_results": found["reformulation_results"],
         "coverage": found["coverage"],
-    }, ensure_ascii=False, indent=2))
+        # Last, so a cut preview still shows everything above.
+        "exhaustive_hits": found["exhaustive_hits"],
+    }, ensure_ascii=False, indent=search_core.REPORT_INDENT))
     return 0
 
 

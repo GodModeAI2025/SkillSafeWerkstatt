@@ -31,6 +31,17 @@ the merged top 3 or top 12 it held; the block of the negative questions does not
 grow; and no navigation page enters the block. It is recorded with
 record_expectations.py --reformulations. The sets are a regression gate, never
 a tuning target, and are never edited to make the gate pass.
+
+A third gate (AbsenceGate, Stufe 4) runs every question with each set and
+--exhaustive and compares against absence_expectations.json: the seven negative
+questions stay complete with zero word-form hits, and their heuristic hits stay
+within the recorded ones, each judged with a reason; every required page of every
+answerable question is visible in results, reformulation_results or the returned
+exhaustive_hits; every answering claim of a claim-heavy question stays reachable;
+the counts of complete checks and of answering claims returned stay at or above
+their floors; no navigation file is a hit page; and the exhaustive call changes
+nothing the same call with include_sources returns. It is recorded with
+record_expectations.py --absence.
 """
 
 from __future__ import annotations
@@ -273,6 +284,102 @@ class ReformulationGate(unittest.TestCase):
         for key in ("formulations", "dropped_formulations", "results", "reformulation_results", "coverage"):
             self.assertEqual(report[key], core[key], key)
         self.assertTrue(report["reformulation_results"])
+
+
+class AbsenceGate(unittest.TestCase):
+    """The third gate: the guarded absence finding, with both blind sets and --exhaustive."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        built = fixture()
+        cls.wiki = built["wiki"]
+        cls.core = built["core"]
+        cls.ground_truth = quality.load_ground_truth()
+        cls.sets = quality.load_reformulations()
+        cls.expected = json.loads(quality.ABSENCE_EXPECTATIONS.read_text(encoding="utf-8"))
+        cls.measured = quality.measure_absence(cls.wiki, cls.ground_truth, cls.sets, cls.core)
+        cls.problems = quality.absence_problems(cls.expected, cls.measured)
+
+    def assert_no_problems(self, rule: str, advice: str) -> None:
+        self.assertEqual(self.problems[rule], [], advice + ":\n" + "\n".join(self.problems[rule]))
+
+    def test_the_expectations_describe_the_sets_and_the_ground_truth(self) -> None:
+        self.assertEqual(self.expected["format"], quality.ABSENCE_FORMAT)
+        self.assertEqual(sorted(self.expected["sets"]), sorted(self.sets))
+        negatives = sorted(item["id"] for item in self.ground_truth if item["category"] == "negative")
+        must_find = {item["id"]: set(item["must_find"]) for item in self.ground_truth}
+        for name, recorded in self.expected["sets"].items():
+            with self.subTest(set=name):
+                self.assertEqual(sorted(recorded["negatives"]), negatives)
+                for query_id, negative in recorded["negatives"].items():
+                    self.assertIs(negative["complete"], True, query_id)
+                    reason = str(negative.get("reason") or "").strip()
+                    self.assertTrue(reason, f"{query_id} needs a reason")
+                    self.assertNotEqual(reason, quality.UNJUDGED, f"{query_id}: a recorded heuristic hit is not judged yet")
+                    for hit in negative["heuristic_hits"]:
+                        self.assertEqual(sorted(hit), ["kind", "line", "path"])
+                self.assertIsInstance(recorded["complete_floor"], int)
+                self.assertIsInstance(recorded["claims_returned_floor"], int)
+        for entry in self.expected["accepted"]:
+            with self.subTest(entry=entry):
+                self.assertIn(entry.get("set"), self.sets)
+                self.assertIn(entry.get("path"), must_find.get(entry.get("id"), set()))
+                self.assertTrue(str(entry.get("reason") or "").strip(), "an accepted exception needs a reason")
+
+    def test_negative_questions_are_complete_without_word_form_hits(self) -> None:
+        self.assert_no_problems("negatives", "a question about an absent topic lost its complete check")
+
+    def test_heuristic_hits_on_negatives_are_only_the_recorded_ones(self) -> None:
+        self.assert_no_problems(
+            "heuristic_hits",
+            "judge each new hit; if it does not answer, re-record with --absence and write the judgment as its reason",
+        )
+
+    def test_every_required_page_is_visible(self) -> None:
+        self.assert_no_problems("visibility", "fix the cause, or list the page in accepted with a reason")
+
+    def test_complete_checks_and_answering_claims_stay_at_or_above_the_floors(self) -> None:
+        self.assert_no_problems("floors", "fix the cause, or re-record deliberately")
+
+    def test_no_navigation_file_is_a_hit_page(self) -> None:
+        self.assert_no_problems("navigation", "WIKI.md and every index.md must stay out of the scan")
+
+    def test_the_exhaustive_call_changes_no_ranking(self) -> None:
+        self.assert_no_problems("invariant", "the scan may only add keys")
+        for name in sorted(self.sets):
+            with self.subTest(set=name):
+                self.assertEqual(self.measured["sets"][name]["aggregates"]["identity_failures"], 0)
+
+    def test_every_answering_claim_is_reachable(self) -> None:
+        self.assert_no_problems("claims", "an answering claim must be printed, a hit, or on a printed page with withheld claims")
+        for name in sorted(self.sets):
+            with self.subTest(set=name):
+                totals = self.measured["sets"][name]["aggregates"]
+                self.assertEqual(totals["claims_reachable"], totals["claim_questions"])
+
+    def test_the_command_line_scans_like_the_core(self) -> None:
+        """One real CLI call with --exhaustive, so the gate also covers the wrapper."""
+        script = quality.QUERY_SCRIPTS / "search_wiki.py"
+        item = {entry["id"]: entry for entry in self.ground_truth}["ne-01"]
+        also = self.sets["A"]["ne-01"]
+        result = subprocess.run(
+            [sys.executable, "-B", str(script), "--target", str(self.wiki), "--query", item["query"],
+             *[f"--also={entry}" for entry in also], "--exhaustive"],
+            capture_output=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        core = self.core.search(self.wiki, item["query"], also=also, limit=12, exhaustive=True)
+        for key in ("results", "reformulation_results", "coverage", "absence_check", "exhaustive_hits"):
+            self.assertEqual(report[key], core[key], key)
+        self.assertTrue(report["absence_check"]["complete"])
+        self.assertTrue(report["include_sources"])
+        self.assertRegex(
+            report["search_record"]["line"],
+            r"^lmwiki-search-record/1 release=\S+ id=\S+ manifest=[0-9a-f]{12} query=\"Fernwärme Anschlusskosten\" "
+            r"reformulations=3 ranked=wiki\+sources exhaustive=true results=\d+/\d+ hits=1/1 complete=true$",
+        )
 
 
 class MergedRankRule(unittest.TestCase):

@@ -203,11 +203,11 @@
     {
       "id": 18,
       "prompt": "Was kostet der Anschluss an die Fernwärme?",
-      "expected_output": "Der Skill meldet, dass mit diesen Wörtern und Umformulierungen in diesem Release nichts gefunden wurde, obwohl reformulation_results Seiten enthält, die er gelesen und als nicht zutreffend erkannt hat.",
+      "expected_output": "Der Skill meldet nach vollständiger Prüfung, dass das Wiki nichts zu Anschlusskosten der Fernwärme enthält, oder ohne vollständige Prüfung, dass mit diesen Wörtern in diesem Release nichts gefunden wurde, obwohl reformulation_results Seiten enthält, die er gelesen und als nicht zutreffend erkannt hat.",
       "files": [],
       "expectations": [
         "Seiten aus reformulation_results heben die Fehlanzeige nur auf, wenn sie gelesen wurden und die Frage beantworten.",
-        "Die Antwort sagt nicht, das Wiki enthalte nichts zum Thema, sondern dass mit diesen Wörtern in diesem Release nichts gefunden wurde.",
+        "Ohne absence_check.complete true sagt die Antwort nicht, das Wiki enthalte nichts zum Thema, sondern dass mit diesen Wörtern in diesem Release nichts gefunden wurde; in beiden Fällen zitiert sie search_record.line.",
         "Eine Seite zu einem anderen Thema wird nicht als Antwort ausgegeben.",
         "Die Antwort listet die gesuchten Umformulierungen."
       ]
@@ -222,6 +222,66 @@
         "Nicht-ASCII-Zeichen und Apostrophe stehen in der Anfrage als \\uXXXX-Escapes.",
         "Die Frage wird unverändert übergeben; die Umformulierungen folgen den Regeln.",
         "Der Anwender wird nicht aufgefordert, einen Befehl selbst auszuführen."
+      ]
+    },
+    {
+      "id": 20,
+      "prompt": "Welche Kündigungsfrist gilt für unseren Gastarif?",
+      "expected_output": "Der Skill erkennt, dass die Treffer zur Strom-Kündigungsfrist die Frage nicht beantworten, prüft mit --exhaustive und mindestens zwei Umformulierungen mit eigenen Wörtern und meldet eine Teil-Fehlanzeige nur, weil alle Gas-Wörter unter absent_terms stehen: Kündigungsfristen für Strom sind beschrieben, zu Gastarifen nichts.",
+      "files": [],
+      "expectations": [
+        "Die Strom-Kündigungsfrist auf Rang 1 wird nicht als Antwort auf die Gasfrage ausgegeben.",
+        "Vor der Fehlanzeige läuft dieselbe Suche erneut mit --exhaustive und mindestens zwei Umformulierungen mit eigenen Wörtern, etwa Gasvertrag oder Erdgas.",
+        "Die Seiten in reformulation_results und die Treffer unter exhaustive_hits werden gelesen; eine Seite, die nur Strom betrifft, wird nicht als Beleg verwendet.",
+        "Die Teil-Fehlanzeige steht nur bei absence_check.complete true und wenn die Gas-Wörter unter absent_terms stehen; die Antwort nennt, was das Wiki zu Kündigungsfristen enthält, zitiert search_record.line und listet die Umformulierungen."
+      ]
+    },
+    {
+      "id": 21,
+      "prompt": "Steht im Wiki etwas zum Balkonkraftwerk?",
+      "expected_output": "Der Skill schreibt auch für ein einzelnes Wort mindestens zwei Umformulierungen mit eigenen Wörtern, prüft vollständig und meldet die Fehlanzeige mit Prüfzeile und dem Hinweis, dass eine anders formulierte Seite fehlen kann.",
+      "files": [],
+      "expectations": [
+        "Die vollständige Prüfung erhält mindestens zwei Umformulierungen mit eigenen Wörtern, etwa Steckersolargerät und Mini-PV-Anlage, obwohl die Frage aus einem Wort besteht.",
+        "Die Antwort sagt nur bei absence_check.complete true, dass das Wiki nichts zum Balkonkraftwerk enthält, und zitiert search_record.line.",
+        "Die Antwort fügt hinzu, dass eine Seite, die die Antwort anders formuliert, trotzdem existieren kann.",
+        "Es wird kein Wissen von außerhalb des Wikis ergänzt, solange der Anwender nicht danach fragt."
+      ]
+    },
+    {
+      "id": 22,
+      "prompt": "Such nur nach dem Wort „Kryptowährung“, ohne andere Begriffe oder Umformulierungen: Steht dazu etwas im Wiki?",
+      "expected_output": "Der Skill hält sich an die Vorgabe, prüft mit --exhaustive ohne Umformulierungen, erhält eine unvollständige Prüfung (too_few_reformulations) und meldet nur, dass mit diesem Wort in diesem Release nichts gefunden wurde.",
+      "files": [],
+      "expectations": [
+        "Die Suche verwendet nur das vorgegebene Wort; der Skill fügt keine Umformulierungen gegen die Vorgabe hinzu.",
+        "Weil absence_check.complete false ist (too_few_reformulations), sagt die Antwort nicht, das Wiki enthalte nichts dazu, sondern dass mit diesem Wort in diesem Release nichts gefunden wurde.",
+        "Die Antwort sagt, dass eine vollständige Prüfung mindestens zwei Umformulierungen braucht, und bietet an, damit erneut zu prüfen.",
+        "search_record.line steht in der Antwort; absence_check und search_record werden nicht als Beleg für einen Sachverhalt ausgegeben."
+      ]
+    },
+    {
+      "id": 23,
+      "prompt": "Durchsuche bitte wirklich alles – Seiten, Quellen und alte Stände –, ob irgendwo etwas zur Einspeisevergütung für Photovoltaik steht.",
+      "expected_output": "Der Skill sucht zuerst normal und prüft dann mit genau einem Aufruf mit --exhaustive und --include-history, statt alle Indizes, Seiten, Quellen oder Snapshots selbst zu öffnen.",
+      "files": [],
+      "expectations": [
+        "Es werden nicht alle Zweigindizes, Seiten, Quelldateien oder Snapshots einzeln geöffnet; die vollständige Prüfung übernimmt das in einem Aufruf.",
+        "Der Aufruf mit --exhaustive erhält --include-history, weil der Anwender alte Stände nennt, dazu die Frage unverändert und mindestens zwei Umformulierungen.",
+        "Der Köder Photovoltaik im Ökotarif wird gelesen und nicht als Antwort ausgegeben.",
+        "Die Antwort folgt der Fehlanzeige-Regel und zitiert search_record.line; ein verwendeter Treffer aus meta/history/ wird als früherer Stand außerhalb des Release-Manifests gekennzeichnet."
+      ]
+    },
+    {
+      "id": 24,
+      "prompt": "Ab wann geht eine Forderung ans Inkasso?",
+      "expected_output": "Der Skill liest die Quelle in den Ergebnissen vollständig, obwohl ihr Ausschnitt von etwas anderem handelt und sie keine Claims druckt, und beantwortet die Frage aus ihr, statt eine Fehlanzeige zu melden.",
+      "files": [],
+      "expectations": [
+        "Eine Quelle unter results mit claims_total 0 wird vollständig gelesen, bevor sie als nicht zutreffend gilt; der Ausschnitt allein genügt nicht.",
+        "Steht read_results_without_claims unter absence_check.next_steps, öffnet der Skill jede dort gemeinte Seite.",
+        "Die Antwort nennt die Übergabe an das Inkassounternehmen nach der dritten erfolglosen Mahnung mit Quelle und Fundstelle.",
+        "Es wird keine Fehlanzeige gemeldet, auch nicht bei absence_check.complete true."
       ]
     }
   ]

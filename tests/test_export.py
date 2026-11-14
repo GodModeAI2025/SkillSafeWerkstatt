@@ -189,6 +189,7 @@ class ExportedSkillRuns(unittest.TestCase):
             ("--query", "Testwiki Überblick", "--include-sources", "--limit", "100"),
             ("--query", "Testwikis Ueberblicke Wikiseiten", "--limit", "100"),
             ("--query", "Testwiki", "--also", "Überblick", "--also", "Fragen", "--limit", "1"),
+            ("--query", "Wiki", "--also", "Übersicht", "--also", "Seite", "--exhaustive"),
         ):
             with self.subTest(arguments=arguments):
                 exported = self.exported_search(*arguments)
@@ -225,8 +226,36 @@ class ExportedSkillRuns(unittest.TestCase):
                     [(item["path"], item["via"], item["found_by"]) for item in expected["reformulation_results"]],
                 )
                 self.assertEqual(report["formulations"], expected["formulations"])
-                if "--also" in arguments:
+                if "--also" in arguments and "--exhaustive" not in arguments:
                     self.assertTrue(report["reformulation_results"], "the case must exercise the block")
+                # Both sides scan the same layers: the query skill runs without --include-history.
+                self.assertEqual(report["search_record"]["line"], expected["search_record"]["line"])
+                self.assertEqual(report["include_sources"], expected["include_sources"])
+                if "--exhaustive" not in arguments:
+                    self.assertIsNone(report["exhaustive_hits"])
+                    self.assertEqual(report["absence_check"], expected["absence_check"])
+                    continue
+                self.assertTrue(report["exhaustive_hits"], "the case must exercise the scan")
+                self.assertTrue(all(entry["path"].startswith(prefix) for entry in report["exhaustive_hits"]))
+                self.assertEqual(
+                    [{**entry, "path": entry["path"][len(prefix):]} for entry in report["exhaustive_hits"]],
+                    expected["exhaustive_hits"],
+                )
+                check, reader_check = report["absence_check"], expected["absence_check"]
+                self.assertEqual(check["scopes"]["history"]["shipped"], False)
+                self.assertEqual(reader_check["scopes"]["history"]["shipped"], True)
+                # The printed paths carry the prefix, and the budget counts printed characters.
+                self.assertEqual(
+                    check["budget"]["used_chars"] - reader_check["budget"]["used_chars"],
+                    len(prefix) * check["counts"]["pages_returned"],
+                )
+                strip = lambda value: {  # noqa: E731
+                    **value,
+                    "budget": None,
+                    "scopes": {key: item for key, item in value["scopes"].items() if key != "history"},
+                    "omitted_pages": [{**item, "path": item["path"].split(prefix, 1)[-1]} for item in value["omitted_pages"]],
+                }
+                self.assertEqual(strip(check), strip(reader_check))
 
     def test_the_exported_coverage_says_history_is_not_shipped(self) -> None:
         exported = self.exported_search("--query", "Wiki", "--limit", "1")
@@ -270,6 +299,11 @@ class ExportedSkillRuns(unittest.TestCase):
             "--also", "--request -", "reformulation_results", "found_by", "\\uXXXX", "at most four reformulations",
             "200 characters", "Never let `reformulation_results` alone defeat an absence finding",
             "List every reformulation that was searched", "references/knowledge/schema/WIKI_PROFILE.md",
+            "--exhaustive", "absence_check", "search_record.line", "references/knowledge/meta/questions.md",
+            "State that the wiki contains nothing on a question, or on part of it, only when a search for this answer "
+            "reported `absence_check.complete: true` and no returned result or exhaustive hit answers it; otherwise "
+            "state that nothing was found with the searched words in this release version, and quote "
+            "`search_record.line` in both cases.",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
@@ -469,6 +503,16 @@ class ExportRefusesABrokenSkill(unittest.TestCase):
         )
         result = export(self.exporter, self.wiki.path, self.tmp / "out")
         self.assert_refused(result, "self-check")
+
+    def test_the_self_check_covers_the_exhaustive_path(self) -> None:
+        """SKILL.md requires --exhaustive before an absence statement; that path must run too."""
+        self.add_template_line(
+            '    if args.exhaustive:\n        raise RuntimeError("exhaustive path is broken")',
+            anchor="    release = verify()\n",
+        )
+        result = export(self.exporter, self.wiki.path, self.tmp / "out")
+        self.assert_refused(result, "self-check")
+        self.assertIn("exhaustive path is broken", result.stderr)
 
     def test_the_self_check_covers_the_request_path(self) -> None:
         """SKILL.md routes Windows and quoted text through --request -; that path must run too."""

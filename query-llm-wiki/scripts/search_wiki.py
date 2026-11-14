@@ -5,7 +5,10 @@ This is the command-line wrapper of the query skill. It verifies the release
 before and after the search; ranking, claims, snippets, reformulations and the
 coverage block come from `search_core.py`, which exported knowledge skills share
 byte for byte. The query and up to four reformulations come from `--query` and
-`--also`, or as one JSON object on standard input with `--request -`.
+`--also`, or as one JSON object on standard input with `--request -`. With
+`--exhaustive` the same call also ranks the sources and scans every passage for
+all words of all searches before an absence statement; every report carries
+`search_record` and `absence_check`.
 """
 
 from __future__ import annotations
@@ -66,6 +69,14 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=12, help="Maximum number of results (1-100)")
     parser.add_argument("--include-sources", action="store_true", help="Also search faithful source Markdown")
     parser.add_argument("--include-history", action="store_true", help="Also search historical snapshots")
+    parser.add_argument(
+        "--exhaustive",
+        action="store_true",
+        help="Also rank sources and scan every passage of the wiki pages, meta/questions.md and the source "
+        "Markdown (with --include-history also the history snapshots) for all words of all searches; "
+        "returns at most 100,000 printed characters of matching passages under exhaustive_hits; "
+        "required before stating that the wiki holds nothing on a question",
+    )
     parser.add_argument("--filter-json", default=None, help="Validated metadata selector as JSON (default: all)")
     parser.add_argument(
         "--expect-manifest-sha256",
@@ -102,6 +113,8 @@ def main() -> int:
     if args.limit < 1 or args.limit > 100:
         raise SystemExit("limit must be between 1 and 100")
     selector = selector_from(request_filter, args.filter_json)
+    # The exhaustive scan ranks the sources too; the report prints the effective value.
+    include_sources = args.include_sources or args.exhaustive
 
     try:
         found = search_core.search(
@@ -109,9 +122,10 @@ def main() -> int:
             query,
             also=also,
             limit=args.limit,
-            include_sources=args.include_sources,
+            include_sources=include_sources,
             include_history=args.include_history,
             selector=selector,
+            exhaustive=args.exhaustive,
         )
     except (search_core.QueryError, search_core.RequestError) as exc:
         raise SystemExit(str(exc)) from exc
@@ -127,8 +141,11 @@ def main() -> int:
         "formulations": found["formulations"],
         "dropped_formulations": found["dropped_formulations"],
         "release": initial_release,
+        # The verdict and the record line come first: hosts may cut long output to a preview.
+        "search_record": search_core.search_record(found, initial_release),
+        "absence_check": found["absence_check"],
         "searched_files": found["searched_files"],
-        "include_sources": args.include_sources,
+        "include_sources": include_sources,
         "include_history": args.include_history,
         "selector": selector,
         "filtered_out": found["filtered_out"],
@@ -138,12 +155,15 @@ def main() -> int:
         "results": found["results"],
         "reformulation_results": found["reformulation_results"],
         "coverage": found["coverage"],
+        # Last, so a cut preview still shows everything above.
+        "exhaustive_hits": found["exhaustive_hits"],
     }
     final_release = verify_snapshot(target, str(initial_release.get("manifest_sha256") or ""))
     if final_release.get("state") != "ready":
         print(json.dumps({"release": final_release, "results": []}, ensure_ascii=False, indent=2))
         return exit_code(final_release)
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    # The budget of exhaustive_hits is counted in exactly this format.
+    print(json.dumps(report, ensure_ascii=False, indent=search_core.REPORT_INDENT))
     return 0
 
 
