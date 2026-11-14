@@ -4,7 +4,9 @@
 The block adds keys only. These tests pin what each count means on a real
 released harness wiki, including the identities a reader may rely on:
 returned + omitted_count == matched, truncated exactly when something was
-omitted, and omitted_top naming at most 20 of the omitted matches.
+omitted, and omitted_top naming at most 20 of the omitted matches. Since format
+2 the counts include the word forms each term lists under `forms`
+(tests/test_wordforms.py pins the rules themselves).
 """
 
 from __future__ import annotations
@@ -140,7 +142,7 @@ class CoverageOnAReleasedWiki(unittest.TestCase):
 
     def assert_identities(self, report: dict) -> None:
         coverage = report["coverage"]
-        self.assertEqual(coverage["format"], "lmwiki-search-coverage/1")
+        self.assertEqual(coverage["format"], "lmwiki-search-coverage/2")
         self.assertEqual(coverage["returned"], len(report["results"]))
         self.assertEqual(coverage["returned"] + coverage["omitted_count"], coverage["matched"])
         self.assertEqual(coverage["truncated"], coverage["omitted_count"] > 0)
@@ -155,9 +157,18 @@ class CoverageOnAReleasedWiki(unittest.TestCase):
             )
         self.assertEqual(coverage["boundary"], search_core.COVERAGE_BOUNDARY)
         terms = [item["term"] for item in coverage["query_terms"]]
+        for item in coverage["query_terms"]:
+            self.assertLessEqual(len(item["forms"]), search_core.FORMS_LISTED)
+            self.assertLessEqual(len(item["forms"]), item["forms_total"])
+            self.assertTrue(all(0 < form["weight"] <= 1.0 for form in item["forms"]))
+        self.assertTrue(set(coverage["form_only_terms"]).isdisjoint(coverage["unmatched_terms"]))
         for result in report["results"]:
             self.assertTrue(result["matched_terms"], result["path"])
             self.assertTrue(set(result["matched_terms"]) <= set(terms))
+            # Every matched term is explained by at least one listed member.
+            self.assertEqual(sorted({rule["term"] for rule in result["match_rules"]}), sorted(result["matched_terms"]))
+            if result["navigation"]:
+                self.assertTrue(all(rule["rule"] == "exact" for rule in result["match_rules"]))
             self.assertEqual(result["claims_returned"], len(result["claims"]))
             self.assertLessEqual(result["claims_returned"], result["claims_total"])
             self.assertEqual(
@@ -221,8 +232,12 @@ class CoverageOnAReleasedWiki(unittest.TestCase):
         self.assertEqual(coverage["scopes"]["sources"]["files"], 1, "sources are counted even when not searched")
         self.assertEqual(coverage["scopes"]["sources"]["files_with_a_query_term"], 1)
         self.assertEqual(coverage["query_terms"], [
-            {"term": "kilowattstunde", "origin": "query", "files": {"wiki": 0, "sources": 1, "history": None}},
+            {
+                "term": "kilowattstunde", "origin": "query", "files": {"wiki": 0, "sources": 1, "history": None},
+                "forms": [], "forms_total": 0,
+            },
         ])
+        self.assertEqual(coverage["form_only_terms"], [])
 
         with_sources = self.search("Kilowattstunde", "--include-sources")
         self.assert_identities(with_sources)
@@ -273,15 +288,20 @@ class CoverageOnAReleasedWiki(unittest.TestCase):
         self.assertEqual(origins["arbeitspreis"], "concept-expansion")
         self.assertEqual(list(origins)[0], "netznutzungsentgelt", "the query's own words come first")
         # Only words of the query itself are reported as unmatched; an
-        # expansion word that only the unsearched source holds is still named.
+        # expansion word that only the unsearched source holds is still named,
+        # also when the source holds only a form of it ("Netzentgelte").
         self.assertEqual(coverage["unmatched_terms"], ["netznutzungsentgelt"])
-        self.assertEqual(coverage["terms_only_in_unsearched"], {"sources": ["arbeitspreis"]})
+        self.assertEqual(coverage["terms_only_in_unsearched"], {"sources": ["netzentgelt", "arbeitspreis"]})
         self.assertEqual(report["results"], [])
         with_sources = self.search("Netznutzungsentgelt", "--include-sources")
         self.assert_identities(with_sources)
         self.assertEqual(with_sources["coverage"]["unmatched_terms"], ["netznutzungsentgelt"])
         self.assertEqual(len(with_sources["results"]), 1)
-        self.assertEqual(with_sources["results"][0]["matched_terms"], ["arbeitspreis"])
+        self.assertEqual(with_sources["results"][0]["matched_terms"], ["netzentgelt", "arbeitspreis"])
+        self.assertIn(
+            {"term": "netzentgelt", "token": "netzentgelte", "rule": "stem", "weight": 0.6},
+            with_sources["results"][0]["match_rules"],
+        )
 
     def test_dropped_words_are_reported_with_their_reason(self) -> None:
         report = self.search("die Messpunkt x und")
@@ -366,13 +386,17 @@ class CoreQueryTerms(unittest.TestCase):
     }
 
     def test_the_term_list_equals_the_ranked_token_set(self) -> None:
-        for query in (
-            "Netznutzungsentgelt", "Kündigung für die Wohnung", "die und der", "a", "Arbeitspreis und Grundpreis",
-            "Vertragsende Netzentgelt Netzentgelt", "x y Kündigung",
+        for query, forms in (
+            (query, forms)
+            for query in (
+                "Netznutzungsentgelt", "Kündigung für die Wohnung", "die und der", "a", "Arbeitspreis und Grundpreis",
+                "Vertragsende Netzentgelt Netzentgelt", "x y Kündigung", "für", "Kündigungen und Netzentgelten",
+            )
+            for forms in (False, True)
         ):
-            with self.subTest(query=query):
-                ranked, _, expanded = search_core.expand_query(query, self.DEFINITIONS)
-                terms, dropped = search_core.query_terms(query, expanded)
+            with self.subTest(query=query, forms=forms):
+                ranked, _, expanded = search_core.expand_query(query, self.DEFINITIONS, forms)
+                terms, dropped = search_core.query_terms(query, expanded, forms)
                 names = [item["term"] for item in terms]
                 self.assertEqual(set(names), ranked)
                 self.assertEqual(len(names), len(set(names)))

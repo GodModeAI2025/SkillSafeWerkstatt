@@ -13,12 +13,17 @@ callers collect all candidates first and score afterwards.
 
 The wiki's own signals - controlled concepts, an exact phrase, page status - stay
 as bonuses on top. They express curation the corpus statistics cannot see.
+
+A query term can also be a weighted group of document tokens (see
+`TermGroup` and wordforms.py): the literal token at weight 1.0 and its word
+forms and heuristic matches at lower weights. Without groups, scoring is the
+literal-token BM25F exactly as before groups existed.
 """
 
 from __future__ import annotations
 
 import math
-from typing import Iterable, Optional
+from typing import Iterable, Mapping, Optional, Sequence
 
 
 #: Term-frequency saturation. The standard default.
@@ -76,6 +81,10 @@ class Corpus:
         frequency = self.document_frequency.get(term, 0)
         return math.log(1.0 + (self.count - frequency + 0.5) / (frequency + 0.5))
 
+    def inverse_document_frequency_of(self, frequency: int) -> float:
+        """The same IDF for a document frequency counted by the caller, such as a term group's."""
+        return math.log(1.0 + (self.count - frequency + 0.5) / (frequency + 0.5))
+
 
 def _counts(values: Iterable[str]) -> dict[str, int]:
     counts: dict[str, int] = {}
@@ -113,6 +122,83 @@ def base_score(
     return score
 
 
+class TermGroup:
+    """One query term as weighted document tokens.
+
+    `members` maps every token that counts for the term to its weight: 1.0 for
+    the literal token, less for a word form or a heuristic member (see
+    wordforms.py). `document_frequency` is counted by the caller, because only
+    the caller knows which members may make a term look common: the search
+    core counts word forms only, and heuristic members only when no document
+    holds a word form.
+    """
+
+    __slots__ = ("label", "members", "document_frequency")
+
+    def __init__(self, label: str, members: Mapping[str, float], document_frequency: int) -> None:
+        self.label = label
+        self.members = dict(members)
+        self.document_frequency = document_frequency
+
+
+def group_base_score(
+    corpus: Corpus,
+    fields: dict[str, list[str]],
+    groups: Sequence[TermGroup],
+    counted: Optional[dict[str, list[str]]] = None,
+) -> float:
+    """BM25F where every query term is a TermGroup.
+
+    The occurrences of a group's members are accumulated across the weighted
+    fields exactly like those of one literal token and saturated; the rule
+    weight is applied after saturation. Members of different weights are
+    layered: the layer up to weight w is filled by the occurrences of every
+    member weighing at least w. So a document holding only the literal token
+    scores exactly as in the literal search, one holding only a member of
+    weight w scores w times that (a compound part in a title keeps its own
+    weight of an exact title hit, not almost all of it), and every further
+    occurrence of any member only adds. A document holding no member of any
+    group scores 0.
+
+    `counted`, when given, receives per group label the tokens that counted.
+    """
+    if not corpus.count:
+        return 0.0
+    counts = {field: _counts(fields.get(field) or []) for field in FIELD_WEIGHTS}
+    present_tokens: set[str] = set()
+    for field_counts in counts.values():
+        present_tokens.update(field_counts)
+    normalisers: dict[str, float] = {}
+    for field in FIELD_WEIGHTS:
+        average = corpus.average_length(field)
+        length = len(fields.get(field) or [])
+        normalisers[field] = 1.0 - B + B * (length / average if average else 1.0)
+    score = 0.0
+    for group in groups:
+        present = sorted(present_tokens.intersection(group.members))
+        if not present:
+            continue
+        by_weight: dict[float, float] = {}
+        for token in present:
+            accumulated = 0.0
+            for field, weight in FIELD_WEIGHTS.items():
+                frequency = counts[field].get(token, 0)
+                if frequency:
+                    accumulated += weight * frequency / normalisers[field]
+            level = group.members[token]
+            by_weight[level] = by_weight.get(level, 0.0) + accumulated
+        idf = corpus.inverse_document_frequency_of(group.document_frequency)
+        levels = sorted(by_weight, reverse=True)
+        layered = 0.0
+        for index, level in enumerate(levels):
+            layered += by_weight[level]
+            below = levels[index + 1] if index + 1 < len(levels) else 0.0
+            score += (level - below) * idf * layered / (K1 + layered)
+        if counted is not None:
+            counted[group.label] = present
+    return score
+
+
 def score(
     corpus: Corpus,
     fields: dict[str, list[str]],
@@ -122,9 +208,19 @@ def score(
     concept_overlap: int = 0,
     status: str = "",
     explain: Optional[dict[str, float]] = None,
+    groups: Optional[Sequence[TermGroup]] = None,
+    counted: Optional[dict[str, list[str]]] = None,
 ) -> float:
-    """BM25F scaled by the wiki's curated signals, never below zero."""
-    base = base_score(corpus, fields, query_terms)
+    """BM25F scaled by the wiki's curated signals, never below zero.
+
+    With `groups`, every query term is a TermGroup and `query_terms` is not
+    used; `counted` then receives the tokens that counted per group. Without
+    `groups`, this is the literal-token score, unchanged.
+    """
+    if groups is not None:
+        base = group_base_score(corpus, fields, groups, counted)
+    else:
+        base = base_score(corpus, fields, query_terms)
     if base <= 0:
         # Nothing in this document's text answers the query. Curation reorders
         # matches; it never turns a non-match into one.

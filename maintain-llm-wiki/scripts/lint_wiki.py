@@ -305,6 +305,32 @@ def parse_claims(path: Path, body: str, errors: list[str]) -> list[dict[str, Any
     return claims
 
 
+#: The expansion rule as CONCEPTS.md stated it before word forms were matched.
+OLD_EXPANSION_RULE = "Search may expand a query only through confirmed preferred terms and aliases."
+#: The rule as the current template states it (owner decision E1).
+EXPANSION_RULE = (
+    "Search expands a query in meaning only through confirmed preferred terms and aliases. Forms of the same "
+    "word (inflection, umlaut spelling, hyphenation) count as matches of that word. Compound parts and "
+    "one-letter typo corrections are disclosed heuristics. Reformulations by the agent are listed in the answer."
+)
+
+
+def expansion_rule_notice(path: Path) -> Optional[str]:
+    """A notice when CONCEPTS.md still states the old expansion rule, with the text that replaces it.
+
+    Only a notice: the old sentence understates what the search matches, but
+    it breaks nothing, so it never blocks a release.
+    """
+    if not path.is_file():
+        return None
+    if OLD_EXPANSION_RULE not in " ".join(path.read_text(encoding="utf-8").split()):
+        return None
+    return (
+        f"schema/CONCEPTS.md still states the old expansion rule {OLD_EXPANSION_RULE!r}; "
+        f"replace that sentence with: {EXPANSION_RULE!r}"
+    )
+
+
 def load_concepts(path: Path, errors: list[str]) -> dict[str, dict[str, str]]:
     if not path.is_file():
         errors.append("schema/CONCEPTS.md is missing; controlled concepts are not configured")
@@ -563,6 +589,9 @@ def main() -> int:
     registry = load_registry(target / "meta/sources.jsonl", errors)
     cluster_definitions = load_clusters(target / "schema/CLUSTERS.md", errors, warnings)
     concept_definitions = load_concepts(target / "schema/CONCEPTS.md", errors)
+    rule_notice = expansion_rule_notice(target / "schema/CONCEPTS.md")
+    if rule_notice:
+        warnings.append(rule_notice)
     # Classify what the storage layer and the operating system put here before
     # judging any of it as wiki content.
     storage_findings = check_storage_layer(target, errors, warnings)

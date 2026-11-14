@@ -20,6 +20,10 @@ Counting rules:
 - Rank 1 is judged per query, the top 3 and the top 12 per required page: a
   query whose first result was a required page must keep a required page
   first, so two required pages that swap places lose nothing.
+- An accepted regression names a query, a required page and a reason. With
+  `accepted_rank` it accepts that one loss: the page is then held to the bands
+  of the accepted rank instead of the recorded one, so a later change cannot
+  push it further without failing. Without `accepted_rank` the page is exempt.
 """
 
 from __future__ import annotations
@@ -47,8 +51,9 @@ ABOUT = (
     "flags unless with_required_flags says otherwise. floors are minimums, caps are maximums. "
     "tests/test_search_quality.py fails when a query whose first result is a required page here "
     "no longer has a required page first, or when a required page leaves the top 3 or the top 12 "
-    "it held here, unless accepted_regressions lists that page with a reason. Changing this file "
-    "is a deliberate act: state the change and its reason in the commit message."
+    "it held here, unless accepted_regressions lists that page with a reason; an entry with "
+    "accepted_rank holds the page to that rank's bands instead. Changing this file is a deliberate "
+    "act: state the change and its reason in the commit message."
 )
 
 
@@ -174,7 +179,7 @@ def rank_regressions(expected: dict[str, Any], measured: dict[str, Any]) -> list
     first result was a required page loses rank 1 only when no required page is
     first any more; accepting the page that was first accepts that loss.
     """
-    accepted = {(item.get("id"), item.get("path")) for item in expected.get("accepted_regressions", [])}
+    accepted = {(item.get("id"), item.get("path")): item for item in expected.get("accepted_regressions", [])}
     problems: list[str] = []
     for query_id, entry in expected["queries"].items():
         current = dict(rank_maps(measured["queries"][query_id]))
@@ -188,7 +193,14 @@ def rank_regressions(expected: dict[str, Any], measured: dict[str, Any]) -> list
                     f"{query_id} ({label}): {first[0]} lost rank 1 and no required page took it: rank 1 -> {where}"
                 )
             for path, rank in recorded.items():
-                if rank is None or (query_id, path) in accepted:
+                acceptance = accepted.get((query_id, path))
+                if acceptance is not None:
+                    if "accepted_rank" not in acceptance:
+                        continue
+                    # Held to the place it was accepted at, never to a better one.
+                    held = acceptance["accepted_rank"]
+                    rank = None if held is None or rank is None else max(rank, held)
+                if rank is None:
                     continue
                 now = ranks_now.get(path)
                 for bound in (TOP, DEFAULT_LIMIT):

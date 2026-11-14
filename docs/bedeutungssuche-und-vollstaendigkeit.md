@@ -116,9 +116,11 @@ Die Regelkonflikte im Einzelnen:
   auch nicht optional, auch nicht später").
 - *Nur Standardbibliothek.* `numpy` steht in `tests/test_packaging.py` auf der Sperrliste.
 - *Der Leser schreibt nichts.* Lese-Skill und exportierter Skill dürfen keinen Index anlegen.
-- *Nur bestätigte Begriffswelten erweitern.* `init_wiki.py` schreibt in jede `CONCEPTS.md`:
-  „Search may expand a query only through confirmed preferred terms and aliases." Eine
-  Ähnlichkeitssuche wäre eine unbestätigte Erweiterung.
+- *Nur bestätigte Begriffswelten erweitern.* `init_wiki.py` schrieb bis Stufe 2 in jede
+  `CONCEPTS.md`: „Search may expand a query only through confirmed preferred terms and
+  aliases." Seit E1 heißt es: „Search expands a query in meaning only through confirmed
+  preferred terms and aliases." Eine Ähnlichkeitssuche wäre auch nach dem neuen Wortlaut eine
+  unbestätigte Erweiterung.
 
 Der Host-Agent ist bereits ein Sprachmodell. Ein zweites Modell im Skill wäre teurer und
 schlechter prüfbar. Ohne Schwelle war es bei den Negativfragen gemessen schädlich, mit Schwelle
@@ -453,7 +455,7 @@ Exporttests, statische Prüfungen für die Vorlagen und Python-3.9-Grammatikprü
 5. Doku nach Repo-Konvention: `SKILL.md`, `references/`, README-Tabellen, `describe_actions`
    (dort fehlt heute schon `--limit`), Evals, neu gebaute Pakete.
 
-### Stufe 2 — Wortformen *(braucht Entscheidung E1)*
+### Stufe 2 — Wortformen *(umgesetzt, siehe Umsetzungsstand Stufe 2)*
 
 1. Gewichtete Begriffsgruppen in `bm25.py` mit rückwärtskompatibler Signatur. Ohne Gruppen ist
    der Weg byte-identisch zu heute. Score 0 bleibt Score 0.
@@ -515,6 +517,13 @@ desselben Wortes gelten als Abgleich; Teil- und Näherungstreffer sind ausgewies
 Agent-Umformulierungen werden aufgelistet." Dazu ein Lint-Hinweis für bestehende
 `CONCEPTS.md`-Texte. Das entscheidet der Eigentümer.
 
+*Entschieden (Ja) und umgesetzt.* Der neue Wortlaut in jeder neuen `CONCEPTS.md`: „Search expands
+a query in meaning only through confirmed preferred terms and aliases. Forms of the same word
+(inflection, umlaut spelling, hyphenation) count as matches of that word. Compound parts and
+one-letter typo corrections are disclosed heuristics. Reformulations by the agent are listed in
+the answer." Für eine bestehende `CONCEPTS.md` mit dem alten Satz meldet der Lint eine Warnung
+mit dem neuen Text; sie blockiert keinen Release.
+
 **E2 — Der vollständige Prüfpfad als Ausnahme vom gestuften Lesen.**
 `answer-contract.md` sagt „Do not read every directory index by reflex", und Eval 11 prüft das.
 Ein `--exhaustive`-Aufruf ist kein Lesen aller Indizes, braucht aber eine ausdrückliche Ausnahme
@@ -531,6 +540,9 @@ Fixture unter `tests/` eingecheckt werden? Ohne das bleibt jede Ranking-Änderun
 den ersten 12; Treffer der Negativfragen 16 → 28) oder alle vier Schritte (57 → 81; 16 → 31
 unter den ersten 12, 16 → 45 unter den ersten 100). Empfehlung: mit a und b beginnen, c und d
 hinter dem Präzisionstor freischalten.
+
+*Entschieden und umgesetzt:* a und b zuerst, c und d nur, wo das Präzisionstor grün bleibt. Alle
+vier Schritte haben es bestanden und sind eingeschaltet (Umsetzungsstand Stufe 2).
 
 ---
 
@@ -579,7 +591,182 @@ Stufe 0 ist in diesem Branch umgesetzt:
     Selbsttest, `PYTHONHOME` verworfen, Zeitstempel von der Uhr, Standardbibliotheksprüfung
     abgeschaltet und ein PEP-701-f-String.
 
-Stufen 1 bis 5 sind offen.
+Stufe 1 ist umgesetzt: gemeinsamer Suchkern, Zählwerk und Präzisionstor (Entscheidung E4).
+Stufe 2 steht im nächsten Abschnitt. Stufen 3 bis 5 sind offen.
+
+## Umsetzungsstand Stufe 2 — Wortformen (2026-11-14)
+
+**Was gebaut ist.** Ein neues Modul `wordforms.py` liegt byte-identisch in beiden Skills und
+reist über den Suchkern in jeden Export. Bei jeder Suche baut der Suchkern im Speicher den
+Wortschatz der durchsuchten Dateien auf. Daraus wird jedes Suchwort zu einer gewichteten Gruppe
+von Wörtern, die dort wirklich vorkommen. Jedes Mitglied trägt seine Regel:
+
+| Regel | Gewicht | Beispiel |
+|---|---|---|
+| `exact` | 1,0 | „Tarif" findet „Tarif" |
+| `fold` | 0,9 | „Kuendigung" findet „Kündigung", „E-Mail" findet „EMail" |
+| `stem` | 0,6 | „Netzentgelten" findet „Netzentgelt" |
+| `verb` | 0,5 | „widerruft" findet „Widerruf" |
+| `compound_head` | 0,45 | „Gebühr" findet „Durchleitungsgebühr" |
+| `compound_modifier` | 0,35 | „Vertrag" findet „Vertragslaufzeit" |
+| `query_part` | 0,35 | „Wärmepumpenstromtarif" findet „Stromtarif" (nur der Kopf: der längste hintere Teil, dessen Rest aus Wörtern des Wikis besteht) |
+| `typo` | 0,3 | „Netzentgeld" findet „Netzentgelt" (eine Änderung, ab 8 Buchstaben) |
+
+Zu Schritt a gehören außerdem die Reparatur weicher Trennzeichen, unsichtbarer Zeichen und
+Trennstriche am Zeilenende, die normalisierte Stoppwortliste („für" fällt wieder weg) und
+Funktionswörter, die nur wörtlich treffen. `bm25.py` wertet eine Gruppe als einen Begriff;
+ohne Gruppen rechnet es wie vorher. `search_core.search(..., word_forms=False)` liefert für
+Messung und Tests die alte wörtliche Rangliste; auf dem Test-Wiki war sie in 114 von 114 Fragen
+identisch mit dem Stand vor Stufe 2.
+
+**Die fünf Konstruktionsregeln** sind je durch einen Test in `tests/test_wordforms.py`
+festgenagelt:
+
+1. Die Seltenheit (IDF) einer Gruppe zählt nur Seiten mit dem Wort selbst oder einer echten
+   Wortform. Kompositumteile und Tippfehler zählen für die Seltenheit nur, wenn es gar keine
+   Wortform gibt. Auf einer Seite kommen sie in Schichten unter den Wortformen hinzu.
+2. Das Regelgewicht wirkt nach der BM25-Sättigung. Ein Kompositumteil im Titel erreicht genau
+   sein Gewicht eines exakten Titeltreffers, nicht 86 Prozent.
+3. Der Phrasenbonus gilt nur für die wörtlichen Suchwörter auf ganzen Wortgrenzen. Vorher war
+   es ein Teilzeichenketten-Vergleich: „tarif" galt auch in „festpreistarif" als Phrase.
+4. Link-Ziele und Slugs werden nie an Bindestrichen zerlegt. Eine Seite, die auf eine Tarifseite
+   verlinkt, trifft „Tarif" nicht über den Slug.
+5. Tippfehler: eine Änderung, ab 8 Buchstaben, nur wenn keine andere Regel trifft. Gemessen auf
+   dem Test-Wiki: alle 8 echten Tippfehler korrigiert. Von 200 korrekten, im Wiki fehlenden
+   Wörtern wurden ab 7 Buchstaben 4 von 151 falsch korrigiert, ab 8 Buchstaben 3 von 130
+   („Abmeldung" zu „Anmeldung", „Ausgaben" zu „Aufgaben", „Ausnahme" zu „Aufnahme"), ab 9
+   Buchstaben 1 von 108. „smart", „meter" und „ankündigen" bleiben unkorrigiert.
+
+Begriffswelten werden über das Wort, seine Schreibung (`fold`) und seine Flexionsendung
+(`stem`) ausgelöst, nie über Verbformen, Kompositumteile oder Tippfehler. „Basisversorgung
+kündigen" behält `grundversorgung.md` auf Rang 1. Eine Seite ohne jedes Mitglied einer Gruppe hat weiter den Score 0.
+
+**Ausgabe.** Das Zählwerk heißt jetzt `lmwiki-search-coverage/2`. Jedes Suchwort nennt unter
+`forms` bis zu 10 gezählte Wörter mit Regel, Gewicht und Dateizahl, dazu `forms_total`. Die
+Dateizahlen zählen Formen mit. `form_only_terms` nennt Suchwörter, die nur über eine andere Form,
+einen Kompositumteil oder eine Tippfehlerkorrektur getroffen haben. Jeder Treffer nennt in
+`match_rules`, welche Wörter der Seite für welches Suchwort gezählt haben. Der Grenzsatz sagt
+jetzt: Formen desselben Wortes und die ausgewiesenen Kompositum- und Tippfehlertreffer werden
+gezählt, wie unter `forms` aufgeführt; andere Wörter, unregelmäßige Formen und andere Sprachen
+nicht.
+
+**Gemessene Leiter** auf dem Test-Wiki, im Prozess über `search_core` (107 beantwortbare Fragen,
+7 Negativfragen, 114 Fragen für Navigationsplätze):
+
+| Stufe | Rang 1 | unter 3 | unter 12 | unter 100 | Negativtreffer unter 12 / 100 | Navigation Top 3 | Verluste gegenüber vorher |
+|---|---|---|---|---|---|---|---|
+| vorher | 41 | 47 | 57 | 62 | 16 / 16 | 20 | – |
+| a | 42 | 47 | 56 | 60 | 20 / 20 | 15 | su-06 fällt aus den ersten 12, sh-04 verliert Rang 1 |
+| a+b | 49 | 56 | 64 | 69 | 27 / 27 | 13 | keine |
+| a+b+c | 52 | 59 | 69 | 78 | 31 / 41 | 13 | br-05: eine Pflichtseite von Rang 3 auf 4 |
+| a+b+c+d (eingeschaltet) | 56 | 64 | 74 | 84 | 31 / 41 | 13 | br-05 wie oben |
+
+Je Kategorie unter den ersten 12, vorher → jetzt: Flexion 3 → 8 von 8, Komposita 4 → 6 von 8,
+Tippfehler 1 → 6 von 8, Umlaut-Schreibung 6 → 7 von 7, Synonym unkontrolliert 2 → 4 von 8,
+Umschreibung 2 → 3 von 8, breite Fragen 0 → 1 von 5. Exakt, kuratierte Synonyme,
+claimlastig, Historie und Kennungen bleiben, wie sie waren. Andere Sprachen bleiben bei 1 von 8.
+
+Die Bedingungen für das Einschalten waren: höchstens drei begründete Verluste, keiner aus den
+ersten 3 bis hinter Platz 12; höchstens 28 Negativtreffer unter den ersten 12 mit a+b und 31 mit
+c oder d; höchstens 20 Top-3-Plätze für Navigationsseiten. Alle vier Schritte erfüllen sie. Der
+einzige Verlust, br-05 („Zähler"), steht mit Begründung und `accepted_rank: 4` in
+`accepted_regressions`: `lindenau-netz.md` enthält „Zählerstand" mehrfach und zieht über die
+Regel `compound_modifier` an `intelligentes-messsystem.md` vorbei, das „Zähler" nur einmal
+nennt. Mit dieser Regel bei 0,2 oder ohne sie bliebe die Seite auf Rang 3, aber su-02 („Smart
+Meter Pflicht") verlöre seine Pflichtseite auf Rang 1; bei 0,25 bis 0,3 gingen beide verloren.
+`expectations.json` ist neu aufgezeichnet: Untergrenzen 56, 64, 74 und 84, Obergrenzen 31
+Negativtreffer und 13 Navigationsplätze.
+
+**Was die Gegenprüfung des Prototyps erklärt.** in-04 („Kunde widerruft am Telefon") verlor im
+Prototyp mit dem Stemmer allein, weil „Kunde" dort alle Seiten mit „Kunden" mitnahm und
+„widerruft" ohne Verbregel nichts traf. Mit Verbregel (Teil von b) findet „widerruft" das Wort
+„Widerruf", die Seite steigt von Rang 9 auf 3. in-05 („umgezogene Kunden") hat ein unregelmäßiges
+Hauptwort, das die Schicht nicht findet. Die Seite rankt nur über „Kunden" und „Vertrag". Zählen
+deren Formen mit, werden beide Wörter häufiger und damit schwächer, und Seiten mit Komposita wie
+„Haushaltskunden" ziehen vorbei. Im Prototyp fiel die Seite so von Rang 5 auf 17. Mit Flexion
+0,7 fiel sie auch hier aus den ersten 12 (Rang 13); mit 0,6 landet sie auf Rang 10.
+
+**Abweichungen vom Plan, gemessen begründet.**
+
+- *Navigationsseiten zählen nur das Wort selbst.* Ohne diese Regel belegten Indexseiten mit allen
+  vier Schritten 24 Top-3-Plätze (Grenze 20), und sh-04 verlöre seine Pflichtseite auf Rang 1.
+  Indexseiten listen Titel und Beschreibungen ganzer Zweige auf und enthalten damit viele Formen.
+- *Bei einem Link mit Beschriftung zählt nur die Beschriftung.* Sonst zählte
+  „[[wiki/concepts/kuendigungsfrist|Kündigungsfrist]]" das Wort doppelt, einmal als gefalteten
+  Slug, einmal als Text. Ohne diese Regel: 18 statt 13 Navigationsplätze bei sonst gleichen
+  Zahlen. Unbeschriftete Links bleiben, wie sie sind.
+- *Formen addieren sich in Schichten statt als strikter Rückfall.* Eine Seite mit dem Wort und
+  einem Kompositum davon bekommt etwas mehr als mit dem Wort allein; eine Seite nur mit dem
+  Kompositum bekommt höchstens dessen Gewicht. Der strikte Rückfall (Komposita zählen nur auf
+  Seiten ganz ohne das Wort) kostete su-02 seine Pflichtseite auf Rang 1 (gemessen mit Flexion
+  0,7, zusammen mit in-05 auf Rang 14). Ein früher Entwurf mit einem gewichteten Mittel statt
+  Schichten senkte sogar den Score, wenn eine Form hinzukam, und kostete br-05 Rang 1.
+- *Kompositumteile des Suchworts nur im Kopf.* Ein unbekanntes Suchwort sucht nur seinen Kopf,
+  den längsten hinteren Teil, dessen Rest aus Wörtern des Wikis besteht. Der Prototyp suchte alle Teile und fand so „Wärmepumpenstromtarif" (co-03); hier bleibt
+  co-03 unauffindbar.
+- *Eine Selektion ändert nicht, was ein Wort trifft.* Der Wortschatz kommt aus allen durchsuchten
+  Dateien vor dem Metadatenfilter, damit die Zählungen unabhängig vom Filter bleiben.
+- *Nicht durchsuchte Quellen zählen nur das Wort und seine echten Wortformen*, keine
+  Kompositumteile und Tippfehler. `terms_only_in_unsearched` wird seit der Nachbesserung auf
+  derselben Grundlage entschieden (siehe unten).
+
+**Laufzeit** (Mittel über 114 Suchen im Prozess, vorher → jetzt): Test-Wiki 34 → 47 ms,
+500-Seiten-Kopie mit 0,5 MB Quellen 341 → 413 ms, dieselbe Kopie mit 7,7 MB Quellen 907 →
+1.028 ms. Das ist das 1,4-, 1,2- und 1,1-Fache; die Grenze war das Doppelte. Die meiste Zeit
+kostet das Aufbauen des Wortschatzes, auch für die nicht durchsuchten Quellen.
+
+**Nachbesserung nach der Gegenprüfung (2026-11-14).** Eine unabhängige Prüfung fand sechs
+Fehler im Code und mehrere ungenaue Stellen in den Texten. Behoben ist:
+
+- *Hinweis auf die Quellen ging verloren.* `terms_only_in_unsearched.sources` verglich die
+  Quellen (nur Wort und Wortformen) mit dem Wiki samt Kompositumteilen und Tippfehlern. Ein
+  Wort, das nur in den Quellen steht, verschwand deshalb aus der Liste, sobald im Wiki ein
+  Kompositum oder ein Tippfehler-Nachbar davon vorkam, etwa „Dauer" über „Dauerlösung" (sc-02,
+  ty-04). Jetzt zählt auf beiden Seiten nur das Wort selbst und seine Wortformen. Außerdem
+  korrigiert die Suche ein Wort, das selbst oder in einer Wortform in den nicht durchsuchten
+  Quellen steht, nie als Tippfehler: „verjähren" wurde vorher zu „Verfahren".
+- *Zu lockere Verbregel.* „-et" galt nach jedem Stamm als Verbendung, und jede „-t"-Form des
+  Wikis passte zu jedem Suchwort mit demselben Stamm. So fand „Internet" das Wort „internen",
+  „Planet" das Wort „Plan" und „andere" das Wort „ändert". Jetzt zählt „-et" nur nach d oder t
+  und nach m oder n, vor denen ein Konsonant außer l und r steht und kein h nach einem Vokal
+  („meldet", „öffnet", „rechnet", aber „lernt", „wohnt"). Eine „-t"-Form gilt nur für ein Suchwort auf „-n" oder für den bloßen Stamm.
+  Die Kehrseite: „kündige" findet „kündigt" nicht mehr, wohl aber „kündigen".
+- *„-er" fiel bei manchen Substantiven doch weg.* Die Ausnahme für Adjektive („wichtiger",
+  „aktueller") griff auch bei „Hersteller", „Antragsteller", „Keller", „Zeiger" und „Fischer".
+  Außerdem bekamen „Herstellers" und „Herstellern" einen anderen Schlüssel als „Hersteller".
+  Jetzt gilt die Ausnahme nur für die Adjektivendungen „-iell", „-uell", „-nell", „-rell",
+  „-mell" statt jedes „-ell", nicht nach „-eig" und bei „-isch" nur mit mindestens zwei
+  Buchstaben davor. „-ers" und „-ern" bekommen denselben Schlüssel wie „-er".
+- *Keine Längengrenze für Komposita.* Ein Wort aus Tausenden Buchstaben ohne Leerzeichen ließ die
+  Suche abstürzen (`RecursionError`) oder minutenlang rechnen. Jetzt zerlegen die
+  Kompositumregeln kein Wort mit mehr als 64 Buchstaben.
+- *Navigationsseiten in der Ausgabe.* `match_rules` zeigte auf Indexseiten die Regel `stem`, wenn
+  ein Begriffswelt-Wort derselben Gruppe dort wörtlich stand, und die Dateizahlen unter `forms`
+  zählten Indexseiten mit. Jetzt zeigt eine Navigationsseite nur das Wort selbst, und eine Form
+  zählt nur in den Dateien, in denen sie für den Score zählt.
+- *Grenzsatz.* Er nennt jetzt neben den Formen auch die ausgewiesenen Kompositum- und
+  Tippfehlertreffer, denn auch sie stecken in den Zahlen.
+
+Das Präzisionstor zeigt danach dieselben Zahlen (56, 64, 74, 84; 31 Negativtreffer; 13
+Navigationsplätze). pa-03 steht wieder auf Rang 9 wie vor Stufe 2 (vorher 10, weil „internen"
+über die falsche Verbform zählte), pa-07 auf Rang 21 statt 24. Gegenüber dem Stand vor Stufe 2
+rückten damit 43 von 124 Pflichtseiten vor, 4 fielen zurück und 77 blieben. Nur br-05 verließ
+dabei ein Band (Rang 3 auf 4, angenommen). Drei Seiten fielen innerhalb ihrer Bänder: in-05 von
+Rang 5 auf 10 (siehe oben), pa-07 von 15 auf 21 und sh-06 von 8 auf 10. Bei pa-07 trifft
+„andere" jetzt „anderen" und auch „ändern", weil Umlaute vor jedem Vergleich entfallen; dazu
+kommen Komposita von „Strom". Bei sh-06 zählen die Formen und Komposita von „Verträge" auf mehr
+Seiten mit. `expectations.json` ist dafür neu aufgezeichnet; nur die Ränge von pa-03 und pa-07
+haben sich geändert.
+
+Bekannte Restfälle: „Konzert" findet „Konzern" über die Verbregel („Konzer-t" gegen
+„Konzer-n"). „Gläubiger" wird wie ein gebeugtes „gläubig" gelesen, „Verteidiger" wie
+„verteidigen"; eine reine Regel ohne Wörterbuch trennt das Substantiv nicht vom Adjektiv oder
+Verb.
+
+**Offen.** Die Gewichte sind auf einem einzigen synthetischen Wiki gewählt, ohne zurückgehaltene
+Testmenge. ty-05 („Abschlagzahlung") bleibt unauffindbar, weil der Kopfteil „Zahlung" vor dem
+Tippfehler greift. ty-07 („Grundversorung") steht auf Rang 23, weil ein Tippfehler keine
+Begriffswelt auslöst und „Grundversorgung" auf fast jeder Seite steht.
 
 ---
 

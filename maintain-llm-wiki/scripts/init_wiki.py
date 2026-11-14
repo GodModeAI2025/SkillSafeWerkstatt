@@ -363,8 +363,11 @@ Each confirmed concept uses this shape:
 ```
 
 `Aliases`, `Broader`, and `Related` are optional. Pages reference concepts with
-a `concepts` frontmatter list. Search may expand a query only through confirmed
-preferred terms and aliases. Concept assignments never move pages.
+a `concepts` frontmatter list. Search expands a query in meaning only through
+confirmed preferred terms and aliases. Forms of the same word (inflection,
+umlaut spelling, hyphenation) count as matches of that word. Compound parts and
+one-letter typo corrections are disclosed heuristics. Reformulations by the
+agent are listed in the answer. Concept assignments never move pages.
 """,
         created,
     )

@@ -56,6 +56,7 @@ EXPORTABLE_LIBRARIES = (
     "search_core.py",
     "trust_contract.py",
     "wiki_filters.py",
+    "wordforms.py",
 )
 # Standard-library modules exported code may import. Reviewed for presence on
 # Python 3.9+ on Windows, macOS and Linux and for offering no file writing,

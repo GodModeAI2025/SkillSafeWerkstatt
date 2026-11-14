@@ -11,6 +11,7 @@ runs its 114 questions, and compares against expectations.json:
 - no required page that was in the top 3 leaves the top 3, and none that was in
   the top 12 (the default limit) leaves the top 12;
 - a loss passes only when accepted_regressions lists the page with a reason;
+  an entry with accepted_rank holds the page to that rank's bands from then on;
 - the number of questions with a required first result, and of questions
   whose required pages are all found within 3, 12 and 100, does not fall below
   the recorded floors;
@@ -102,6 +103,9 @@ class SearchQualityGate(unittest.TestCase):
             with self.subTest(entry=entry):
                 self.assertIn(entry.get("path"), must_find.get(entry.get("id"), set()))
                 self.assertTrue(str(entry.get("reason") or "").strip(), "an accepted regression needs a reason")
+                if "accepted_rank" in entry:
+                    held = entry["accepted_rank"]
+                    self.assertTrue(held is None or (isinstance(held, int) and 1 <= held <= quality.RANK_LIMIT))
 
     def test_the_build_wrote_nothing_into_the_repository(self) -> None:
         for name in ("wiki", "work", "source_map.json", "fixture_report.json", "claim_index.json"):
@@ -159,6 +163,18 @@ class RankOneRule(unittest.TestCase):
 
     def test_an_accepted_page_may_lose_rank_1(self) -> None:
         self.assertEqual(self.check({"a.md": 1}, {"a.md": 3}, accepted=("a.md",)), [])
+
+    def test_an_accepted_rank_holds_the_page_to_its_new_bands(self) -> None:
+        expected = {
+            "queries": {"q": {"must_find_ranks": {"a.md": 3}}},
+            "accepted_regressions": [{"id": "q", "path": "a.md", "reason": "test", "accepted_rank": 4}],
+        }
+        now = lambda rank: {"queries": {"q": {"must_find_ranks": {"a.md": rank}}}}  # noqa: E731
+        self.assertEqual(quality.rank_regressions(expected, now(4)), [])
+        self.assertEqual(quality.rank_regressions(expected, now(9)), [])
+        self.assertEqual(
+            quality.rank_regressions(expected, now(13)), ["q (without flags): a.md left the top 12: rank 4 -> rank 13"]
+        )
 
     def test_a_page_that_leaves_the_top_3_is_reported_for_both(self) -> None:
         problems = self.check({"a.md": 1}, {"a.md": 5})

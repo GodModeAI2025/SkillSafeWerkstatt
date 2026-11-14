@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Validated, read-only selectors for SkillSafeWerkstatt Markdown frontmatter."""
+"""Validated, read-only selectors for SkillSafeWerkstatt Markdown frontmatter.
+
+Both skills carry this file byte for byte (tests/test_packaging.py,
+SharedModuleParity); exported knowledge skills copy the maintenance skill's.
+"""
 
 from __future__ import annotations
 

@@ -264,11 +264,14 @@ class ExportableLibraries(unittest.TestCase):
 class SharedModuleParity(unittest.TestCase):
     """Modules both skills carry must be byte-identical, or they will diverge."""
 
-    # search_core.py and bm25.py are the one search both skills and every
-    # exported knowledge skill run; a drifted copy would rank differently.
+    # search_core.py, bm25.py and wordforms.py are the one search both skills
+    # and every exported knowledge skill run; a drifted copy would rank
+    # differently. frontmatter_contract.py and wiki_filters.py are in the
+    # exported search's import closure too: exports copy the maintenance
+    # skill's files, so the query skill's must not parse or filter otherwise.
     SHARED = (
         "sync_artifacts.py", "trust_contract.py", "freshness.py", "verify_release.py",
-        "search_core.py", "bm25.py",
+        "search_core.py", "bm25.py", "wordforms.py", "frontmatter_contract.py", "wiki_filters.py",
     )
 
     def test_shared_modules_are_identical(self) -> None:

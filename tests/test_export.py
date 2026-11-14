@@ -161,8 +161,12 @@ class ExportedSkillRuns(unittest.TestCase):
         )
 
     def test_the_exported_search_ranks_like_the_query_skill(self) -> None:
-        """One shared core: same paths, order, scores, and coverage counts."""
-        for arguments in (("--query", "Wiki"), ("--query", "Testwiki Überblick", "--include-sources", "--limit", "100")):
+        """One shared core: same paths, order, scores, word forms, and coverage counts."""
+        for arguments in (
+            ("--query", "Wiki"),
+            ("--query", "Testwiki Überblick", "--include-sources", "--limit", "100"),
+            ("--query", "Testwikis Ueberblicke Wikiseiten", "--limit", "100"),
+        ):
             with self.subTest(arguments=arguments):
                 exported = self.exported_search(*arguments)
                 self.assertEqual(exported.returncode, 0, exported.stderr.decode("utf-8", errors="replace"))
@@ -181,14 +185,21 @@ class ExportedSkillRuns(unittest.TestCase):
                     [(item["path"][len(prefix):], item["score"]) for item in report["results"]],
                     [(item["path"], item["score"]) for item in expected["results"]],
                 )
-                for key in ("matched", "returned", "truncated", "omitted_count", "query_terms", "unmatched_terms"):
+                self.assertEqual(
+                    [item["match_rules"] for item in report["results"]],
+                    [item["match_rules"] for item in expected["results"]],
+                )
+                for key in (
+                    "format", "matched", "returned", "truncated", "omitted_count", "query_terms", "unmatched_terms",
+                    "form_only_terms",
+                ):
                     self.assertEqual(report["coverage"][key], expected["coverage"][key], key)
 
     def test_the_exported_coverage_says_history_is_not_shipped(self) -> None:
         exported = self.exported_search("--query", "Wiki", "--limit", "1")
         self.assertEqual(exported.returncode, 0, exported.stderr.decode("utf-8", errors="replace"))
         coverage = json.loads(exported.stdout.decode("utf-8"))["coverage"]
-        self.assertEqual(coverage["format"], "lmwiki-search-coverage/1")
+        self.assertEqual(coverage["format"], "lmwiki-search-coverage/2")
         self.assertEqual(
             coverage["scopes"]["history"],
             {"searched": False, "shipped": False, "files": None, "files_with_a_query_term": None},
@@ -222,6 +233,7 @@ class ExportedSkillRuns(unittest.TestCase):
             "<skill-root>/scripts/search_knowledge.py", "${CLAUDE_SKILL_DIR}", "--expect-manifest-sha256",
             "truncated", "claims_returned", "claims_total", "unmatched_terms",
             "terms_only_in_unsearched.sources", "--include-sources", "coverage.boundary",
+            "match_rules", "form_only_terms", "typo",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)

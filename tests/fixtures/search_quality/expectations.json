@@ -1,18 +1,18 @@
 {
   "format": "lmwiki-search-quality-expectations/1",
-  "about": "Recorded by record_expectations.py from the search as it was at recording time. A rank is the 1-based position of a required page at --limit 100 (null: not among the first 100), without flags unless with_required_flags says otherwise. floors are minimums, caps are maximums. tests/test_search_quality.py fails when a query whose first result is a required page here no longer has a required page first, or when a required page leaves the top 3 or the top 12 it held here, unless accepted_regressions lists that page with a reason. Changing this file is a deliberate act: state the change and its reason in the commit message.",
+  "about": "Recorded by record_expectations.py from the search as it was at recording time. A rank is the 1-based position of a required page at --limit 100 (null: not among the first 100), without flags unless with_required_flags says otherwise. floors are minimums, caps are maximums. tests/test_search_quality.py fails when a query whose first result is a required page here no longer has a required page first, or when a required page leaves the top 3 or the top 12 it held here, unless accepted_regressions lists that page with a reason; an entry with accepted_rank holds the page to that rank's bands instead. Changing this file is a deliberate act: state the change and its reason in the commit message.",
   "rank_limit": 100,
   "default_limit": 12,
   "floors": {
     "answerable_queries": 107,
-    "required_first_result": 41,
-    "all_must_find_within_3": 47,
-    "all_must_find_within_12": 57,
-    "all_must_find_within_100": 62
+    "required_first_result": 56,
+    "all_must_find_within_3": 64,
+    "all_must_find_within_12": 74,
+    "all_must_find_within_100": 84
   },
   "caps": {
-    "negative_results_within_12": 16,
-    "navigation_in_top_3": 20
+    "negative_results_within_12": 31,
+    "navigation_in_top_3": 13
   },
   "queries": {
     "ex-01": {
@@ -52,47 +52,47 @@
     },
     "in-01": {
       "must_find_ranks": {
-        "wiki/concepts/netzentgelt.md": 24
+        "wiki/concepts/netzentgelt.md": 1
       }
     },
     "in-02": {
       "must_find_ranks": {
-        "wiki/concepts/kuendigungsfrist.md": null
+        "wiki/concepts/kuendigungsfrist.md": 2
       }
     },
     "in-03": {
       "must_find_ranks": {
-        "wiki/concepts/zaehlerstand.md": null
+        "wiki/concepts/zaehlerstand.md": 1
       }
     },
     "in-04": {
       "must_find_ranks": {
-        "wiki/concepts/widerrufsrecht.md": 9
+        "wiki/concepts/widerrufsrecht.md": 3
       }
     },
     "in-05": {
       "must_find_ranks": {
-        "wiki/topics/umzug.md": 5
+        "wiki/topics/umzug.md": 10
       }
     },
     "in-06": {
       "must_find_ranks": {
-        "wiki/topics/zahlungsverzug-und-mahnwesen.md": null
+        "wiki/topics/zahlungsverzug-und-mahnwesen.md": 1
       }
     },
     "in-07": {
       "must_find_ranks": {
-        "wiki/concepts/preisanpassung.md": null
+        "wiki/concepts/preisanpassung.md": 4
       }
     },
     "in-08": {
       "must_find_ranks": {
-        "wiki/topics/lieferantenwechsel.md": 4
+        "wiki/topics/lieferantenwechsel.md": 2
       }
     },
     "um-01": {
       "must_find_ranks": {
-        "wiki/concepts/kuendigungsfrist.md": 2
+        "wiki/concepts/kuendigungsfrist.md": 1
       }
     },
     "um-02": {
@@ -107,7 +107,7 @@
     },
     "um-04": {
       "must_find_ranks": {
-        "wiki/entities/tarif-lindenwaerme-wp.md": 2
+        "wiki/entities/tarif-lindenwaerme-wp.md": 1
       }
     },
     "um-05": {
@@ -117,7 +117,7 @@
     },
     "um-06": {
       "must_find_ranks": {
-        "wiki/entities/tarif-lindenstrom-oeko.md": null
+        "wiki/entities/tarif-lindenstrom-oeko.md": 1
       }
     },
     "um-07": {
@@ -132,7 +132,7 @@
     },
     "co-02": {
       "must_find_ranks": {
-        "wiki/concepts/messstellenbetrieb.md": null
+        "wiki/concepts/messstellenbetrieb.md": 15
       }
     },
     "co-03": {
@@ -142,17 +142,17 @@
     },
     "co-04": {
       "must_find_ranks": {
-        "wiki/topics/jahresverbrauchsabrechnung.md": null
+        "wiki/topics/jahresverbrauchsabrechnung.md": 1
       }
     },
     "co-05": {
       "must_find_ranks": {
-        "wiki/topics/neukundenbonus.md": null
+        "wiki/topics/neukundenbonus.md": 1
       }
     },
     "co-06": {
       "must_find_ranks": {
-        "wiki/concepts/marktlokation.md": 2
+        "wiki/concepts/marktlokation.md": 1
       }
     },
     "co-07": {
@@ -167,7 +167,7 @@
     },
     "su-01": {
       "must_find_ranks": {
-        "wiki/concepts/preisanpassung.md": null
+        "wiki/concepts/preisanpassung.md": 8
       }
     },
     "su-02": {
@@ -177,7 +177,7 @@
     },
     "su-03": {
       "must_find_ranks": {
-        "wiki/topics/umzug.md": null
+        "wiki/topics/umzug.md": 10
       }
     },
     "su-04": {
@@ -192,12 +192,12 @@
     },
     "su-06": {
       "must_find_ranks": {
-        "wiki/topics/neukundenbonus.md": 8
+        "wiki/topics/neukundenbonus.md": 3
       }
     },
     "su-07": {
       "must_find_ranks": {
-        "wiki/concepts/versorgungsunterbrechung.md": null
+        "wiki/concepts/versorgungsunterbrechung.md": 25
       }
     },
     "su-08": {
@@ -227,7 +227,7 @@
     },
     "sc-05": {
       "must_find_ranks": {
-        "wiki/concepts/messstellenbetrieb.md": 2
+        "wiki/concepts/messstellenbetrieb.md": 1
       }
     },
     "sc-06": {
@@ -262,22 +262,22 @@
     },
     "pa-05": {
       "must_find_ranks": {
-        "wiki/concepts/messstellenbetrieb.md": 39
+        "wiki/concepts/messstellenbetrieb.md": 11
       }
     },
     "pa-06": {
       "must_find_ranks": {
-        "wiki/concepts/grundversorgung.md": 5
+        "wiki/concepts/grundversorgung.md": 1
       }
     },
     "pa-07": {
       "must_find_ranks": {
-        "wiki/topics/umzug.md": 15
+        "wiki/topics/umzug.md": 21
       }
     },
     "pa-08": {
       "must_find_ranks": {
-        "wiki/topics/ratenzahlung.md": null
+        "wiki/topics/ratenzahlung.md": 20
       }
     },
     "cl-01": {
@@ -322,22 +322,22 @@
     },
     "ty-01": {
       "must_find_ranks": {
-        "wiki/concepts/netzentgelt.md": null
+        "wiki/concepts/netzentgelt.md": 1
       }
     },
     "ty-02": {
       "must_find_ranks": {
-        "wiki/concepts/kuendigungsfrist.md": null
+        "wiki/concepts/kuendigungsfrist.md": 1
       }
     },
     "ty-03": {
       "must_find_ranks": {
-        "wiki/concepts/widerrufsrecht.md": null
+        "wiki/concepts/widerrufsrecht.md": 1
       }
     },
     "ty-04": {
       "must_find_ranks": {
-        "wiki/topics/lieferantenwechsel.md": null
+        "wiki/topics/lieferantenwechsel.md": 2
       }
     },
     "ty-05": {
@@ -347,12 +347,12 @@
     },
     "ty-06": {
       "must_find_ranks": {
-        "wiki/concepts/bonitaetspruefung.md": null
+        "wiki/concepts/bonitaetspruefung.md": 1
       }
     },
     "ty-07": {
       "must_find_ranks": {
-        "wiki/concepts/grundversorgung.md": null
+        "wiki/concepts/grundversorgung.md": 23
       }
     },
     "ty-08": {
@@ -362,24 +362,24 @@
     },
     "br-01": {
       "must_find_ranks": {
-        "wiki/concepts/vertragslaufzeit.md": 4,
-        "wiki/concepts/kuendigungsfrist.md": null,
-        "wiki/topics/vertragsschluss-im-fernabsatz.md": 11,
-        "wiki/comparisons/grundversorgung-und-sondervertrag.md": 19,
+        "wiki/concepts/vertragslaufzeit.md": 3,
+        "wiki/concepts/kuendigungsfrist.md": 25,
+        "wiki/topics/vertragsschluss-im-fernabsatz.md": 6,
+        "wiki/comparisons/grundversorgung-und-sondervertrag.md": 9,
         "wiki/concepts/widerrufsrecht.md": 2
       }
     },
     "br-02": {
       "must_find_ranks": {
         "wiki/concepts/kuendigungsfrist.md": 1,
-        "wiki/concepts/sonderkuendigungsrecht.md": 3,
+        "wiki/concepts/sonderkuendigungsrecht.md": 2,
         "wiki/concepts/grundversorgung.md": null
       }
     },
     "br-03": {
       "must_find_ranks": {
         "wiki/concepts/kuendigungsfrist.md": 1,
-        "wiki/concepts/widerrufsrecht.md": null,
+        "wiki/concepts/widerrufsrecht.md": 15,
         "wiki/concepts/preisanpassung.md": 6,
         "wiki/concepts/versorgungsunterbrechung.md": 7,
         "wiki/topics/lieferantenwechsel.md": 5
@@ -387,19 +387,19 @@
     },
     "br-04": {
       "must_find_ranks": {
-        "wiki/entities/tarif-lindenstrom-fix12.md": null,
-        "wiki/entities/tarif-lindenstrom-basis.md": null,
-        "wiki/entities/tarif-lindenstrom-flex.md": null,
-        "wiki/concepts/netzentgelt.md": null,
-        "wiki/concepts/preisanpassung.md": null
+        "wiki/entities/tarif-lindenstrom-fix12.md": 8,
+        "wiki/entities/tarif-lindenstrom-basis.md": 3,
+        "wiki/entities/tarif-lindenstrom-flex.md": 10,
+        "wiki/concepts/netzentgelt.md": 9,
+        "wiki/concepts/preisanpassung.md": 6
       }
     },
     "br-05": {
       "must_find_ranks": {
         "wiki/concepts/zaehlerstand.md": 1,
-        "wiki/concepts/messstellenbetrieb.md": null,
-        "wiki/concepts/intelligentes-messsystem.md": 3,
-        "wiki/comparisons/moderne-messeinrichtung-und-intelligentes-messsystem.md": null
+        "wiki/concepts/messstellenbetrieb.md": 13,
+        "wiki/concepts/intelligentes-messsystem.md": 4,
+        "wiki/comparisons/moderne-messeinrichtung-und-intelligentes-messsystem.md": 11
       }
     },
     "ch-01": {
@@ -553,7 +553,7 @@
     },
     "sh-02": {
       "must_find_ranks": {
-        "wiki/topics/preisanpassung-januar-2025.md": 6
+        "wiki/topics/preisanpassung-januar-2025.md": 3
       }
     },
     "sh-03": {
@@ -573,7 +573,7 @@
     },
     "sh-06": {
       "must_find_ranks": {
-        "wiki/topics/kuendigungsfristen-alte-rechtslage.md": 8
+        "wiki/topics/kuendigungsfristen-alte-rechtslage.md": 10
       }
     },
     "id-01": {
@@ -613,7 +613,7 @@
     },
     "id-08": {
       "must_find_ranks": {
-        "wiki/topics/neukundenbonus.md": 3
+        "wiki/topics/neukundenbonus.md": 2
       }
     },
     "id-09": {
@@ -653,5 +653,12 @@
       "must_find_ranks": {}
     }
   },
-  "accepted_regressions": []
+  "accepted_regressions": [
+    {
+      "id": "br-05",
+      "path": "wiki/concepts/intelligentes-messsystem.md",
+      "accepted_rank": 4,
+      "reason": "Accepted with the word-form layer (Stufe 2): rank 3 -> 4, still in the top 12. Rule compound_modifier: wiki/entities/lindenau-netz.md holds 'Zähler' once and 'Zählerstand'/'Zählerständen' several times, so the broad query 'Zähler' now counts those compounds and lifts it above this page, which holds 'Zähler' once and no compound of it. Measured alternatives: compound_modifier at 0.2 or dropped keeps this page third but costs su-02 ('Smart Meter Pflicht') its required first result, because this same page needs 'Pflichteinbau' to stay first there; 0.25 to 0.3 lose both. A rank-1 loss weighs more than a step from rank 3 to 4."
+    }
+  ]
 }

@@ -163,6 +163,18 @@
         "Wörter aus unmatched_terms führen zu einer zweiten Suche mit anderen Wörtern, nicht zu einer Fehlanzeige.",
         "Die Zählwerte werden nicht als Beleg dafür ausgegeben, dass das Wiki zum Thema nichts enthält."
       ]
+    },
+    {
+      "id": 15,
+      "prompt": "Was gehört alles zum Netzentgeld, und wer legt die Gebühren fest?",
+      "expected_output": "Eine belegte Antwort über Netzentgelte, die offenlegt, dass das falsch geschriebene Suchwort nur über eine Tippfehlerkorrektur gefunden wurde, und die vor dem Zitieren prüft, dass die Seiten wirklich Netzentgelte behandeln.",
+      "files": [],
+      "expectations": [
+        "Steht ein Wort der Frage in form_only_terms, liest der Skill unter query_terms[].forms nach, welches Wort gezählt hat (hier netzentgelt mit Regel typo), bevor er antwortet.",
+        "Trägt nur eine Regel typo, compound_head, compound_modifier oder query_part das entscheidende Wort eines Treffers (match_rules), prüft der Skill im Seitentext, dass die Seite das gefragte Wort meint, bevor er sie zitiert.",
+        "Die Antwort sagt ausdrücklich, dass der Treffer über die Korrektur von „Netzentgeld“ zu „Netzentgelt“ zustande kam; ein über einen Kompositumteil wie „Durchleitungsgebühr“ gefundener Treffer wird ebenso benannt.",
+        "Wörter aus unmatched_terms führen zu einer zweiten Suche mit anderen Wörtern, und die Antwort nennt diese Wörter; die Zählwerte gelten nicht als Beleg, dass das Wiki zum Thema nichts enthält."
+      ]
     }
   ]
 }
