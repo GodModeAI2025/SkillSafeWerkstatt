@@ -619,6 +619,21 @@ ohne Gruppen rechnet es wie vorher. `search_core.search(..., word_forms=False)` 
 Messung und Tests die alte wörtliche Rangliste; auf dem Test-Wiki war sie in 114 von 114 Fragen
 identisch mit dem Stand vor Stufe 2.
 
+*Nachtrag aus Stufe 4 (zweite Suche nach falschen Fehlanzeigen).* Zu Schritt a gehört seither
+auch eine einheitliche Schreibweise für Zahlen, in Frage und Seite gleich: Tausendertrennzeichen
+(Punkt, Leerzeichen, geschütztes oder schmales Leerzeichen, Apostroph) fallen weg, wenn jede
+weitere Gruppe genau drei Ziffern hat, und eine direkt angehängte Einheit aus mindestens zwei
+Buchstaben wird abgetrennt. „2.500 kWh", „2 500 kWh" und „2500kWh" ergeben so „2500 kWh";
+vorher war „2.500" für die Suche „2" und „500", und eine Frage nach „2500" fand die Seite nicht.
+Dezimalkomma, Datum und ein einzelner Buchstabe an der Zahl („§ 14a") bleiben unverändert. Auf
+dem Test-Wiki rückte dadurch eine Pflichtseite einen Rang vor (pa-04, Rang 24 auf 23); sonst
+blieben alle drei Tore unverändert. Ebenfalls festgehalten: Plurale auf „-er" („Häuser",
+„Kinder") und die Formen von Stämmen unter vier Buchstaben („Tag", „Tage", „Tagen") sind für die
+Wortformen keine Formen desselben Wortes, weil die Flexionsregel bei Substantiven „-er" nie
+abschneidet und mindestens vier Buchstaben stehen lässt. Die Anweisungstexte sagten bis dahin
+pauschal, Plurale würden gefunden. Nur die vollständige Prüfung findet diese Formen, als
+ausgewiesene Heuristik `ending`; das Ranking bleibt dabei.
+
 **Die fünf Konstruktionsregeln** sind je durch einen Test in `tests/test_wordforms.py`
 festgenagelt:
 

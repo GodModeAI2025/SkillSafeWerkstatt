@@ -181,11 +181,11 @@ class Segmentation(unittest.TestCase):
         self.assertNotIn("basalt", by_line[11].tokens)
         self.assertNotIn("wiki", by_line[11].tokens)
         source = passages(self.SOURCE, "sources/quelle.md")
+        # A marker inside a paragraph does not end it: the paragraph carries the range of both locators.
         self.assertEqual(outline(source), [
             ("header", 1, "", "Quelle"),
             ("paragraph", 6, "page=1", "Text auf Seite eins."),
-            ("paragraph", 8, "page=2", "Text nach Marker."),
-            ("paragraph", 10, "slide=3", "Folientext hier."),
+            ("paragraph", 8, "page=2-slide=3", "Text nach Marker. Folientext hier."),
         ])
 
     def test_headings_count_only_at_column_0_and_outside_fences(self) -> None:
@@ -211,26 +211,141 @@ class Segmentation(unittest.TestCase):
             ("paragraph", 18, "", "Danach."),
         ])
 
-    def test_long_passages_are_cut_at_1500_characters(self) -> None:
+    def test_long_passages_are_cut_at_a_sentence_end_after_1500_characters(self) -> None:
+        # Without any sentence end, a paragraph is cut at the line that reaches the hard cap.
         line = " ".join(["Wort"] * 20)
         body = [f"{line} {number:03d}" for number in range(40)]
         found = passages(page("T", "\n".join(body)))[1:]
-        self.assertEqual([item.line for item in found], [7, 22, 37])
-        joined = [len("\n".join(body[0:15])), len("\n".join(body[15:30])), len("\n".join(body[30:40]))]
-        self.assertGreaterEqual(joined[0], search_core.PASSAGE_MAX_CHARS)
-        self.assertLess(len("\n".join(body[0:14])), search_core.PASSAGE_MAX_CHARS)
-        self.assertEqual([item.text for item in found], [" ".join(body[0:15]), " ".join(body[15:30]), " ".join(body[30:40])])
-        self.assertEqual(joined[2], len("\n".join(body[30:40])))
+        size = len(body[0]) + 1
+        per_passage = -(-(search_core.PASSAGE_HARD_MAX_CHARS + 1) // size)
+        self.assertEqual([item.line for item in found], [7, 7 + per_passage])
+        self.assertEqual([item.text for item in found], [" ".join(body[:per_passage]), " ".join(body[per_passage:])])
+        self.assertGreaterEqual(len("\n".join(body[:per_passage])), search_core.PASSAGE_HARD_MAX_CHARS)
+        # An overlong line continues the paragraph before it, and each cut falls after the first sentence end past the cap.
         sentences = " ".join(f"Satz Nummer {number} endet hier." for number in range(200))
         cut = passages(page("T", "Davor.\n" + sentences + "\nDanach."))[1:]
-        self.assertEqual(cut[0].text, "Davor.")
-        chunks = cut[1:-1]
-        self.assertGreater(len(chunks), 2)
-        self.assertTrue(all(item.line == 8 for item in chunks))
-        self.assertTrue(all(len(item.text) <= search_core.PASSAGE_MAX_CHARS for item in chunks))
-        self.assertTrue(all(item.text.endswith("endet hier.") for item in chunks))
-        self.assertEqual(" ".join(item.text for item in chunks), sentences)
-        self.assertEqual((cut[-1].line, cut[-1].text), (9, "Danach."))
+        self.assertGreater(len(cut), 2)
+        self.assertEqual(cut[0].line, 7)
+        self.assertTrue(cut[0].text.startswith("Davor. Satz Nummer 0 endet hier."))
+        self.assertTrue(all(item.line == 8 for item in cut[1:]))
+        self.assertTrue(all(item.text.endswith(".") for item in cut))
+        for item in cut[:-1]:
+            self.assertGreaterEqual(len(item.text), search_core.PASSAGE_MAX_CHARS)
+            self.assertLess(len(item.text), search_core.PASSAGE_MAX_CHARS + len("Satz Nummer 199 endet hier. "))
+        self.assertEqual(" ".join(item.text for item in cut), "Davor. " + sentences + " Danach.")
+        self.assertTrue(cut[-1].text.endswith("endet hier. Danach."))
+
+    def test_a_hard_wrapped_paragraph_is_never_cut_inside_a_sentence(self) -> None:
+        """Regression: a paragraph of short lines was cut after the line that reached 1,500 characters, inside a sentence."""
+        answer = (
+            "Kündigt der Betreiber eine Änderung an, gilt für den Gneis abweichend von den allgemeinen Regelungen "
+            "dieses Schreibens und der übrigen Blätter eine verkürzte Frist bis zur Halde von zwei Wochen. Danach folgt der Rest."
+        )
+
+        def wrap(count: int) -> tuple:
+            text = " ".join(f"Der Satz Nummer {number} im Rundschreiben erläutert eine Einzelheit." for number in range(count))
+            text += " " + answer
+            wrapped, current = [], ""
+            for word in text.split(" "):
+                if current and len(current) + 1 + len(word) > 79:
+                    wrapped.append(current)
+                    current = word
+                else:
+                    current = f"{current} {word}" if current else word
+            wrapped.append(current)
+            # Where the old rule cut: after the line that brought the passage to 1,500 characters.
+            sizes = [len("\n".join(wrapped[: i + 1])) for i in range(len(wrapped))]
+            return text, wrapped, next((size for size in sizes if size >= 1500), 0)
+
+        # A filler length for which the old cut falls inside the answer, between "Gneis" and "Halde".
+        text, wrapped, old_cut = next(
+            built for built in map(wrap, range(10, 40)) if built[0].index("Gneis") < built[2] < built[0].index("Halde")
+        )
+        body = "\n".join(wrapped)
+        found = passages(page("Rundschreiben", body))[1:]
+        self.assertGreater(len(found), 1)
+        self.assertTrue(all(item.text.endswith(".") for item in found), [item.text[-40:] for item in found])
+        self.assertEqual(" ".join(item.text for item in found), text)
+        holding = [item for item in found if "Gneis" in item.text]
+        self.assertEqual(len(holding), 1)
+        self.assertIn("Halde", holding[0].text)
+        with Tree({"sources/rundschreiben.md": page("Rundschreiben", body, "source")}) as root:
+            report = exhaustive(root, "Gneis Halde", TWO)
+        self.assertIn(("sources/rundschreiben.md", "paragraph", holding[0].line), hit_list(report))
+        self.assertTrue(report["absence_check"]["complete"])
+
+    def test_a_page_marker_inside_a_paragraph_keeps_it_one_passage(self) -> None:
+        """Regression: a page marker ended the passage, so a sentence broken across a page break never hit."""
+        source = page("Bedingungen", "\n".join([
+            "<!-- page: 3 -->",                                  # 7
+            "(2) Beim Abbau im Gneis darf der Betreiber eine",   # 8
+            "<!-- page: 4 -->",                                  # 9
+            "Halde von sechs Metern anlegen.",                   # 10
+            "",
+            "Die Basalt-",                                       # 12
+            "<!-- page: 5 -->",
+            "halde ist voll. Davor <!-- page: 6 --> und danach.",  # 14
+        ]), "source")
+        found = passages(source, "sources/agb.md")[1:]
+        self.assertEqual(outline(found), [
+            ("paragraph", 8, "page=3-4", "(2) Beim Abbau im Gneis darf der Betreiber eine Halde von sechs Metern anlegen."),
+            ("paragraph", 12, "page=4-6", "Die Basalthalde ist voll. Davor und danach."),
+        ])
+        # The hyphen at the line end before the marker is joined.
+        self.assertIn("basalthalde", found[1].tokens)
+        self.assertNotIn("halde", found[1].tokens)
+        with Tree({"sources/agb.md": source}) as root:
+            report = exhaustive(root, "Gneis Halde", TWO)
+            joined = exhaustive(root, "Basalthalde", TWO)
+        self.assertIn(("sources/agb.md", "paragraph", 8), hit_list(report))
+        [hit] = [hit for entry in report["exhaustive_hits"] for hit in entry["hits"] if hit["line"] == 8]
+        self.assertEqual((hit["locator"], hit["strength"]), ("page=3-4", "word_form"))
+        self.assertIn(("sources/agb.md", "paragraph", 12), hit_list(joined))
+        self.assertNotIn("basalthalde", joined["absence_check"]["absent_terms"])
+        self.assertEqual(search_core.locator_span("page=3", "page=3"), "page=3")
+        self.assertEqual(search_core.locator_span("", "page=1"), "page=1")
+        self.assertEqual(search_core.locator_span("page=3", "page=5"), "page=3-5")
+        self.assertEqual(search_core.locator_span("page=2", "slide=3"), "page=2-slide=3")
+
+    def test_a_raw_html_table_is_read_as_a_table(self) -> None:
+        """Regression: a pandoc HTML table was one paragraph, cut without its header row; <h2> and <summary> gave no context."""
+        rows = ["<table>", "<thead>", '<tr class="header">', "<th>Leistung</th>", "<th>Quarzit</th>", "<th>Basalt</th>", "</tr>",
+                "</thead>", "<tbody>"]
+        for number in range(1, 60):
+            rows += [f'<tr class="odd"><td>Position {number} mit etwas Text</td><td>{number},00</td>', f"<td>{number},50</td></tr>"]
+        rows += ["<tr><td>Halde &amp; Lager</td>", "<td><p>2.000,00</p>", "<p>netto</p></td><td>1.500,00</td></tr>", "</tbody>", "</table>"]
+        body = "## Preise\n\n" + "\n".join(rows) + "\nDanach ohne Leerzeile.\n"
+        found = passages(page("Anlage", body, "source"), "sources/anlage.md")
+        chunks = [item for item in found if item.kind == "paragraph" and item.text.startswith("|")]
+        self.assertGreater(len(chunks), 1)
+        head = "| Leistung | Quarzit | Basalt |"
+        self.assertTrue(chunks[0].text.startswith(head + " | Position 1 mit etwas Text | 1,00 | 1,50 |"))
+        self.assertEqual(chunks[0].line, 11)
+        self.assertEqual((chunks[0].section, chunks[0].opens), (("Preise",), ("Preise", head)))
+        self.assertTrue(all(item.section == ("Preise", head) and not item.opens for item in chunks[1:]))
+        self.assertTrue(chunks[-1].text.endswith("| Halde & Lager | 2.000,00 netto | 1.500,00 |"))
+        self.assertEqual(found[-1].text, "Danach ohne Leerzeile.")
+        details = page("Seite", "\n".join([
+            "<h2>Gneis</h2>",                          # 7
+            "Die Halde ist voll.",                     # 8
+            "",
+            "<details><summary>Basalt</summary>",      # 10
+            "Das Lager ist leer.",                     # 11
+            "</details>",
+            "",
+            "Das Lager danach.",                       # 14
+        ]))
+        self.assertEqual([(item.kind, item.line, item.section) for item in passages(details)[1:]], [
+            ("heading", 7, ()), ("paragraph", 8, ("Gneis",)), ("heading", 10, ("Gneis",)),
+            ("paragraph", 11, ("Gneis", "Basalt")), ("paragraph", 14, ("Gneis",)),
+        ])
+        with Tree({"sources/anlage.md": page("Anlage", body, "source"), "wiki/d.md": details}) as root:
+            table = exhaustive(root, "Quarzit Halde", TWO)
+            context = exhaustive(root, "Gneis Halde", ("Basalt Lager", "Granit"))
+        self.assertIn(("sources/anlage.md", "paragraph", chunks[-1].line), hit_list(table))
+        self.assertIn(("wiki/d.md", "paragraph", 8), hit_list(context))
+        self.assertIn(("wiki/d.md", "paragraph", 11), hit_list(context))
+        self.assertNotIn(("wiki/d.md", "paragraph", 14), hit_list(context))
 
     def test_lines_are_split_on_newline_only(self) -> None:
         text = page("T", "Erste Zeile\fmit Formfeed\n\f\nZweite Zeile\n\n## Titel\n\n" + claim("clm-1", "Schluss.") + "\nNach dem Claim.")
@@ -625,6 +740,107 @@ class Matching(unittest.TestCase):
         self.assertNotIn("basalt", loaded.scan.section_index)
         self.assertNotIn("gneis", loaded.scan.section_index)
         self.assertIn("granit", loaded.scan.section_index)
+
+    def test_numbers_match_in_every_thousands_spelling_and_with_a_glued_unit(self) -> None:
+        """Regression: "2.500 kWh" gave the tokens 2 and 500, so the question's 2500 was absent although the page held it."""
+        spellings = {
+            "wiki/punkt.md": "Ab 2.500 kWh gilt der Quarzit-Tarif.",
+            "wiki/leer.md": "Ab 2 500 kWh gilt der Quarzit-Tarif.",
+            "wiki/nbsp.md": "Ab 2 500 kWh gilt der Quarzit-Tarif.",
+            "wiki/schmal.md": "Ab 2 500 kWh gilt der Quarzit-Tarif.",
+            "wiki/duenn.md": "Ab 2 500 kWh gilt der Quarzit-Tarif.",
+            "wiki/apostroph.md": "Ab 2'500 kWh gilt der Quarzit-Tarif.",
+            "wiki/einheit.md": "Ab 2500kWh gilt der Quarzit-Tarif.",
+        }
+        for text in spellings.values():
+            with self.subTest(text=text):
+                self.assertEqual(search_core.tokens(text, False, True)[:3], ["ab", "2500", "kwh"])
+        for written, expected in (
+            ("2.500,50 Euro", ["2500", "50", "euro"]), ("2,50 Euro", ["2", "50", "euro"]), ("31.12.2025", ["31", "12", "2025"]),
+            ("1.234.567", ["1234567"]), ("§ 14a EnWG", ["14a", "enwg"]), ("§ 312g BGB", ["312g", "bgb"]), ("OBIS 1.8.1", ["obis", "1", "8", "1"]),
+        ):
+            with self.subTest(written=written):
+                self.assertEqual(search_core.tokens(written, False, True), expected)
+        # A space between digit groups may separate two numbers: the scan keeps the groups as well.
+        self.assertEqual(search_core.scan_words("100 200"), frozenset({"100200", "100", "200"}))
+        # The literal search is unchanged.
+        self.assertEqual(search_core.tokens("2.500 kWh", False, False), ["2", "500", "kwh"])
+        files = {path: page(path.split("/")[1][:-3].title(), text) for path, text in spellings.items()}
+        files["wiki/tabelle.md"] = page("Tabelle", "Quarzit-Tarif 100 200 kWh.")
+        with Tree(files) as root:
+            plain = exhaustive(root, "Ab 2500 kWh Quarzit-Tarif", TWO)
+            dotted = exhaustive(root, "2.500 kWh Quarzit-Tarif", TWO)
+            part = exhaustive(root, "200 kWh Quarzit-Tarif", TWO)
+        for label, report in (("2500", plain), ("2.500", dotted)):
+            with self.subTest(query=label):
+                self.assertEqual(report["absence_check"]["formulations"][0]["content_words"], ["2500", "kwh", "quarzit-tarif"])
+                self.assertEqual(sorted(path for path, _, _ in hit_list(report)), sorted(spellings))
+                self.assertNotIn("2500", report["absence_check"]["absent_terms"])
+                # The ranking reads the same spelling, so every page ranks above the one without the number.
+                ranked = [item["path"] for item in report["results"]]
+                self.assertEqual(sorted(ranked[: len(spellings)]), sorted(spellings))
+        self.assertIn(("wiki/tabelle.md", "paragraph", 7), hit_list(part))
+        self.assertNotIn("200", part["absence_check"]["absent_terms"])
+
+    def test_plurals_in_er_and_short_stems_match_as_the_ending_heuristic(self) -> None:
+        """Regression: "Krankenhaus" never met "Krankenhäuser", nor "Tag" "Tage", so the singular was listed as absent."""
+        files = {
+            "wiki/a.md": page("Seite A", "Die Quarzithäuser stehen am Hang."),
+            "wiki/b.md": page("Seite B", "Nach sieben Tagen ist die Halde voll."),
+            "wiki/c.md": page("Seite C", "Am ersten Tag ist das Lager leer."),
+        }
+        with Tree(files) as root:
+            house = exhaustive(root, "Quarzithaus Hang", TWO)
+            day = exhaustive(root, "Tag Halde", TWO)
+            days = exhaustive(root, "Tage Lager", TWO)
+            plain = search_core.search(root, "Quarzithaus Hang", also=list(TWO), include_sources=True)
+        self.assertFalse(search_core.wordforms.same_word("quarzithaus", "quarzithauser"))
+        for report, path, term, token in (
+            (house, "wiki/a.md", "quarzithaus", "quarzithauser"), (day, "wiki/b.md", "tag", "tagen"), (days, "wiki/c.md", "tage", "tag"),
+        ):
+            with self.subTest(term=term):
+                [hit] = [hit for entry in report["exhaustive_hits"] if entry["path"] == path for hit in entry["hits"]]
+                self.assertEqual(hit["strength"], "heuristic")
+                self.assertIn({"term": term, "token": token, "rule": "ending", "in": "text"}, hit["matched"])
+                self.assertNotIn(term, report["absence_check"]["absent_terms"])
+                terms = {entry["term"]: entry for entry in report["absence_check"]["terms"]}
+                self.assertIn({"token": token, "rule": "ending"}, terms[term]["forms"])
+                self.assertEqual(report["absence_check"]["counts"]["hits_word_form"], 0)
+        # The ranking does not know the rule: it finds the page through "Hang" only.
+        for key in INVARIANT_KEYS:
+            self.assertEqual(house[key], plain[key], key)
+        self.assertIn("quarzithaus", house["coverage"]["unmatched_terms"])
+
+    def test_a_link_target_elsewhere_does_not_stop_the_hyphen_part_rule(self) -> None:
+        """Regression: one unlabelled link [[.../gneis-halde]] anywhere switched hyphen_part off for "Gneis-Halde" in every text."""
+        files = {
+            "wiki/a.md": page("Seite A", "Bei Regen meldet der [[wiki/concepts/gneis-halde]] alles."),
+            "wiki/b.md": page("Seite B", "Die Gneis-Halde liegt am Hang."),
+            "wiki/c.md": page("Seite C", "Siehe [[wiki/concepts/basalt-lager]] und das Basalt-Lager."),
+        }
+        with Tree(files) as root:
+            loaded = search_core.load(root, include_sources=True, exhaustive=True)
+            report = exhaustive(root, "Gneis Halde", TWO)
+            both = exhaustive(root, "Basalt Lager", ("Gneis Halde", "Granit"))
+        by_path = {item.text: item for item in loaded.scan.passages}
+        self.assertEqual(by_path["Bei Regen meldet der [[wiki/concepts/gneis-halde]] alles."].identifiers,
+                         frozenset({"wiki", "concepts", "gneis-halde"}))
+        # In a passage that writes the compound as text too, it is text there.
+        self.assertNotIn("basalt-lager", by_path["Siehe [[wiki/concepts/basalt-lager]] und das Basalt-Lager."].identifiers)
+        self.assertEqual(loaded.scan.hyphen_parts()[search_core.wordforms.stem_key("gneis")], frozenset({"gneis-halde"}))
+        self.assertEqual(hit_list(report), [("wiki/b.md", "paragraph", 7)])
+        [hit] = report["exhaustive_hits"][0]["hits"]
+        self.assertEqual(hit["matched"], [
+            {"term": "gneis", "token": "gneis-halde", "rule": "hyphen_part", "in": "text"},
+            {"term": "halde", "token": "gneis-halde", "rule": "hyphen_part", "in": "text"},
+        ])
+        check = report["absence_check"]
+        self.assertNotIn("gneis", check["absent_terms"])
+        self.assertNotIn("halde", check["absent_terms"])
+        # The link target itself is never split: the passage that only links is no hit and no holder.
+        terms = {entry["term"]: entry for entry in check["terms"]}
+        self.assertEqual(terms["gneis"]["passages"]["wiki"], 1)
+        self.assertIn(("wiki/c.md", "paragraph", 7), hit_list(both))
 
 
 class OrderBudgetDedupe(unittest.TestCase):
@@ -1128,7 +1344,7 @@ class Instructions(unittest.TestCase):
         everywhere = (
             ABSENCE_RULE, "--exhaustive", "absence_check", "search_record.line", "exhaustive_hits", "next_steps",
             "absent_terms", "100,000 characters", "at least two reformulations", "read_results_without_claims",
-            "hyphen_part", "not its snippet",
+            "hyphen_part", "`ending`", "plural in -er", "not its snippet",
         )
         texts = {label: path.read_text(encoding="utf-8") for label, path in self.TEXTS.items()}
         for label, text in texts.items():

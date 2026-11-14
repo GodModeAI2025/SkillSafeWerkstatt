@@ -39,9 +39,10 @@ statement is allowed. With `exhaustive`, one call also ranks the sources and
 scans every passage of the ranked files except navigation (page headers,
 headings, claims, paragraphs, list items, tables, open questions) for all
 content words of all formulations, in the members the ranking resolved plus
-two scan-only additions: hyphen parts (`hyphen_part`) and the identifiers of
-claim and page metadata. The hits come back under `exhaustive_hits`, cut to a
-fixed budget of printed characters. The scan only adds keys: everything else equals the same
+what only the scan sees: hyphen parts (`hyphen_part`), endings the word forms
+do not cover (`ending`), the identifiers of claim and page metadata, and words
+only its segmentation repairs. The hits come back under `exhaustive_hits`, cut
+to a fixed budget of printed characters. The scan only adds keys: everything else equals the same
 call with `include_sources`. Nothing is indexed or cached on disk.
 """
 
@@ -50,6 +51,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from html import unescape as html_unescape
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, NamedTuple, Optional
 
@@ -64,6 +66,26 @@ from wiki_filters import matches_selector
 H1 = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 HEADING = re.compile(r"^#{1,6}\s+(.+)$", re.MULTILINE)
 TOKEN = re.compile(r"[^\W_]+(?:[-_][^\W_]+)*", re.UNICODE)
+#: Digit groups split by a thousands separator, a full stop, an apostrophe or a
+#: space, when every later group has exactly three digits ("2.500", "2 500",
+#: "1.234.567"). `normalized` has already turned U+00A0, U+202F and U+2009 into
+#: a space. A decimal comma ("2,50") is no separator, and no group starts inside
+#: a number, a date ("31.12.2025") or a word.
+DIGIT_GROUPS = re.compile(r"(?<![\w.,'’])\d{1,3}(?:[. '’]\d{3})+(?!\d)")
+#: The separators DIGIT_GROUPS removes.
+DIGIT_SEPARATOR = re.compile(r"[. '’]")
+#: Units of two or more letters that a number may carry written straight after it
+#: ("2500kWh"), normalised. A single letter stays on the number: "§ 14a" and
+#: "§ 312g" name paragraphs, so "800W" is not split either.
+NUMBER_UNITS = (
+    "kwhth", "kwhel", "kwh", "mwh", "gwh", "twh", "wh", "kwp", "mwp", "gwp", "kvar", "kva", "mva", "kw", "mw", "gw",
+    "kv", "va", "cent", "ct", "euro", "eur", "km", "kg", "cm", "mm", "qm", "m2", "m3", "ml", "std", "min", "sek",
+    "khz", "mhz", "ghz", "hz", "kbit", "mbit", "gbit", "kb", "mb", "gb", "tb", "bar", "mio", "mrd", "tsd",
+)
+#: A number with one of NUMBER_UNITS written straight after it.
+NUMBER_UNIT = re.compile(r"(?<![\w-])(\d+)(" + "|".join(NUMBER_UNITS) + r")(?![^\W_])")
+#: Where `number_spelling` can change anything: a separator before a group of three digits, or a unit after a digit.
+NUMBER_SHAPE = re.compile(r"\d(?:[. '’]\d{3}(?!\d)|(?:" + "|".join(NUMBER_UNITS) + r")(?![^\W_]))")
 STOPWORDS = {
     "aber", "als", "am", "an", "auch", "auf", "aus", "bei", "das", "der", "die",
     "ein", "eine", "einer", "eines", "für", "hat", "im", "in", "ist", "mit", "oder",
@@ -168,9 +190,14 @@ EXHAUSTIVE_BUDGET_CHARS = 100_000
 REPORT_INDENT = 2
 #: A hit prints at most this many characters of its passage, cut around the first match.
 EXCERPT_CHARS = 400
-#: A passage ends once its text reaches this many characters, so a PDF
-#: extraction without blank lines cannot become one passage per page.
+#: A paragraph longer than this is cut into several passages, so a PDF
+#: extraction without blank lines cannot become one passage per page. The cut
+#: falls at the first sentence end once a passage has reached this size, so no
+#: sentence is split; a table is cut at the row that reaches it.
 PASSAGE_MAX_CHARS = 1_500
+#: Where a paragraph that reaches no sentence end is cut all the same, at the
+#: end of the line that reaches this size.
+PASSAGE_HARD_MAX_CHARS = 3_000
 #: How many pages without a returned hit absence_check names.
 OMITTED_PAGES_LISTED = 20
 #: Counted reformulations a complete absence check needs.
@@ -209,8 +236,9 @@ ABSENCE_BOUNDARY = (
     "of at least one searched formulation, in the forms listed under terms, itself or in its context, "
     "was returned under exhaustive_hits. Context is the page header, the headings and label lines above "
     "the passage, its parent list items and the first row of a split table, nothing else: a passage that "
-    "needs a neighbouring paragraph, or that words the answer differently, with other words, an irregular "
-    "form or another language, is not a hit, and layers marked scanned: false were not checked."
+    "needs a neighbouring paragraph, or a sentence of its paragraph beyond a cut, or that words the answer "
+    "differently, with other words, an irregular form, a number in words or in another unit, or another "
+    "language, is not a hit, and layers marked scanned: false were not checked."
 )
 #: Order of the layers among pages with otherwise equal hits.
 SCOPE_RANK = {"wiki": 0, "sources": 1, "history": 2}
@@ -220,8 +248,19 @@ FENCE = re.compile(r"^ {0,3}(```|~~~)")
 SCAN_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 #: A list item starts a passage of its own.
 LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d{1,9}[.)])\s+")
-#: Where an overlong line may be split.
-SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+#: A possible sentence end inside a line: ., ! or ?, closing quotes or brackets, whitespace, the next word.
+SENTENCE_GAP = re.compile(r"[.!?][\"'»«“”’‘)\]]*(\s+)(?=(\S))")
+#: Characters that may close a sentence after its final punctuation.
+SENTENCE_CLOSERS = "\"'»«“”’‘)]"
+#: Characters that may open a word before its letters.
+WORD_OPENERS = "\"'»«“”„‚‘(["
+#: Abbreviations whose full stop ends no sentence, normalised; single letters,
+#: numbers and words with an inner full stop ("z.B.") are caught by rule.
+SENTENCE_ABBREVIATIONS = frozenset((
+    "abs abschn anh anl anm art aufl bd bzgl bspw bzw ca dr ebd einschl entspr erg evtl exkl ff gem ggf ggu hrsg "
+    "inkl insb jh kap lfd lit lt max mind mio mrd nr pkt prof sog spez std str tel tsd usw vgl vorl zt zzgl ziff "
+    "jan feb mar apr jun jul aug sep sept okt nov dez mo di mi do fr sa so hr "
+    "approx cf eg etc fig ie incl excl no nos pp vol vs").split())
 #: A setext heading underline under a one-line paragraph: = for level 1, - for level 2.
 SETEXT_UNDERLINE = re.compile(r"^ {0,3}(?:=+|-+)[ \t]*$")
 #: A line that is only bold text, with an optional colon: a label that heads the passages after it.
@@ -235,22 +274,74 @@ LABEL_LEVEL = 7
 HYPHEN_PART_RULE = "hyphen_part"
 #: Its weight, as low as a compound modifier; it only orders the listed forms and `matched`.
 HYPHEN_PART_WEIGHT = 0.35
+#: The scan's rule for a token that is the term with one of INFLECTION_ENDINGS
+#: added or removed where the stem rule cannot see it: plurals in -er, with or
+#: without umlaut ("Häuser", "Kinder"), and the forms of a stem shorter than
+#: four letters ("Tag", "Tage", "Tagen"). It is a heuristic: "Zahl" also meets
+#: "Zähler", so a hit through it is checked in the text.
+ENDING_RULE = "ending"
+#: Its weight, as low as a hyphen part.
+ENDING_WEIGHT = 0.35
+#: The endings the rule adds to a term or removes from it.
+INFLECTION_ENDINGS = ("e", "en", "n", "er", "ern", "es")
+#: The shortest stem the rule may leave or extend.
+ENDING_MIN_STEM = 3
+#: The start of a raw HTML table, as pandoc writes a table with merged cells or block content.
+HTML_TABLE_START = re.compile(r"<table\b", re.IGNORECASE)
+#: The end of a raw HTML table.
+HTML_TABLE_END = re.compile(r"</table\s*>", re.IGNORECASE)
+#: One row of an HTML table, up to its closing tag or the next row (HTML allows leaving </tr> out).
+HTML_ROW = re.compile(
+    r"<tr\b[^>]*>(.*?)(?=</tr\s*>|<tr\b|</t(?:head|body|foot)\s*>|</table\s*>|\Z)", re.IGNORECASE | re.DOTALL
+)
+#: One cell of an HTML table row, header or data.
+HTML_CELL = re.compile(r"<t[hd]\b[^>]*>(.*?)(?=</t[hd]\s*>|<t[hd]\b|\Z)", re.IGNORECASE | re.DOTALL)
+#: An HTML heading on a line of its own.
+HTML_HEADING = re.compile(r"^<h([1-6])\b[^>]*>(.*?)</h\1\s*>$", re.IGNORECASE)
+#: The summary of an HTML details block on a line of its own, optionally after the opening <details>.
+HTML_SUMMARY = re.compile(r"^(?:<details\b[^>]*>\s*)?<summary\b[^>]*>(.*?)</summary\s*>$", re.IGNORECASE)
+#: The end of an HTML details block: the label its summary set ends here.
+HTML_DETAILS_END = re.compile(r"^</details\s*>$", re.IGNORECASE)
+#: Any HTML tag or comment, removed from the text of a table, heading or summary.
+HTML_TAG = re.compile(r"<[^>]*>")
 #: A source ID inside a wiki link or path, as the wiki contract names source files (`src-<hash>-<slug>.md`).
 SOURCE_ID_IN_TEXT = re.compile(r"\bsrc-[0-9a-f]{16}(?![0-9a-z])")
 #: A wiki link without a label; its target is an address, not text.
 UNLABELLED_WIKILINK = re.compile(r"\[\[([^\[\]|]*)\]\]")
 
 
+def number_spelling(value: str, apart: Optional[list[str]] = None) -> str:
+    """A normalised text with every number in one spelling: digit groups joined, a unit split off (pure).
+
+    "2.500 kwh", "2 500 kwh" and "2500kwh" all become "2500 kwh", so a query
+    and a page that write one number differently meet. When `apart` is a
+    list, the groups of every number joined across a space are appended to
+    it: a space between two numbers ("100 200") is not always a separator.
+    """
+    if NUMBER_SHAPE.search(value) is None:
+        return value
+
+    def join(match: "re.Match[str]") -> str:
+        written = match.group(0)
+        if apart is not None and " " in written:
+            apart.extend(DIGIT_SEPARATOR.split(written))
+        return DIGIT_SEPARATOR.sub("", written)
+
+    return NUMBER_UNIT.sub(r"\1 \2", DIGIT_GROUPS.sub(join, value))
+
+
 def tokens(value: str, drop_stopwords: bool = True, forms: bool = False) -> list[str]:
     """The normalised whole words of a text.
 
     With `forms` (the word-form layer), layout artefacts that split a word are
-    repaired first and the stopword list is compared in its normalised form.
-    Without it, tokens are exactly those of the literal search.
+    repaired first, numbers are brought into one spelling (`number_spelling`),
+    and the stopword list is compared in its normalised form. Without it,
+    tokens are exactly those of the literal search.
     """
     if forms:
-        value = wordforms.repair_text(value)
-    values = TOKEN.findall(normalized(value))
+        values = TOKEN.findall(number_spelling(normalized(wordforms.repair_text(value))))
+    else:
+        values = TOKEN.findall(normalized(value))
     if drop_stopwords:
         stopwords = FORM_STOPWORDS if forms else STOPWORDS
         values = [value for value in values if value not in stopwords and len(value) > 1]
@@ -1344,15 +1435,18 @@ class Passage(NamedTuple):
     """One unit of the exhaustive scan: a page header, heading, claim, paragraph, list item, table or open question.
 
     `line` is the 1-based file line where it starts, `locator` the claim ID or
-    the source page or slide (`page=3`), `status` the claim status, `tokens`
-    its own normalised words and identifiers, and `section` the path of its
-    context, outermost first: the headings and labels above it, then its
-    parent list items, then the first row of the table it continues (for a
-    heading passage: its ancestors only). `opens` is the path this passage
-    heads for the passages after it (a heading, a label, a list item, the
-    first chunk of a split table), with the tokens that path holds in
-    `opens_tokens`. `identifiers` are the tokens taken from metadata (claim,
-    source and page IDs); they match only as whole tokens.
+    the source page or slide (`page=3`, or `page=3-4` for a paragraph that
+    runs across a page break), `status` the claim status, `tokens` its own
+    normalised words and identifiers, and `section` the path of its context,
+    outermost first: the headings and labels above it, then its parent list
+    items, then the first row of the table it continues (for a heading
+    passage: its ancestors only). `opens` is the path this passage heads for
+    the passages after it (a heading, a label, a list item, the first chunk
+    of a split table), with the tokens that path holds in `opens_tokens`.
+    `identifiers` are the tokens this passage holds only as an identifier,
+    from metadata (claim, source and page IDs) or the target of a wiki link
+    without a label, and not also as written text; they match only as whole
+    tokens and are never split at their hyphens.
     """
 
     kind: str
@@ -1365,6 +1459,77 @@ class Passage(NamedTuple):
     opens: tuple = ()
     opens_tokens: frozenset = frozenset()
     identifiers: frozenset = frozenset()
+
+
+def scan_words(repaired: str) -> frozenset:
+    """The tokens the scan indexes for an already repaired text (pure).
+
+    They are the tokens of the word-form layer (`tokens(..., False, True)`),
+    plus the groups of every number joined across a space, which may have
+    been two numbers ("100 200") rather than one.
+    """
+    apart: list[str] = []
+    found = frozenset(TOKEN.findall(number_spelling(normalized(repaired), apart)))
+    return found.union(apart) if apart else found
+
+
+def html_text(fragment: str) -> str:
+    """The text of an HTML fragment: tags and comments removed, entities decoded, whitespace collapsed (pure)."""
+    if "<" in fragment:
+        fragment = HTML_TAG.sub(" ", fragment)
+    if "&" in fragment:
+        fragment = html_unescape(fragment)
+    return " ".join(fragment.split())
+
+
+def sentence_end(word: str, following: str) -> bool:
+    """Whether `word`, followed by the word `following` ("" at a line end), ends a sentence (pure).
+
+    It must end in ., ! or ?, before any closing quotes or brackets, and the
+    next word must not start in lowercase. A full stop after a number ("am 1.
+    Januar"), a single letter ("S. 3"), a word with an inner full stop
+    ("z.B.") or an abbreviation ("Abs. 2") ends nothing.
+    """
+    core = word.rstrip(SENTENCE_CLOSERS)
+    if not core or core[-1] not in ".!?" or following[:1].islower():
+        return False
+    if core[-1] != ".":
+        return True
+    bare = core.rstrip(".").lstrip(WORD_OPENERS)
+    if len(bare) < 2 or "." in bare or bare[-1].isdigit():
+        return False
+    return normalized(bare) not in SENTENCE_ABBREVIATIONS
+
+
+def sentence_pieces(line: str) -> list[tuple[str, bool]]:
+    """A line cut after every sentence end, each piece with whether it ends a sentence (pure).
+
+    The last piece ends a sentence when the line ends with one; whitespace
+    between the pieces is dropped.
+    """
+    pieces: list[tuple[str, bool]] = []
+    start = 0
+    if "." in line or "!" in line or "?" in line:
+        for match in SENTENCE_GAP.finditer(line):
+            begin = max(line.rfind(" ", start, match.start()), line.rfind("\t", start, match.start())) + 1
+            if sentence_end(line[max(begin, start):match.start(1)], match.group(2)):
+                pieces.append((line[start:match.start(1)], True))
+                start = match.end(1)
+    rest = line[start:]
+    last = rest[max(rest.rfind(" "), rest.rfind("\t")) + 1:]
+    pieces.append((rest, sentence_end(last, "")))
+    return pieces
+
+
+def locator_span(first: str, last: str) -> str:
+    """The locator of a passage that starts under `first` and ends under `last`: one of them, or a range like `page=3-4` (pure)."""
+    if first == last or not first:
+        return last
+    if not last:
+        return first
+    kind, _, _ = first.partition("=")
+    last_kind, _, value = last.partition("=")
+    return f"{first}-{value}" if kind == last_kind else f"{first}-{last}"
 
 
 def link_labels(text: str) -> str:
@@ -1390,21 +1555,6 @@ def scan_navigation(relative: str) -> bool:
     that names the asked word is exactly what an absence answer must disclose.
     """
     return inner_path(relative) == "WIKI.md" or PurePosixPath(relative).name == "index.md"
-
-
-def sentence_chunks(line: str) -> list[str]:
-    """An overlong line split at sentence ends into chunks of at most PASSAGE_MAX_CHARS where possible."""
-    chunks: list[str] = []
-    current = ""
-    for sentence in SENTENCE_END.split(line):
-        if current and len(current) + 1 + len(sentence) > PASSAGE_MAX_CHARS:
-            chunks.append(current)
-            current = sentence
-        else:
-            current = f"{current} {sentence}" if current else sentence
-    if current:
-        chunks.append(current)
-    return chunks
 
 
 def identifier_tokens(*values: Any) -> frozenset:
@@ -1451,14 +1601,24 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
     feed from a PDF extraction must not shift them. Trailing whitespace is
     stripped from every line, so a CRLF file yields the same passages.
 
-    Context reaches a passage from the headings above it (Markdown and setext
-    headings, and labels: a one-line paragraph of at most LABEL_MAX_CHARS
-    characters that is only bold text or ends in a colon, which lasts until
-    the next heading or label), from its parent list items, and, in a table
-    cut at the size cap, from the table's first row. The page header and every
-    claim also carry the identifiers of their metadata as whole tokens: page
-    and source IDs, and the claim, source, replaced and contradicted claim IDs.
-    The targets of unlabelled wiki links are identifiers too (`link_addresses`).
+    Only a blank line or a structural line (heading, list item, table, fence,
+    claim block, HTML table, heading or summary) ends a paragraph. A page or
+    slide marker does not: it only sets the locator of what follows, so a
+    sentence broken across a page stays one passage, with the locator range
+    of both pages, and a hyphen at the line end before the marker is joined.
+    A paragraph longer than PASSAGE_MAX_CHARS is cut at a sentence end.
+
+    Context reaches a passage from the headings above it (Markdown, setext and
+    HTML headings, and labels: a one-line paragraph of at most LABEL_MAX_CHARS
+    characters that is only bold text or ends in a colon, or the summary of an
+    HTML details block, which lasts until the next heading or label), from its
+    parent list items, and, in a table cut at the size cap, from the table's
+    first row. A raw HTML table is read as a table: each row becomes a row of
+    cells, and its first row is the one a cut carries. The page header and
+    every claim also carry the identifiers of their metadata as whole tokens:
+    page and source IDs, and the claim, source, replaced and contradicted
+    claim IDs. The targets of unlabelled wiki links are identifiers too
+    (`link_addresses`).
     """
     data = document["data"]
     body = document["raw_body"]
@@ -1471,10 +1631,11 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
     header_ids = identifier_tokens(data.get("id"), data.get("source_id"))
     if "src-" in listed_sources:
         header_ids = header_ids.union(SOURCE_ID_IN_TEXT.findall(normalized(listed_sources)))
-    header_tokens = frozenset(tokens(title, False, True)).union(
-        tokens(", ".join(aliases), False, True), tokens(description, False, True), header_ids
-    )
-    passages: list[Passage] = [Passage("header", 1, "", "", header_text, header_tokens, (), identifiers=header_ids)]
+    repair = wordforms.repair_text
+    header_words = scan_words(repair(title)).union(scan_words(repair(", ".join(aliases))), scan_words(repair(description)))
+    passages: list[Passage] = [
+        Passage("header", 1, "", "", header_text, header_words | header_ids, (), identifiers=header_ids - header_words)
+    ]
     title_tokens = tokens(title, False, True)
     plain_kind = "open_question" if inner_path(relative) == "meta/questions.md" else "paragraph"
 
@@ -1495,6 +1656,11 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
     indent = 0
     table_row = ""
     carried: tuple = ()
+    # The locators in effect at the first and at the last text of the open passage.
+    first_locator = ""
+    last_locator = ""
+    # The lines of a raw HTML table that is still open, as (number, line).
+    html_block: Optional[list[tuple[int, str]]] = None
 
     def refresh() -> None:
         nonlocal section
@@ -1505,6 +1671,12 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
             levels.pop()
             labels.pop()
 
+    def written(addresses: frozenset, text_with_links: str) -> frozenset:
+        # The link targets this passage does not also hold as written text: its identifiers.
+        if not addresses:
+            return frozenset()
+        return addresses - scan_words(UNLABELLED_WIKILINK.sub(" ", text_with_links))
+
     def heading(level: int, label: str, number: int) -> None:
         indents.clear()
         items.clear()
@@ -1513,8 +1685,11 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
         words = tokens(label, False, True)
         # An H1 that repeats the title is carried by the header passage.
         if words and not (level == 1 and words == title_tokens):
-            found = frozenset(words)
-            passages.append(Passage("heading", number, locator, "", label, found, section, section + (label,), found))
+            found = scan_words(label)
+            addresses = link_addresses(label)
+            identifiers = written(addresses, label)
+            found = found | addresses
+            passages.append(Passage("heading", number, locator, "", label, found, section, section + (label,), found, identifiers))
         levels.append(level)
         labels.append(label)
         refresh()
@@ -1526,44 +1701,45 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
             carried = ()
             listed = False
             return
-        if lines:
-            raw = "\n".join(lines)
-            # tokens(raw, False, True) repairs and then splits; the repaired text is also the display text.
-            repaired = wordforms.repair_text(link_labels(raw))
-            found = frozenset(TOKEN.findall(normalized(repaired)))
-            addresses = link_addresses(raw)
-            if addresses:
-                found = found | addresses
-            if found:
-                shown = " ".join(repaired.split())
-                label = (
-                    len(lines) == 1 and not listed and not table and not items and len(shown) <= LABEL_MAX_CHARS
-                    and (shown.endswith(":") or BOLD_LABEL.match(shown) is not None)
-                )
-                if label:
-                    pop_headings(LABEL_LEVEL)
-                    refresh()
-                where = section + carried if carried else section
-                opens: tuple = ()
-                opens_tokens: frozenset = frozenset()
-                if listed or label:
-                    opens, opens_tokens = where + (shown,), found
-                elif table and cut and not carried:
-                    repaired_row = wordforms.repair_text(link_labels(table_row))
-                    row_tokens = frozenset(TOKEN.findall(normalized(repaired_row)))
-                    if row_tokens:
-                        opens, opens_tokens = where + (" ".join(repaired_row.split()),), row_tokens
-                passages.append(Passage(plain_kind, first_line, locator, "", shown, found, where, opens, opens_tokens, addresses))
-                if label:
-                    levels.append(LABEL_LEVEL)
-                    labels.append(shown)
-                    refresh()
-                elif listed:
-                    indents.append(indent)
-                    items.append(shown)
-                    refresh()
-                if table and cut and opens:
-                    carried = (opens[-1],)
+        raw = "\n".join(lines)
+        # The repaired text is the display text too.
+        repaired = wordforms.repair_text(link_labels(raw))
+        found = scan_words(repaired)
+        addresses = link_addresses(raw)
+        identifiers = written(addresses, repaired)
+        if addresses:
+            found = found | addresses
+        if found:
+            shown = " ".join(repaired.split())
+            label = (
+                len(lines) == 1 and not listed and not table and not items and len(shown) <= LABEL_MAX_CHARS
+                and (shown.endswith(":") or BOLD_LABEL.match(shown) is not None)
+            )
+            if label:
+                pop_headings(LABEL_LEVEL)
+                refresh()
+            where = section + carried if carried else section
+            opens: tuple = ()
+            opens_tokens: frozenset = frozenset()
+            if listed or label:
+                opens, opens_tokens = where + (shown,), found
+            elif table and cut and not carried:
+                repaired_row = wordforms.repair_text(link_labels(table_row))
+                row_tokens = scan_words(repaired_row)
+                if row_tokens:
+                    opens, opens_tokens = where + (" ".join(repaired_row.split()),), row_tokens
+            span = locator_span(first_locator, last_locator)
+            passages.append(Passage(plain_kind, first_line, span, "", shown, found, where, opens, opens_tokens, identifiers))
+            if label:
+                levels.append(LABEL_LEVEL)
+                labels.append(shown)
+                refresh()
+            elif listed:
+                indents.append(indent)
+                items.append(shown)
+                refresh()
+            if table and cut and opens:
+                carried = (opens[-1],)
         if not (cut and table):
             carried = ()
         lines = []
@@ -1571,26 +1747,51 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
         table = False
         listed = False
 
+    def begin(number: int, is_table: bool, size: int) -> None:
+        nonlocal first_line, table, length, first_locator
+        first_line = number
+        table = is_table
+        length = size
+        first_locator = locator
+
     def append(line: str, number: int, is_table: bool = False) -> None:
-        nonlocal first_line, length, table, table_row
-        if len(line) > PASSAGE_MAX_CHARS:
-            finish()
-            for chunk in sentence_chunks(line):
-                lines.append(chunk)
-                first_line = number
-                finish()
+        nonlocal length, table_row, last_locator
+        if is_table:
+            # A table row is one unit; the table is cut at the row that reaches the cap.
+            if not lines:
+                begin(number, True, len(line))
+                if not carried:
+                    table_row = line
+            else:
+                length += 1 + len(line)
+            lines.append(line)
+            last_locator = locator
+            if length >= PASSAGE_MAX_CHARS:
+                finish(cut=True)
             return
-        if not lines:
-            first_line = number
-            table = is_table
-            length = len(line)
-            if is_table and not carried:
-                table_row = line
-        else:
-            length += 1 + len(line)
-        lines.append(line)
-        if length >= PASSAGE_MAX_CHARS:
-            finish(cut=True)
+        if (length + 1 + len(line) if lines else len(line)) < PASSAGE_MAX_CHARS:
+            # No cut can fall in this line: it joins the passage whole.
+            if lines:
+                length += 1 + len(line)
+            else:
+                begin(number, False, len(line))
+            lines.append(line)
+            last_locator = locator
+            return
+        for piece_number, (piece, ends) in enumerate(sentence_pieces(line)):
+            if not lines:
+                begin(number, False, len(piece))
+                lines.append(piece)
+            else:
+                length += 1 + len(piece)
+                if piece_number:
+                    lines[-1] = f"{lines[-1]} {piece}"
+                else:
+                    lines.append(piece)
+            last_locator = locator
+            # Cut at the first sentence end once the cap is reached; the rest of the line starts the next passage.
+            if length >= PASSAGE_MAX_CHARS and (ends or length >= PASSAGE_HARD_MAX_CHARS):
+                finish(cut=True)
 
     def enter(depth: int) -> None:
         # A new passage that is no list item leaves every list item indented as deep or deeper.
@@ -1602,10 +1803,55 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
                 items.pop()
             refresh()
 
+    def table_line(row: str, number: int, depth: int) -> None:
+        # Consecutive rows form one passage.
+        if lines and not table:
+            finish()
+        if not lines:
+            enter(depth)
+        append(row, number, True)
+
+    def close_html() -> None:
+        # Read a raw HTML table as a table: each <tr> a row of cells, the first row carried across a cut.
+        nonlocal html_block, locator
+        block, html_block = html_block, None
+        if not block:
+            return
+        raw = "\n".join(line for _, line in block)
+        start = block[0][0]
+        depth = len(block[0][1]) - len(block[0][1].lstrip())
+        markers = [(match.start(), f"{match.group(1).lower()}={match.group(2)}") for match in PAGE_MARKER.finditer(raw)]
+        # Text outside the rows (a caption, an unclosed fragment) is kept as a paragraph.
+        rest = html_text(HTML_ROW.sub(" ", raw))
+        if rest:
+            enter(depth)
+            append(rest, start)
+            finish()
+        for match in HTML_ROW.finditer(raw):
+            while markers and markers[0][0] < match.end():
+                locator = markers.pop(0)[1]
+            cells = [html_text(cell) for cell in HTML_CELL.findall(match.group(1))]
+            row = "| " + " | ".join(cells) + " |" if cells else html_text(match.group(1))
+            if row.strip("| "):
+                table_line(row, start + raw.count("\n", 0, match.start()), depth)
+        finish()
+        for _, value in markers:
+            locator = value
+
     def handle(line: str, number: int) -> None:
-        nonlocal fenced, locator, lines, length, listed
+        nonlocal fenced, locator, lines, length, listed, html_block
         line = line.rstrip()
         left = line.lstrip()
+        if html_block is not None:
+            # Inside a raw HTML table: everything up to </table> belongs to it; a blank line ends an unclosed one.
+            if not left:
+                close_html()
+                finish()
+                return
+            html_block.append((number, line))
+            if HTML_TABLE_END.search(line):
+                close_html()
+            return
         # Each pattern runs only where its first characters can match: the scan reads every line.
         if left[:1] in ("`", "~") and FENCE.match(line):
             finish()
@@ -1614,11 +1860,13 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
         if not fenced:
             marker = PAGE_MARKER.search(line) if "<!--" in line else None
             if marker:
-                finish()
+                # A marker moves the locator for what follows; it never ends the passage it stands in.
+                before, after = line[: marker.start()], line[marker.end():]
+                if before.strip():
+                    handle(before, number)
                 locator = f"{marker.group(1).lower()}={marker.group(2)}"
-                rest = line[: marker.start()] + line[marker.end():]
-                if rest.strip():
-                    handle(rest, number)
+                if after.strip():
+                    handle(after, number)
                 return
             atx = SCAN_HEADING.match(line) if line[:1] == "#" else None
             if atx:
@@ -1636,6 +1884,26 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
                     length = 0
                     heading(1 if left[0] == "=" else 2, label, number)
                     return
+            if left[:1] == "<":
+                if HTML_TABLE_START.match(left):
+                    finish()
+                    html_block = [(number, line)]
+                    if HTML_TABLE_END.search(line):
+                        close_html()
+                    return
+                tag = HTML_HEADING.match(left)
+                summary = None if tag else HTML_SUMMARY.match(left)
+                if tag or summary:
+                    label = html_text(wordforms.repair_text(link_labels(tag.group(2) if tag else summary.group(1))))
+                    if label:
+                        finish()
+                        heading(int(tag.group(1)) if tag else LABEL_LEVEL, label, number)
+                        return
+                if HTML_DETAILS_END.match(left):
+                    finish()
+                    pop_headings(LABEL_LEVEL)
+                    refresh()
+                    return
         if not left:
             finish()
             return
@@ -1646,12 +1914,8 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
             listed = True
             append(line, number)
             return
-        if first == "|":  # a table row; consecutive rows form one passage
-            if lines and not table:
-                finish()
-            if not lines:
-                enter(len(line) - len(left))
-            append(line, number, True)
+        if first == "|":  # a table row
+            table_line(line, number, len(line) - len(left))
             return
         if table:
             finish()
@@ -1666,9 +1930,14 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
         for offset, line in enumerate(segment.split("\n")):
             handle(line, start + offset)
 
+    def close() -> None:
+        if html_block is not None:
+            close_html()
+        finish()
+
     for match in CLAIM_BLOCK.finditer(body):
         walk(body[position:match.start()], line_at)
-        finish()
+        close()
         # A claim block stands at column 0: it ends every list.
         if items:
             indents.clear()
@@ -1676,12 +1945,15 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
             refresh()
         claim_line = line_at + body.count("\n", position, match.start())
         claim = claim_fields(match)
-        identifiers = claim_identifiers(claim)
+        claim_ids = claim_identifiers(claim)
         addresses = link_addresses(match.group("text"))
-        if addresses:
-            identifiers = identifiers | addresses
         # Tokens come from the text with its line breaks, so a hyphen at a line end is repaired as the ranking does.
-        found = frozenset(tokens(link_labels(match.group("text")), False, True)).union(identifiers)
+        claim_text = wordforms.repair_text(link_labels(match.group("text")))
+        words = scan_words(claim_text)
+        # Identifiers are the IDs and link targets the claim does not also hold as written text.
+        plain = scan_words(UNLABELLED_WIKILINK.sub(" ", claim_text)) if addresses else words
+        identifiers = (claim_ids | addresses) - plain
+        found = words | claim_ids | addresses
         if found:
             passages.append(
                 Passage("claim", claim_line, claim["id"], claim["status"], claim["text"], found, section, identifiers=identifiers)
@@ -1689,7 +1961,7 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
         line_at = claim_line + body.count("\n", match.start(), match.end())
         position = match.end()
     walk(body[position:], line_at)
-    finish()
+    close()
     return passages
 
 
@@ -1768,17 +2040,25 @@ def hyphen_units(word: str) -> tuple:
     return units
 
 
-def scan_members(ranking: Ranking, scan: "ScanIndex") -> dict[Any, list[wordforms.Member]]:
+def scan_members(ranking: Ranking, scan: "ScanIndex", vocabulary: dict[str, int]) -> dict[Any, list[wordforms.Member]]:
     """The members the scan matches per term: the ranking's, plus what only the scan can see.
 
-    Two additions, both for terms outside the closed class and function words:
+    Three additions, all for terms outside the closed class and function words:
 
-    - a term that is itself a scanned token but not one of the ranking's
-      members gets it as `exact`; that only happens for an identifier from
-      claim metadata or the frontmatter, which the ranking never reads;
-    - every joined text token that holds the term as a hyphen-separated part
-      of the same stem key ("sms" in "sms-warndienst") is added under the
-      heuristic rule `hyphen_part`, which the ranking does not know.
+    - a scanned token that the ranking's vocabulary lacks and that is the
+      term itself or has its spelling or stem key gets the word-form rule
+      `exact`, `fold` or `stem`; that happens for an identifier from claim
+      metadata or the frontmatter, which the ranking never reads, and for a
+      word only the scan's segmentation repairs (a hyphen at a line end
+      before a page marker, a number in a table cell);
+    - every joined token written as text that holds the term as a
+      hyphen-separated part of the same stem key ("sms" in "sms-warndienst")
+      is added under the heuristic rule `hyphen_part`, which the ranking does
+      not know;
+    - every scanned token that is the term with an inflection ending added
+      or removed where the stem rule cannot see it ("krankenhauser" for
+      "krankenhaus", "tage" for "tag") is added under the heuristic rule
+      `ending` (see `ScanIndex.ending_forms`).
     """
     parts = scan.hyphen_parts()
     members: dict[Any, list[wordforms.Member]] = {}
@@ -1787,12 +2067,21 @@ def scan_members(ranking: Ranking, scan: "ScanIndex") -> dict[Any, list[wordform
         listed = list(ranking.members.get(term, ()))
         if term not in SCAN_EXCLUDED:
             known = {token for token, _, _ in listed}
-            if term not in known and term in scan.own:
-                listed.insert(0, (term, "exact", wordforms.WEIGHTS["exact"]))
-                known.add(term)
+            for token, rule in scan.scan_only_forms(term, vocabulary):
+                if token not in known:
+                    member = (token, rule, wordforms.WEIGHTS[rule])
+                    if rule == "exact":
+                        listed.insert(0, member)
+                    else:
+                        listed.append(member)
+                    known.add(token)
             for token in sorted(parts.get(wordforms.stem_key(term), ())):
                 if token not in known:
                     listed.append((token, HYPHEN_PART_RULE, HYPHEN_PART_WEIGHT))
+                    known.add(token)
+            for token in sorted(scan.ending_forms(term)):
+                if token not in known:
+                    listed.append((token, ENDING_RULE, ENDING_WEIGHT))
         members[term] = listed
     return members
 
@@ -1898,10 +2187,16 @@ class ScanIndex:
         self.header_pages: dict[str, set[int]] = {}
         self.section_index: dict[str, set[tuple[int, tuple]]] = {}
         self.section_passages: dict[tuple[int, tuple], set[int]] = {}
-        # Tokens that came from metadata or link targets: never split for the hyphen_part rule.
-        self.identifiers: set[str] = set()
+        # Where a token stands only as an identifier (metadata, a link target), per
+        # passage, header page and context key. The hyphen_part rule never splits
+        # a token there; the same token written as text elsewhere is split.
+        self.address_only: dict[str, set[int]] = {}
+        self.header_address_only: dict[str, set[int]] = {}
+        self.section_address_only: dict[str, set[tuple[int, tuple]]] = {}
         self._parts: Optional[dict[str, frozenset]] = None
         self._stems: Optional[dict[str, frozenset]] = None
+        self._spellings: Optional[dict[str, frozenset]] = None
+        self._scan_only: Optional[tuple[Any, dict[str, frozenset]]] = None
         for relative, scope, text, document, selected in files:
             if scan_navigation(relative):
                 self.counts[scope]["navigation_skipped"] += 1
@@ -1931,8 +2226,8 @@ class ScanIndex:
         prefixes: dict[tuple, list[tuple[int, tuple]]] = {}
         openers: list[Passage] = []
         for pid, passage in enumerate(passages, first):
-            if passage.identifiers:
-                self.identifiers.update(passage.identifiers)
+            for token in passage.identifiers:
+                self.address_only.setdefault(token, set()).add(pid)
             for token in passage.tokens:
                 holders = own.get(token)
                 if holders is None:
@@ -1953,6 +2248,8 @@ class ScanIndex:
             if passage.kind == "header":
                 for token in passage.tokens:
                     self.header_pages.setdefault(token, set()).add(page)
+                for token in passage.identifiers:
+                    self.header_address_only.setdefault(token, set()).add(page)
             if passage.opens:
                 openers.append(passage)
         # A heading, label, list item or table row is context only for the
@@ -1962,22 +2259,31 @@ class ScanIndex:
             if key in section_passages:
                 for token in passage.opens_tokens:
                     self.section_index.setdefault(token, set()).add(key)
+                for token in passage.identifiers:
+                    self.section_address_only.setdefault(token, set()).add(key)
         self.passages.extend(passages)
         self.passage_page.extend([page] * len(passages))
         # A heading that is not emitted (an H1 repeating the title) still
         # leads its section: its words are the title's, held by the header.
         self.page_passages.append(range(first, len(self.passages)))
 
-    def hyphen_parts(self) -> dict[str, frozenset]:
-        """Per stem key, the joined text tokens with a part of that key ("sms" -> "sms-warndienst"), built once.
+    def written_holders(self, token: str) -> set[int]:
+        """The passages that hold `token` as written text, not only as an identifier."""
+        holders = self.own.get(token, set())
+        only = self.address_only.get(token)
+        return holders - only if only else holders
 
-        Identifiers and link targets are left out, even where the same token
-        also stands in text: an address is never split at its hyphens.
+    def hyphen_parts(self) -> dict[str, frozenset]:
+        """Per stem key, the joined tokens written as text with a part of that key ("sms" -> "sms-warndienst"), built once.
+
+        Whether a token is text is decided per passage: a token that stands
+        somewhere only as an identifier or link target is still split where it
+        is written as text, and never where it is an address.
         """
         if self._parts is None:
             parts: dict[str, set[str]] = {}
             for token in self.own:
-                if ("-" not in token and "_" not in token) or token in self.identifiers:
+                if ("-" not in token and "_" not in token) or not self.written_holders(token):
                     continue
                 for unit in wordforms.units_of(token):
                     if len(unit) >= 2 and unit not in SCAN_EXCLUDED:
@@ -1994,27 +2300,116 @@ class ScanIndex:
             self._stems = {key: frozenset(found) for key, found in stems.items()}
         return self._stems
 
+    def spellings(self) -> dict[str, frozenset]:
+        """Per folded spelling, the alphabetic tokens scanned in an ae/oe/ue spelling ("haeuser"), built once for the ending rule.
+
+        Every other alphabetic token is its own folded spelling and is looked up in `own` directly.
+        """
+        if self._spellings is None:
+            spellings: dict[str, set[str]] = {}
+            for token in self.own:
+                if ("ae" in token or "oe" in token or "ue" in token) and token.isalpha():
+                    key = wordforms.spelling_key(token)
+                    if key != token:
+                        spellings.setdefault(key, set()).add(token)
+            self._spellings = {key: frozenset(found) for key, found in spellings.items()}
+        return self._spellings
+
+    def ending_forms(self, term: str) -> frozenset:
+        """The scanned tokens that are `term` with one of INFLECTION_ENDINGS added or removed, compared in folded spelling.
+
+        "krankenhaus" finds "krankenhauser" and "krankenhausern", "tag" finds
+        "tage", "tagen" and "tages", "tage" finds "tag"; a stem of fewer than
+        ENDING_MIN_STEM letters is never extended or left.
+        """
+        key = wordforms.spelling_key(term)
+        if term in SCAN_EXCLUDED or not key.isalpha() or len(key) < ENDING_MIN_STEM:
+            return frozenset()
+        candidates = {key + ending for ending in INFLECTION_ENDINGS}
+        candidates.update(
+            key[: -len(ending)]
+            for ending in INFLECTION_ENDINGS
+            if key.endswith(ending) and len(key) - len(ending) >= ENDING_MIN_STEM
+        )
+        spellings = self.spellings()
+        found: set[str] = set()
+        for candidate in candidates:
+            if candidate in self.own:
+                found.add(candidate)
+            found.update(spellings.get(candidate, ()))
+        found.discard(term)
+        return frozenset(found - SCAN_EXCLUDED)
+
+    def scan_only_forms(self, term: str, vocabulary: dict[str, int]) -> list[tuple[str, str]]:
+        """Scanned tokens the ranking's vocabulary lacks that are `term` itself or one of its word forms, with the rule.
+
+        The rule is `exact` for the term itself, `fold` for the same folded
+        spelling, and `stem` for the same stem key, as the word-form layer
+        names them. Closed-class and function words are never added.
+        """
+        if self._scan_only is None or self._scan_only[0] is not vocabulary:
+            index: dict[str, set[str]] = {}
+            for token in self.own:
+                if token not in vocabulary and token not in SCAN_EXCLUDED:
+                    index.setdefault(wordforms.stem_key(token), set()).add(token)
+            self._scan_only = (vocabulary, {key: frozenset(found) for key, found in index.items()})
+        found = self._scan_only[1].get(wordforms.stem_key(term), frozenset())
+        spelling = wordforms.spelling_key(term)
+        return [
+            (token, "exact" if token == term else "fold" if wordforms.spelling_key(token) == spelling else "stem")
+            for token in sorted(found)
+        ]
+
     def unit_members(self, unit: str) -> list[wordforms.Member]:
         """The members of one part of a hyphenated search word written apart: its stem key alone or as a part."""
         key = wordforms.stem_key(unit)
         found = self.stems().get(key, frozenset()) | self.hyphen_parts().get(key, frozenset())
-        return [(token, HYPHEN_PART_RULE, HYPHEN_PART_WEIGHT) for token in sorted(found)]
+        members = [(token, HYPHEN_PART_RULE, HYPHEN_PART_WEIGHT) for token in sorted(found)]
+        members.extend((token, ENDING_RULE, ENDING_WEIGHT) for token in sorted(self.ending_forms(unit) - found))
+        return members
+
+
+#: The matcher's key for a hyphen_part member that may only count where it is written as text.
+TEXT_ONLY = "text-only"
 
 
 class _Matcher:
-    """The set algebra of the hit rule over one ScanIndex, with posting unions cached for one call."""
+    """The set algebra of the hit rule over one ScanIndex, with posting unions cached for one call.
+
+    A member key is a token, or (TEXT_ONLY, token) for a joined token that
+    the hyphen_part rule may only take where it is written as text.
+    """
 
     def __init__(self, scan: ScanIndex) -> None:
         self.scan = scan
         self._own: dict[frozenset, set[int]] = {}
         self._context: dict[frozenset, set[int]] = {}
 
+    def holders(self, key: Any) -> Iterable[int]:
+        if key.__class__ is tuple:
+            return self.scan.written_holders(key[1])
+        return self.scan.own.get(key, ())
+
+    def header_pages(self, key: Any) -> Iterable[int]:
+        if key.__class__ is tuple:
+            only = self.scan.header_address_only.get(key[1])
+            pages = self.scan.header_pages.get(key[1], set())
+            return pages - only if only else pages
+        return self.scan.header_pages.get(key, ())
+
+    def section_keys(self, key: Any) -> Iterable[tuple[int, tuple]]:
+        if key.__class__ is tuple:
+            only = self.scan.section_address_only.get(key[1])
+            keys = self.scan.section_index.get(key[1], set())
+            return keys - only if only else keys
+        return self.scan.section_index.get(key, ())
+
     def own(self, members: frozenset) -> set[int]:
         found = self._own.get(members)
         if found is None:
             found = set()
-            for token in members:
-                found.update(self.scan.own.get(token, ()))
+            for key in members:
+                found.update(self.holders(key))
             self._own[members] = found
         return found
 
@@ -2024,11 +2419,11 @@ class _Matcher:
         if found is None:
             scan = self.scan
             found = set(self.own(members))
-            for token in members:
-                for page in scan.header_pages.get(token, ()):
+            for key in members:
+                for page in self.header_pages(key):
                     found.update(scan.page_passages[page])
-                for key in scan.section_index.get(token, ()):
-                    found.update(scan.section_passages.get(key, ()))
+                for section in self.section_keys(key):
+                    found.update(scan.section_passages.get(section, ()))
             self._context[members] = found
         return found
 
@@ -2042,10 +2437,18 @@ class _Formulation:
     `splits` maps the word to the keys of those parts.
     """
 
-    def __init__(self, text: str, ranking: Ranking, definitions: dict[str, dict[str, Any]], scan: ScanIndex) -> None:
+    def __init__(
+        self,
+        text: str,
+        ranking: Ranking,
+        definitions: dict[str, dict[str, Any]],
+        scan: ScanIndex,
+        vocabulary: dict[str, int],
+    ) -> None:
         self.text = text
+        self.scan = scan
         self.terms = ranking.terms
-        self.members: dict[Any, list[wordforms.Member]] = scan_members(ranking, scan)
+        self.members: dict[Any, list[wordforms.Member]] = scan_members(ranking, scan, vocabulary)
         self.content = content_words(ranking.terms)
         self.alternatives = alternatives(self.content, concept_runs(text, definitions), definitions)
         self.splits: dict[str, tuple] = {}
@@ -2060,9 +2463,15 @@ class _Formulation:
             self.splits[word] = keys
             self.alternatives[word] = self.alternatives[word] + [(None, keys)]
 
+    def key_of(self, token: str, rule: str) -> Any:
+        """The matcher's key for one member: a joined token taken by hyphen_part counts only where it is text."""
+        if rule == HYPHEN_PART_RULE and token in self.scan.address_only and ("-" in token or "_" in token):
+            return (TEXT_ONLY, token)
+        return token
+
     def tokens_of(self, token: Any, word_forms_only: bool) -> frozenset:
         return frozenset(
-            member
+            self.key_of(member, rule)
             for member, rule, _ in self.members.get(token, ())
             if not word_forms_only or rule in wordforms.WORD_FORM_RULES
         )
@@ -2099,7 +2508,7 @@ class _Formulation:
             for word in self.content
             for _concept, option in self.alternatives[word]
             for token in option
-            for member in self.tokens_of(token, False)
+            for member, _, _ in self.members.get(token, ())
         )
 
     def matched(self, matcher: _Matcher, pid: int) -> list[dict[str, Any]]:
@@ -2117,17 +2526,18 @@ class _Formulation:
                 pool = [member for token in option for member in self.members.get(token, ())]
                 best: Optional[tuple[tuple[int, float, str], str]] = None
                 for token, rule, weight in pool:
-                    if token in passage.tokens:
+                    key = self.key_of(token, rule)
+                    if token in passage.tokens and (key.__class__ is not tuple or token not in passage.identifiers):
                         where = 0
-                    elif not sections.isdisjoint(scan.section_index.get(token, ())):
+                    elif not sections.isdisjoint(matcher.section_keys(key)):
                         where = 1
-                    elif page in scan.header_pages.get(token, ()):
+                    elif page in matcher.header_pages(key):
                         where = 2
                     else:
                         continue
-                    key = (where, -weight, token)
-                    if best is None or key < best[0]:
-                        best = (key, rule)
+                    rank = (where, -weight, token)
+                    if best is None or rank < best[0]:
+                        best = (rank, rule)
                 if best is None:
                     continue
                 entry: dict[str, Any] = {
@@ -2176,7 +2586,7 @@ def exhaustive_scan(
     absent terms, counts, budget, omitted pages and scopes.
     """
     matcher = _Matcher(scan)
-    formulations = [_Formulation(text, ranking, definitions, scan) for text, ranking in zip(texts, rankings)]
+    formulations = [_Formulation(text, ranking, definitions, scan, vocabulary) for text, ranking in zip(texts, rankings)]
     by_formulation: list[set[int]] = []
     word_form_hits: set[int] = set()
     summary: list[dict[str, Any]] = []
@@ -2323,7 +2733,7 @@ def exhaustive_scan(
                 census[key]["formulations"].append(index)
                 continue
             members = formulation.members.get(term, [])
-            holders = matcher.own(frozenset(token for token, _, _ in members))
+            holders = matcher.own(formulation.tokens_of(term, False))
             split = formulation.splits.get(term) if origin == "query" else None
             if split:
                 # A hyphenated word also occurs where a passage holds all of its parts.

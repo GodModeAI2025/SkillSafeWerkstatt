@@ -65,6 +65,10 @@ EXPORTABLE_LIBRARIES = (
 EXPORTED_STDLIB = frozenset({
     "__future__", "argparse", "dataclasses", "datetime", "hashlib", "json",
     "math", "pathlib", "re", "typing", "unicodedata",
+    # The search core uses html.unescape only, to decode entities in raw HTML
+    # tables of source extractions; it is pure (re plus the html.entities
+    # table), opens no file, and exists unchanged since Python 3.4.
+    "html",
     # Entrypoints use sys only to put their own folder on sys.path and to
     # switch stdout and stderr to UTF-8; it writes no files of its own.
     "sys",
