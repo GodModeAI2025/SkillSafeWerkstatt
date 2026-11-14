@@ -6,7 +6,10 @@ released harness wiki, including the identities a reader may rely on:
 returned + omitted_count == matched, truncated exactly when something was
 omitted, and omitted_top naming at most 20 of the omitted matches. Since format
 2 the counts include the word forms each term lists under `forms`
-(tests/test_wordforms.py pins the rules themselves).
+(tests/test_wordforms.py pins the rules themselves). Since format 3 every report
+also counts per search (`coverage.formulations`) and describes the block of
+reformulation-only pages (`coverage.reformulation_results`), whether or not the
+call carried reformulations (tests/test_search_formulations.py pins the fusion).
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "query-llm-wiki" / "scripts"))
@@ -126,6 +130,71 @@ def build_coverage_wiki(wiki: Wiki) -> None:
     wiki.release("coverage-1")
 
 
+def assert_reformulation_identities(test: unittest.TestCase, report: dict, limit: Optional[int] = None) -> None:
+    """The per-search counts and the reformulation block agree with the report they belong to.
+
+    Without `limit`, it is known only when the question's results were cut off.
+    """
+    coverage = report["coverage"]
+    if limit is None and coverage["truncated"]:
+        limit = coverage["returned"]
+    formulations = coverage["formulations"]
+    test.assertEqual([entry["formulation"] for entry in formulations], list(range(len(report["formulations"]))))
+    test.assertEqual([entry["index"] for entry in report["formulations"]], list(range(len(report["formulations"]))))
+    first = formulations[0]
+    test.assertEqual(first["matched"], coverage["matched"])
+    test.assertEqual(first["within_limit"], coverage["returned"])
+    test.assertEqual(first["truncated"], coverage["truncated"])
+    test.assertEqual(first["contributed"], 0)
+    test.assertEqual(
+        first["query_terms"], [{key: value for key, value in item.items() if key != "forms"} for item in coverage["query_terms"]]
+    )
+    for key in ("dropped_terms", "unmatched_terms", "form_only_terms", "terms_only_in_unsearched"):
+        test.assertEqual(first[key], coverage[key], key)
+    block = report["reformulation_results"]
+    for entry in formulations:
+        test.assertEqual(entry["truncated"], entry["matched"] > entry["within_limit"])
+        test.assertLessEqual(entry["within_limit"], entry["matched"])
+        if limit is None:
+            if not block:
+                test.assertEqual(entry["contributed"], 0)
+            continue
+        test.assertEqual(entry["within_limit"], min(entry["matched"], limit))
+        test.assertLessEqual(len(block), limit)
+        test.assertEqual(
+            entry["contributed"],
+            sum(
+                1 for item in block
+                if any(hit["formulation"] == entry["formulation"] and hit["rank"] <= limit for hit in item["found_by"])
+            ),
+        )
+    summary = coverage["reformulation_results"]
+    test.assertEqual(summary["returned"], len(block))
+    test.assertEqual(summary["returned"] + summary["omitted_count"], summary["candidates"])
+    test.assertEqual(summary["truncated"], summary["omitted_count"] > 0)
+    test.assertEqual(len(summary["omitted_top"]), min(20, summary["omitted_count"]))
+    test.assertEqual(summary["boundary"], search_core.REFORMULATION_BOUNDARY)
+    shown = {item["path"] for item in report["results"]}
+    for rank, item in enumerate(report["results"], 1):
+        test.assertEqual(item["found_by"][0], {"formulation": 0, "rank": rank})
+        test.assertEqual(item["found_by"], sorted(item["found_by"], key=lambda hit: hit["formulation"]))
+    for item in block:
+        test.assertFalse(item["navigation"])
+        test.assertNotIn(item["path"], shown)
+        test.assertGreaterEqual(item["via"], 1)
+        test.assertIn(item["via"], [hit["formulation"] for hit in item["found_by"]])
+        test.assertEqual(item["claims_returned"], len(item["claims"]))
+    if len(report["formulations"]) == 1:
+        test.assertEqual(block, [])
+        test.assertEqual(
+            summary,
+            {
+                "returned": 0, "candidates": 0, "truncated": False, "omitted_count": 0, "omitted_top": [],
+                "navigation_skipped": 0, "boundary": search_core.REFORMULATION_BOUNDARY,
+            },
+        )
+
+
 class CoverageOnAReleasedWiki(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -142,7 +211,8 @@ class CoverageOnAReleasedWiki(unittest.TestCase):
 
     def assert_identities(self, report: dict) -> None:
         coverage = report["coverage"]
-        self.assertEqual(coverage["format"], "lmwiki-search-coverage/2")
+        self.assertEqual(coverage["format"], "lmwiki-search-coverage/3")
+        assert_reformulation_identities(self, report)
         self.assertEqual(coverage["returned"], len(report["results"]))
         self.assertEqual(coverage["returned"] + coverage["omitted_count"], coverage["matched"])
         self.assertEqual(coverage["truncated"], coverage["omitted_count"] > 0)
@@ -433,6 +503,12 @@ class ActionCatalogLists(unittest.TestCase):
         helptext = run(QUERY / "search_wiki.py", "--help").stdout
         accepted = {word.rstrip(",") for word in helptext.split() if word.startswith("--")} - {"--help", "--target"}
         self.assertEqual(listed, accepted)
+        # An agent that discovers the search through the catalog learns every
+        # matching rule and every output it has to read.
+        description = actions["search"]["description"]
+        for phrase in ("compound and typo heuristics", "match_rules", "reformulation_results", "found_by", "word forms, and unmatched terms"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, description)
 
 
 if __name__ == "__main__":

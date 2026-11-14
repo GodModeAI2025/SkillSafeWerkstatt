@@ -21,6 +21,16 @@ runs its 114 questions, and compares against expectations.json:
 
 expectations.json is regenerated only on purpose, with
 tests/fixtures/search_quality/record_expectations.py, and the commit says why.
+
+A second gate (ReformulationGate, Stufe 3) runs every question with each of two
+blind sets of agent reformulations (reformulations.json) and compares against
+reformulation_expectations.json: reformulations never change the question's own
+results or coverage; the merged found counts (results plus
+reformulation_results) stay at or above their floors; no required page leaves
+the merged top 3 or top 12 it held; the block of the negative questions does not
+grow; and no navigation page enters the block. It is recorded with
+record_expectations.py --reformulations. The sets are a regression gate, never
+a tuning target, and are never edited to make the gate pass.
 """
 
 from __future__ import annotations
@@ -48,22 +58,43 @@ CACHE_FOLDERS = (
 )
 
 
+#: One fixture build for both gates of this module, made on first use.
+_FIXTURE: dict = {}
+
+
+def fixture() -> dict:
+    if not _FIXTURE:
+        directory = tempfile.mkdtemp(prefix="lmwiki-search-quality-")
+        caches_before = {folder: folder.exists() for folder in CACHE_FOLDERS}
+        wiki = quality.build(Path(directory) / "fixture")
+        _FIXTURE.update(
+            directory=directory,
+            caches_before=caches_before,
+            wiki=wiki,
+            # Taken before this process imports the search core itself.
+            caches_after_build={folder: folder.exists() for folder in CACHE_FOLDERS},
+            core=quality.load_core(),
+        )
+    return _FIXTURE
+
+
+def tearDownModule() -> None:
+    if _FIXTURE:
+        shutil.rmtree(_FIXTURE["directory"], ignore_errors=True)
+        _FIXTURE.clear()
+
+
 class SearchQualityGate(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls._dir = tempfile.mkdtemp(prefix="lmwiki-search-quality-")
-        cls.caches_before = {folder: folder.exists() for folder in CACHE_FOLDERS}
-        cls.wiki = quality.build(Path(cls._dir) / "fixture")
-        # Taken before this process imports the search core itself.
-        cls.caches_after_build = {folder: folder.exists() for folder in CACHE_FOLDERS}
+        built = fixture()
+        cls.caches_before = built["caches_before"]
+        cls.wiki = built["wiki"]
+        cls.caches_after_build = built["caches_after_build"]
         cls.ground_truth = quality.load_ground_truth()
         cls.expected = json.loads(quality.EXPECTATIONS.read_text(encoding="utf-8"))
-        cls.core = quality.load_core()
+        cls.core = built["core"]
         cls.measured = quality.measure(cls.wiki, cls.ground_truth, cls.core)
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        shutil.rmtree(cls._dir, ignore_errors=True)
 
     def test_the_expectations_describe_the_ground_truth(self) -> None:
         self.assertEqual(self.expected["format"], quality.EXPECTATIONS_FORMAT)
@@ -141,6 +172,133 @@ class SearchQualityGate(unittest.TestCase):
                 )
                 self.assertEqual(report["coverage"], core["coverage"])
                 self.assertEqual(report["release"]["state"], "ready")
+
+
+class ReformulationGate(unittest.TestCase):
+    """The second gate: the agent's reformulations, from two blind sets."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        built = fixture()
+        cls.wiki = built["wiki"]
+        cls.core = built["core"]
+        cls.ground_truth = quality.load_ground_truth()
+        cls.sets = quality.load_reformulations()
+        cls.expected = json.loads(quality.REFORMULATION_EXPECTATIONS.read_text(encoding="utf-8"))
+        cls.measured = quality.measure_reformulations(cls.wiki, cls.ground_truth, cls.sets, cls.core)
+
+    def aggregates(self, name: str) -> dict:
+        return self.measured["sets"][name]["aggregates"]
+
+    def test_the_sets_are_valid_requests(self) -> None:
+        ids = sorted(item["id"] for item in self.ground_truth)
+        self.assertEqual(sorted(self.sets), ["A", "B"])
+        for name, questions in self.sets.items():
+            with self.subTest(set=name):
+                self.assertEqual(sorted(questions), ids)
+                for query_id, also in questions.items():
+                    self.assertIsInstance(also, list, query_id)
+                    self.assertLessEqual(len(also), self.core.MAX_ALSO, query_id)
+                    self.assertTrue(all(isinstance(entry, str) for entry in also), query_id)
+                    self.core.check_also(also)
+
+    def test_the_expectations_describe_the_sets_and_the_ground_truth(self) -> None:
+        self.assertEqual(self.expected["format"], quality.REFORMULATION_FORMAT)
+        self.assertEqual(sorted(self.expected["sets"]), sorted(self.sets))
+        for name, recorded in self.expected["sets"].items():
+            with self.subTest(set=name):
+                self.assertEqual(sorted(recorded["queries"]), sorted(item["id"] for item in self.ground_truth))
+                self.assertEqual(recorded["caps"]["navigation_in_block"], 0)
+                for item in self.ground_truth:
+                    entry = recorded["queries"][item["id"]]
+                    self.assertEqual(sorted(entry["merged_ranks"]), sorted(item["must_find"]))
+                    self.assertEqual("with_required_flags" in entry, bool(item.get("requires_flags")))
+        for entry in self.expected["accepted_regressions"]:
+            with self.subTest(entry=entry):
+                must_find = {item["id"]: set(item["must_find"]) for item in self.ground_truth}
+                self.assertIn(entry.get("set"), self.sets)
+                self.assertIn(entry.get("path"), must_find.get(entry.get("id"), set()))
+                self.assertTrue(str(entry.get("reason") or "").strip(), "an accepted regression needs a reason")
+
+    def test_reformulations_never_change_the_question_results(self) -> None:
+        for name in sorted(self.sets):
+            with self.subTest(set=name):
+                changed = [
+                    query_id for query_id, entry in self.measured["sets"][name]["queries"].items() if not entry["identical"]
+                ]
+                self.assertEqual(changed, [], "the question's results or coverage changed with reformulations")
+                totals = self.aggregates(name)
+                self.assertEqual(totals["identity_failures"], 0)
+
+    def test_merged_found_counts_stay_at_or_above_the_floors(self) -> None:
+        for name, recorded in self.expected["sets"].items():
+            for key, floor in recorded["floors"].items():
+                with self.subTest(set=name, measure=key):
+                    self.assertGreaterEqual(self.aggregates(name)[key], floor)
+
+    def test_no_required_page_leaves_the_merged_top_3_or_12(self) -> None:
+        problems = quality.reformulation_regressions(self.expected, self.measured)
+        self.assertEqual(
+            problems,
+            [],
+            "required pages left the merged top 3 or 12; fix the cause, list them in accepted_regressions with a "
+            "reason, or re-record deliberately:\n" + "\n".join(problems),
+        )
+
+    def test_negative_questions_block_entries_stay_capped(self) -> None:
+        for name, recorded in self.expected["sets"].items():
+            with self.subTest(set=name):
+                cap = recorded["caps"]["negative_block_within_12"]
+                self.assertLessEqual(self.aggregates(name)["negative_block_within_12"], cap)
+
+    def test_no_navigation_page_enters_the_block(self) -> None:
+        for name in sorted(self.sets):
+            with self.subTest(set=name):
+                self.assertEqual(self.aggregates(name)["navigation_in_block"], 0)
+
+    def test_the_command_line_fuses_like_the_core(self) -> None:
+        """One real CLI call with reformulations, so the gate also covers the wrapper."""
+        script = quality.QUERY_SCRIPTS / "search_wiki.py"
+        item = {entry["id"]: entry for entry in self.ground_truth}["pa-01"]
+        also = self.sets["A"]["pa-01"]
+        result = subprocess.run(
+            [sys.executable, "-B", str(script), "--target", str(self.wiki), "--query", item["query"],
+             *[f"--also={entry}" for entry in also]],
+            capture_output=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        core = self.core.search(self.wiki, item["query"], also=also, limit=12)
+        for key in ("formulations", "dropped_formulations", "results", "reformulation_results", "coverage"):
+            self.assertEqual(report[key], core[key], key)
+        self.assertTrue(report["reformulation_results"])
+
+
+class MergedRankRule(unittest.TestCase):
+    """The merged rank is the better of the result rank and the block position."""
+
+    @staticmethod
+    def measured(ranks: dict) -> dict:
+        return {"sets": {"A": {"queries": {"q": {"merged_ranks": ranks}}}}}
+
+    def test_a_page_may_move_from_results_to_the_block_inside_its_band(self) -> None:
+        expected = {"sets": {"A": {"queries": {"q": {"merged_ranks": {"a.md": {"results": 2, "block": None}}}}}},
+                    "accepted_regressions": []}
+        self.assertEqual(quality.reformulation_regressions(expected, self.measured({"a.md": {"results": 40, "block": 3}})), [])
+        problems = quality.reformulation_regressions(expected, self.measured({"a.md": {"results": 40, "block": 5}}))
+        self.assertEqual(problems, ["set A, q (without flags): a.md left the merged top 3: merged rank 2 -> merged rank 5"])
+
+    def test_an_accepted_page_is_held_to_its_accepted_rank(self) -> None:
+        expected = {
+            "sets": {"A": {"queries": {"q": {"merged_ranks": {"a.md": {"results": 2, "block": None}}}}}},
+            "accepted_regressions": [{"set": "A", "id": "q", "path": "a.md", "reason": "test", "accepted_rank": 9}],
+        }
+        self.assertEqual(quality.reformulation_regressions(expected, self.measured({"a.md": {"results": None, "block": 9}})), [])
+        self.assertEqual(
+            quality.reformulation_regressions(expected, self.measured({"a.md": {"results": None, "block": None}})),
+            ["set A, q (without flags): a.md left the merged top 12: merged rank 9 -> not in the merged top 12"],
+        )
 
 
 class RankOneRule(unittest.TestCase):

@@ -1,0 +1,1297 @@
+{
+ "A": {
+  "ex-01": [
+   "Netznutzungsentgelt",
+   "Netzgebühren"
+  ],
+  "ex-02": [
+   "außerordentliche Kündigung",
+   "Kündigungsrecht Preisänderung"
+  ],
+  "ex-03": [
+   "Ersatzbelieferung",
+   "Versorgung ohne Liefervertrag"
+  ],
+  "ex-04": [
+   "Jahresabrechnung",
+   "Turnusabrechnung",
+   "Verbrauchsabrechnung jährlich"
+  ],
+  "ex-05": [
+   "LindenStrom",
+   "Fix12 Festpreis"
+  ],
+  "ex-06": [
+   "Schlichtungsverfahren Beschwerde",
+   "Verbraucherschlichtung"
+  ],
+  "ex-07": [
+   "netzorientierte Steuerung",
+   "Wallbox Wärmepumpe Steuerung",
+   "SteuVE"
+  ],
+  "in-01": [
+   "Netzentgelte Bestandteile",
+   "Netznutzungsentgelt Zusammensetzung",
+   "Netzgebühren Preisbestandteile"
+  ],
+  "in-02": [
+   "Kündigungsbestätigung",
+   "Kündigung bestätigen",
+   "Bestätigung Vertragsende"
+  ],
+  "in-03": [
+   "Zählerstandschätzung",
+   "geschätzter Zählerstand",
+   "Verbrauchsschätzung",
+   "Schätzung Ablesung"
+  ],
+  "in-04": [
+   "Widerruf telefonisch",
+   "Widerrufsrecht Fernabsatzvertrag",
+   "Widerruf mündlich Form"
+  ],
+  "in-05": [
+   "Umzug Vertrag",
+   "Umzug Sonderkündigungsrecht",
+   "Wohnungswechsel Lieferstelle",
+   "Vertragsübernahme neue Adresse"
+  ],
+  "in-06": [
+   "Mahngebühren",
+   "Mahnkosten",
+   "Mahnverfahren Zahlungsverzug"
+  ],
+  "in-07": [
+   "Preisanpassung Mitteilungsfrist",
+   "Preisänderung ankündigen Frist",
+   "Preiserhöhung Vorankündigung",
+   "Preisanpassung Benachrichtigung"
+  ],
+  "in-08": [
+   "Lieferantenwechsel Dauer",
+   "Anbieterwechsel Bearbeitungszeit",
+   "Versorgerwechsel Frist",
+   "Wechselprozess"
+  ],
+  "um-01": [
+   "Kündigungsfrist Sondervertrag",
+   "Kündigungsfrist Sonderkundenvertrag",
+   "Kündigung Laufzeitvertrag Frist"
+  ],
+  "um-02": [
+   "Zählerstand melden",
+   "Zählerstandsmeldung",
+   "Ablesung übermitteln",
+   "Zählerablesung"
+  ],
+  "um-03": [
+   "Bonitätsprüfung Ablehnung",
+   "Kreditwürdigkeitsprüfung",
+   "Vertragsablehnung Bonität",
+   "Auskunftei"
+  ],
+  "um-04": [
+   "Wärmepumpe Tarif",
+   "Wärmepumpenstrom",
+   "Heizstrom Tarif"
+  ],
+  "um-05": [
+   "Schlussrechnung Lieferantenwechsel",
+   "Endabrechnung Anbieterwechsel",
+   "Abschlussrechnung Vertragsende"
+  ],
+  "um-06": [
+   "Ökostrom",
+   "Ökostromtarif",
+   "erneuerbare Energien Herkunftsnachweis",
+   "Grünstrom"
+  ],
+  "um-07": [
+   "Haustür Vertrieb Regeln",
+   "Haustürgeschäft",
+   "Außergeschäftsraumvertrag Widerruf",
+   "Direktvertrieb Vertriebspartner"
+  ],
+  "co-01": [
+   "Kündigungsfrist",
+   "Kündigungstermin",
+   "Kündigung Frist Vertragsende"
+  ],
+  "co-02": [
+   "Messstellenbetreiber wechseln",
+   "Messstellenbetreiberwechsel",
+   "wettbewerblicher Messstellenbetreiber",
+   "Messstellenbetrieb Wechsel"
+  ],
+  "co-03": [
+   "Wärmepumpe Tarif",
+   "Wärmepumpenstrom",
+   "Heizstromtarif"
+  ],
+  "co-04": [
+   "Abrechnungsfrist",
+   "Jahresabrechnung Zustellung Frist",
+   "Rechnungsstellung Frist"
+  ],
+  "co-05": [
+   "Sofortbonus Auszahlung",
+   "Neukundenbonus auszahlen",
+   "Bonus Gutschrift",
+   "Wechselbonus"
+  ],
+  "co-06": [
+   "Marktlokations-ID",
+   "MaLo-ID",
+   "Zählpunktnummer finden"
+  ],
+  "co-07": [
+   "Versorgungsunterbrechung Kosten",
+   "Sperrkosten",
+   "Wiederherstellung Versorgung Gebühren",
+   "Stromsperre Gebühren"
+  ],
+  "co-08": [
+   "Vertragslaufzeit Verlängerung",
+   "automatische Vertragsverlängerung",
+   "Mindestlaufzeit Verlängerung Kündigung",
+   "stillschweigende Verlängerung"
+  ],
+  "su-01": [
+   "Preisanpassung Mitteilungsfrist",
+   "Preisänderung Vorankündigung",
+   "Preiserhöhung Benachrichtigung"
+  ],
+  "su-02": [
+   "intelligentes Messsystem Pflicht",
+   "Smart-Meter-Rollout",
+   "Pflichteinbau Messsystem",
+   "moderne Messeinrichtung"
+  ],
+  "su-03": [
+   "Umzug Stromvertrag",
+   "Umzug Lieferstelle",
+   "Umzug Sonderkündigungsrecht",
+   "Einzug Auszug Abmeldung"
+  ],
+  "su-04": [
+   "Ökostrom",
+   "Ökostromtarif",
+   "erneuerbare Energien",
+   "Herkunftsnachweis"
+  ],
+  "su-05": [
+   "Beschwerde Bearbeitungszeit",
+   "Beschwerde Antwortfrist",
+   "Reklamation Frist",
+   "Beschwerdemanagement"
+  ],
+  "su-06": [
+   "Neukundenbonus",
+   "Wechselbonus",
+   "Sofortbonus",
+   "Willkommensbonus"
+  ],
+  "su-07": [
+   "Versorgungsunterbrechung Zahlungsrückstand",
+   "Stromsperre Voraussetzungen",
+   "Sperrandrohung Mahnung",
+   "Unterbrechung Versorgung Zahlungsverzug"
+  ],
+  "su-08": [
+   "Zählerstand melden",
+   "Zählerstandsmeldung",
+   "Ablesung übermitteln",
+   "Zählerablesung"
+  ],
+  "sc-01": [
+   "Netzentgelte 2026",
+   "Netzentgelt Haushaltskunden",
+   "Netznutzung Preisblatt",
+   "Netzkosten Strompreis"
+  ],
+  "sc-02": [
+   "Lieferantenwechsel Dauer",
+   "Versorgerwechsel Frist",
+   "Wechselprozess Lieferbeginn",
+   "Anbieterwechsel Bearbeitungszeit"
+  ],
+  "sc-03": [
+   "Versorgungsunterbrechung Zahlungsverzug",
+   "Liefersperre Sperrandrohung",
+   "Unterbrechung Versorgung Grundversorgung",
+   "Sperrung Voraussetzungen Ankündigung"
+  ],
+  "sc-04": [
+   "Bonitätsprüfung Vertragsabschluss",
+   "Kreditwürdigkeit Auskunftei",
+   "Schufa-Abfrage Neukunde",
+   "Bonität Neuvertrag"
+  ],
+  "sc-05": [
+   "Messstellenbetrieb Entgelt",
+   "Messentgelt jährlich",
+   "Zählermiete",
+   "Messstellenbetreiber Kosten Preisobergrenze"
+  ],
+  "sc-06": [
+   "Grundversorgung kündigen",
+   "Grundversorgungsvertrag Kündigungsfrist",
+   "Basisversorgung Kündigung",
+   "Ersatzversorgung beenden"
+  ],
+  "sc-07": [
+   "Widerrufsrecht",
+   "Widerrufsfrist Vertragsabschluss",
+   "Vertrag widerrufen",
+   "Widerrufsbelehrung"
+  ],
+  "pa-01": [
+   "Stromsperre Zahlungsverzug",
+   "Versorgungsunterbrechung Nichtzahlung",
+   "Liefersperre Voraussetzungen",
+   "Sperrandrohung Mahnung"
+  ],
+  "pa-02": [
+   "Stromvertrag kündigen",
+   "Kündigungsfrist Tarif",
+   "Sonderkündigungsrecht",
+   "Vertragslaufzeit beenden"
+  ],
+  "pa-03": [
+   "Widerrufsrecht Online-Abschluss",
+   "Widerruf Fernabsatzvertrag",
+   "Widerrufsfrist",
+   "Vertrag widerrufen"
+  ],
+  "pa-04": [
+   "Abschlagserhöhung",
+   "Abschlag Anpassung",
+   "Abschlagszahlung höher Preiserhöhung",
+   "Lastschrift Betrag geändert"
+  ],
+  "pa-05": [
+   "Stromzähler Zuständigkeit",
+   "Messstellenbetreiber",
+   "Zähler Eigentum Netzbetreiber",
+   "Messeinrichtung Wartung"
+  ],
+  "pa-06": [
+   "Grundversorgungspflicht",
+   "Belieferungspflicht Ausnahme",
+   "Grundversorgung Ablehnung Zahlungsrückstände",
+   "Kontrahierungszwang Unzumutbarkeit"
+  ],
+  "pa-07": [
+   "Umzug Stromvertrag",
+   "Sonderkündigungsrecht Umzug",
+   "Umzug Vertrag mitnehmen",
+   "Umzug Abmeldung Lieferstelle"
+  ],
+  "pa-08": [
+   "Ratenzahlung",
+   "Ratenzahlungsvereinbarung",
+   "Stundung Zahlungsaufschub",
+   "Teilzahlung Zahlungsschwierigkeiten"
+  ],
+  "cl-01": [
+   "Kündigungsfrist Stromvertrag",
+   "Stromvertrag kündigen",
+   "Kündigungsfrist",
+   "Vertragslaufzeit Kündigung"
+  ],
+  "cl-02": [
+   "Kunde zahlt Rechnung nicht",
+   "Zahlungsverzug Mahnung",
+   "Mahnverfahren Sperre",
+   "offene Forderung Inkasso"
+  ],
+  "cl-03": [
+   "Smart Meter Einbau Pflicht",
+   "intelligentes Messsystem Pflichteinbau",
+   "moderne Messeinrichtung",
+   "Smart-Meter-Rollout"
+  ],
+  "cl-04": [
+   "Widerrufsrecht Online-Vertrag",
+   "Widerruf Fernabsatzvertrag",
+   "Widerrufsfrist",
+   "Widerrufsbelehrung"
+  ],
+  "cl-05": [
+   "Berechnung monatlicher Abschlag",
+   "Abschlagszahlung Berechnung",
+   "Abschlagshöhe Jahresverbrauch",
+   "Vorauszahlung Verbrauchsprognose"
+  ],
+  "cl-06": [
+   "Netzentgelt Haushaltskunden",
+   "Netznutzungsentgelt",
+   "Netzentgelte Höhe",
+   "Netzkosten Strompreis"
+  ],
+  "cl-07": [
+   "Umzug Kunde",
+   "Umzug melden",
+   "Sonderkündigungsrecht Umzug",
+   "Wohnungswechsel Lieferstelle"
+  ],
+  "cl-08": [
+   "Bonitätsprüfung negativ Belieferung",
+   "Bonität abgelehnt",
+   "Schufa negativ Vertrag",
+   "Grundversorgung Vorauszahlung"
+  ],
+  "ty-01": [
+   "Netzentgelt",
+   "Netznutzungsentgelt",
+   "Netzentgelte Preisblatt"
+  ],
+  "ty-02": [
+   "Kündigungsfrist",
+   "Kündigung Frist Vertrag",
+   "Vertragslaufzeit Kündigung"
+  ],
+  "ty-03": [
+   "Widerrufsrecht",
+   "Widerrufsfrist",
+   "Vertrag widerrufen"
+  ],
+  "ty-04": [
+   "Lieferantenwechsel Dauer",
+   "Anbieterwechsel Frist",
+   "Versorgerwechsel Bearbeitungszeit"
+  ],
+  "ty-05": [
+   "Abschlagszahlung ändern",
+   "Abschlag anpassen",
+   "Abschlagshöhe Änderung",
+   "Vorauszahlung anpassen"
+  ],
+  "ty-06": [
+   "Bonitätsprüfung",
+   "Schufa-Abfrage",
+   "Kreditwürdigkeit Auskunftei"
+  ],
+  "ty-07": [
+   "Grundversorgung Preis",
+   "Grundversorgungstarif Preise",
+   "Allgemeine Preise Grundversorgung",
+   "Grundversorgung Arbeitspreis Grundpreis"
+  ],
+  "ty-08": [
+   "Zählerstand melden",
+   "Zählerstandsmeldung",
+   "Selbstablesung",
+   "Ablesung Zählerstand"
+  ],
+  "br-01": [
+   "Vertragsabschluss",
+   "Vertragslaufzeit",
+   "Vertragsbedingungen AGB",
+   "Liefervertrag"
+  ],
+  "br-02": [
+   "Kündigungsfrist",
+   "Sonderkündigungsrecht",
+   "Kündigungsbestätigung",
+   "Kündigung durch Versorger"
+  ],
+  "br-03": [
+   "Kündigungsfrist",
+   "Widerrufsfrist",
+   "Zahlungsfrist",
+   "Fristen Übersicht"
+  ],
+  "br-04": [
+   "Preisanpassung",
+   "Preisblatt",
+   "Arbeitspreis Grundpreis",
+   "Preiserhöhung"
+  ],
+  "br-05": [
+   "Zählerstand",
+   "Zählerwechsel",
+   "Messstellenbetrieb",
+   "Stromzähler Gaszähler"
+  ],
+  "ch-01": [
+   "Konzessionsabgabe Sondervertragskunden",
+   "Konzessionsabgabe Höhe",
+   "Konzessionsabgabenverordnung KAV",
+   "Konzessionsabgabe Sonderkunden"
+  ],
+  "ch-02": [
+   "Veröffentlichung Netzentgelte Netzbetreiber",
+   "Netzentgelte Folgejahr Frist",
+   "vorläufige Netzentgelte",
+   "Preisblatt Netzbetreiber Veröffentlichung"
+  ],
+  "ch-03": [
+   "Netzentgelte Anteil Strompreis",
+   "Netznutzungsentgelt Preisbestandteile",
+   "Zusammensetzung Strompreis",
+   "Netzkosten Preisbestandteil"
+  ],
+  "ch-04": [
+   "Jahresverbrauch 4-Personen-Haushalt",
+   "Durchschnittsverbrauch Haushaltsgröße",
+   "Verbrauchsschätzung Personenzahl",
+   "Standardverbrauch Haushalt kWh"
+  ],
+  "ch-05": [
+   "Abschlagsanpassung Senkung Nachweis",
+   "Abschlagszahlung reduzieren",
+   "Abschlag herabsetzen Begründung",
+   "Abschlag ändern Zählerstand"
+  ],
+  "ch-06": [
+   "Doppelanmeldung Marktlokation",
+   "konkurrierende Anmeldung Lieferantenwechsel",
+   "Anmeldekonflikt zwei Lieferanten",
+   "MaLo mehrere Lieferanten Zuordnung"
+  ],
+  "ch-07": [
+   "Schlussrechnung Frist alter Lieferant",
+   "Endabrechnung Lieferantenwechsel Frist",
+   "bisheriger Lieferant Schlussabrechnung",
+   "Abrechnung nach Vertragsende Frist"
+  ],
+  "ch-08": [
+   "Zählerstand Lieferantenwechsel Zeitfenster",
+   "Zählerstandsmeldung Wechseltermin Frist",
+   "Ablesung Lieferbeginn Lieferende",
+   "Zählerablesung Wechsel Tage"
+  ],
+  "so-01": [
+   "Störungsnummer Stromausfall",
+   "Stromausfall melden Netzbetreiber",
+   "Entstörungsdienst Notdienst",
+   "Versorgungsunterbrechung Störung"
+  ],
+  "so-02": [
+   "Mieterstromzuschlag",
+   "Mieterstrom Förderung Zuschlag",
+   "Mieterstrommodell Vergütung"
+  ],
+  "so-03": [
+   "Verjährung Forderungen Stromlieferung",
+   "Verjährungsfrist Energielieferung",
+   "verjährte Rechnung Nachforderung",
+   "Verjährung Nachzahlung Abrechnung"
+  ],
+  "so-04": [
+   "Inkasso Übergabe Forderung",
+   "Mahnverfahren Inkassobüro",
+   "Mahnstufen Zahlungsverzug",
+   "Forderungsmanagement offene Rechnung"
+  ],
+  "so-05": [
+   "Eichfrist elektronischer Zähler",
+   "Eichgültigkeit Stromzähler",
+   "Eichung abgelaufen Zählerwechsel",
+   "moderne Messeinrichtung Eichfrist"
+  ],
+  "so-06": [
+   "Haftung Überspannungsschaden",
+   "Geräteschäden Überspannung Netzbetreiber",
+   "Schadensersatz defekte Elektrogeräte",
+   "Spannungsschwankung Haftung"
+  ],
+  "so-07": [
+   "gemeinschaftliche Gebäudeversorgung",
+   "Gebäudestrom Photovoltaik Mehrfamilienhaus",
+   "Solarstrom Mieter Aufteilung",
+   "Mieterstrom Alternative Gebäude"
+  ],
+  "so-08": [
+   "Insolvenz Kunde Forderungen",
+   "Insolvenzverfahren offene Forderungen",
+   "Forderungsanmeldung Insolvenzverwalter",
+   "Privatinsolvenz Energielieferung"
+  ],
+  "sh-01": [
+   "LindenStrom Klassik Erstlaufzeit",
+   "LindenStrom Klassik Mindestlaufzeit",
+   "Tarif Klassik Vertragslaufzeit"
+  ],
+  "sh-02": [
+   "Arbeitspreis Grundversorgung 2025",
+   "Grundversorgungstarif Preis kWh 2025",
+   "Preisblatt Grundversorgung",
+   "Grundversorgung Verbrauchspreis"
+  ],
+  "sh-03": [
+   "Kündigungsfrist drei Monate Altverträge",
+   "Altvertrag Kündigung Frist",
+   "Bestandsverträge Kündigungsfrist"
+  ],
+  "sh-04": [
+   "Tarif Klassik eingestellt",
+   "Klassik Tarif Umstellung Kunden",
+   "Klassik Bestandskunden Tarifwechsel",
+   "Tarif Klassik Nachfolgetarif"
+  ],
+  "sh-05": [
+   "Netzentgelt 2025",
+   "Netznutzungsentgelte 2025 Höhe",
+   "Netzentgelte Preisblatt",
+   "Netzentgelt ct/kWh"
+  ],
+  "sh-06": [
+   "automatische Verlängerung ein Jahr",
+   "stillschweigende Vertragsverlängerung",
+   "Verlängerungsklausel Altverträge",
+   "faire Verbraucherverträge Verlängerung"
+  ],
+  "id-01": [
+   "§ 41 EnWG",
+   "Preisänderung Mitteilung Sonderkündigungsrecht",
+   "Preisanpassung Unterrichtung Letztverbraucher"
+  ],
+  "id-02": [
+   "§ 19 StromGVV",
+   "Versorgungsunterbrechung Zahlungsverzug Grundversorgung",
+   "Stromsperre Androhung",
+   "Liefersperre Grundversorgungsverordnung"
+  ],
+  "id-03": [
+   "§ 14a EnWG Modul 2",
+   "steuerbare Verbrauchseinrichtungen Netzentgeltreduzierung",
+   "Wärmepumpe Wallbox reduziertes Netzentgelt",
+   "separater Zähler Netzentgelt Modul"
+  ],
+  "id-04": [
+   "9,84 Cent pro Kilowattstunde"
+  ],
+  "id-05": [
+   "Marktlokations-ID",
+   "Marktlokation Identifikationsnummer",
+   "MaLo"
+  ],
+  "id-06": [
+   "OBIS-Kennzahl 1.8.1",
+   "OBIS Kennziffer Zählerstand Bezug"
+  ],
+  "id-07": [
+   "31. Dezember 2025",
+   "Jahresende 2025"
+  ],
+  "id-08": [
+   "Bonus 75 €",
+   "Neukundenbonus 75 Euro",
+   "Wechselbonus"
+  ],
+  "id-09": [
+   "§ 312g BGB",
+   "Widerrufsrecht Fernabsatzvertrag",
+   "Widerrufsbelehrung Widerrufsfrist"
+  ],
+  "id-10": [
+   "LFW 24",
+   "Lieferantenwechsel 24 Stunden",
+   "schneller Lieferantenwechsel werktäglich"
+  ],
+  "id-11": [
+   "08005546330",
+   "0800 554 63 30"
+  ],
+  "ne-01": [
+   "Fernwärmeanschluss Kosten",
+   "Hausanschluss Wärmenetz Baukostenzuschuss",
+   "Wärmeanschluss Preis"
+  ],
+  "ne-02": [
+   "Gasvertrag Kündigungsfrist",
+   "Erdgas Tarif kündigen",
+   "Kündigung Gaslieferung Frist"
+  ],
+  "ne-03": [
+   "Steckersolargerät Anmeldung",
+   "Balkonkraftwerk Marktstammdatenregister",
+   "Mini-PV-Anlage registrieren",
+   "Stecker-Solaranlage Netzbetreiber melden"
+  ],
+  "ne-04": [
+   "Ladestation öffentlich Ladetarif",
+   "Ladestrom Elektroauto Preis kWh",
+   "Ladekarte E-Mobilität Preise"
+  ],
+  "ne-05": [
+   "Wasserhärte",
+   "Trinkwasser Härtebereich",
+   "Wasserqualität Härtegrad dH"
+  ],
+  "ne-06": [
+   "Einspeisevergütung PV-Anlage",
+   "Solaranlage Vergütung Einspeisung",
+   "EEG-Vergütung Photovoltaik",
+   "Solarstrom Einspeisung Vergütungssatz"
+  ],
+  "ne-07": [
+   "Urlaubsantrag",
+   "Urlaub beantragen Mitarbeiter",
+   "Betriebsvereinbarung Urlaub",
+   "Urlaubsregelung"
+  ]
+ },
+ "B": {
+  "ex-01": [
+   "Netznutzungsentgelt",
+   "Netzkosten",
+   "Netzentgelt Preisbestandteil"
+  ],
+  "ex-02": [
+   "außerordentliche Kündigung",
+   "Kündigungsrecht Preisänderung",
+   "fristlose Kündigung"
+  ],
+  "ex-03": [
+   "Grundversorgung",
+   "Ersatzversorger",
+   "Belieferung ohne Liefervertrag"
+  ],
+  "ex-04": [
+   "Jahresabrechnung",
+   "Jahresrechnung",
+   "Verbrauchsabrechnung",
+   "Turnusabrechnung"
+  ],
+  "ex-05": [
+   "LindenStrom Fix 12",
+   "Fix12 Preisgarantie"
+  ],
+  "ex-06": [
+   "Schlichtungsverfahren",
+   "Verbraucherschlichtung Beschwerde",
+   "außergerichtliche Streitbeilegung"
+  ],
+  "ex-07": [
+   "netzorientierte Steuerung",
+   "Wärmepumpe Wallbox Netzbetreiber steuern",
+   "reduziertes Netzentgelt",
+   "SteuVE"
+  ],
+  "in-01": [
+   "Netzentgelte Bestandteile",
+   "Netznutzungsentgelt Zusammensetzung",
+   "Netzkosten Preisbestandteile",
+   "Netzentgelt Grundpreis Arbeitspreis"
+  ],
+  "in-02": [
+   "Kündigungsbestätigung",
+   "Kündigung bestätigen",
+   "Bestätigung Vertragsende",
+   "Kündigungseingang"
+  ],
+  "in-03": [
+   "Zählerstandsschätzung",
+   "geschätzter Zählerstand",
+   "Verbrauchsschätzung Abrechnung",
+   "Ablesung fehlt Schätzung"
+  ],
+  "in-04": [
+   "Widerruf telefonisch",
+   "Widerrufsrecht Fernabsatz",
+   "Widerrufsfrist",
+   "telefonischer Vertragsabschluss"
+  ],
+  "in-05": [
+   "Umzug Vertragsfortführung",
+   "Umzug Kündigung",
+   "Umzug neue Lieferstelle",
+   "Umzugsmeldung"
+  ],
+  "in-06": [
+   "Mahngebühren",
+   "Mahnkosten",
+   "Mahnpauschale",
+   "Zahlungsverzug Kosten"
+  ],
+  "in-07": [
+   "Preisanpassung Mitteilungsfrist",
+   "Preisänderung ankündigen Frist",
+   "Preiserhöhung Vorankündigung",
+   "Preisanpassung Informationspflicht"
+  ],
+  "in-08": [
+   "Lieferantenwechsel Dauer",
+   "Anbieterwechsel Bearbeitungszeit",
+   "Wechselprozess Frist",
+   "Versorgerwechsel"
+  ],
+  "um-01": [
+   "Kündigungsfrist Sondervertrag",
+   "Sonderkundenvertrag Kündigung",
+   "Kündigungsfrist Sondertarif",
+   "Kündigungsfrist Vertragslaufzeit"
+  ],
+  "um-02": [
+   "Zählerstand melden",
+   "Zählerstand übermitteln",
+   "Selbstablesung",
+   "Zählerstandsmitteilung"
+  ],
+  "um-03": [
+   "Bonitätsprüfung Ablehnung",
+   "Vertragsablehnung Bonität",
+   "Bonitätsauskunft negativ",
+   "Kreditwürdigkeit Vertragsannahme"
+  ],
+  "um-04": [
+   "Wärmepumpe Tarif",
+   "Wärmepumpenstrom",
+   "Wärmepumpentarif",
+   "Heizstrom Tarif"
+  ],
+  "um-05": [
+   "Schlussrechnung Lieferantenwechsel",
+   "Endabrechnung Anbieterwechsel",
+   "Schlussabrechnung Vertragsende",
+   "Abschlussrechnung"
+  ],
+  "um-06": [
+   "Ökostrom",
+   "Grünstrom",
+   "Strom aus erneuerbaren Energien",
+   "Herkunftsnachweise"
+  ],
+  "um-07": [
+   "Haustürgeschäft",
+   "Haustürvertrieb Regeln",
+   "Vertrag außerhalb Geschäftsräume",
+   "Außendienst Verhaltensregeln"
+  ],
+  "co-01": [
+   "Kündigungsfrist",
+   "Kündigungsfristen Laufzeit",
+   "fristgerechte Kündigung",
+   "Kündigungstermin"
+  ],
+  "co-02": [
+   "Messstellenbetreiber wechseln",
+   "Messstellenbetreiberwechsel",
+   "wettbewerblicher Messstellenbetreiber",
+   "Zähler Betreiber Wechsel"
+  ],
+  "co-03": [
+   "Wärmepumpentarif",
+   "Wärmepumpenstrom",
+   "Heizstromtarif",
+   "Wärmepumpe Tarif"
+  ],
+  "co-04": [
+   "Abrechnungsfrist",
+   "Jahresabrechnung Frist",
+   "Rechnungsstellung Frist",
+   "Abrechnung verspätet"
+  ],
+  "co-05": [
+   "Sofortbonus Auszahlung",
+   "Neukundenbonus Auszahlung",
+   "Bonusauszahlung",
+   "Wechselbonus"
+  ],
+  "co-06": [
+   "Marktlokations-ID",
+   "MaLo-ID",
+   "Marktlokationsnummer",
+   "Zählpunktbezeichnung"
+  ],
+  "co-07": [
+   "Sperrkosten",
+   "Versorgungsunterbrechung Kosten",
+   "Sperrung Wiederherstellung Gebühr",
+   "Entsperrung Kosten"
+  ],
+  "co-08": [
+   "Vertragslaufzeit Verlängerung",
+   "automatische Vertragsverlängerung",
+   "stillschweigende Verlängerung",
+   "Mindestlaufzeit Verlängerung"
+  ],
+  "su-01": [
+   "Preisanpassung Mitteilungsfrist",
+   "Preisänderung Ankündigung",
+   "Preiserhöhung Vorankündigung",
+   "Preisanpassung Informationspflicht"
+  ],
+  "su-02": [
+   "intelligentes Messsystem Pflicht",
+   "Smart-Meter-Rollout",
+   "Pflichteinbau intelligentes Messsystem",
+   "moderne Messeinrichtung"
+  ],
+  "su-03": [
+   "Umzug Stromvertrag",
+   "Umzug Lieferstelle",
+   "Umzug Kündigung",
+   "Umzugsmeldung"
+  ],
+  "su-04": [
+   "Ökostrom",
+   "Strom aus erneuerbaren Energien",
+   "Herkunftsnachweise",
+   "Ökostromtarif"
+  ],
+  "su-05": [
+   "Beschwerde Bearbeitungsfrist",
+   "Beschwerdemanagement Frist",
+   "Reklamationsbearbeitung Dauer",
+   "Verbraucherbeschwerde Antwortfrist"
+  ],
+  "su-06": [
+   "Neukundenbonus",
+   "Wechselbonus",
+   "Sofortbonus",
+   "Neukundenprämie"
+  ],
+  "su-07": [
+   "Versorgungsunterbrechung Zahlungsverzug",
+   "Stromsperre Voraussetzungen",
+   "Sperrandrohung Mindestbetrag",
+   "Zahlungsrückstand Sperrung"
+  ],
+  "su-08": [
+   "Zählerstand melden",
+   "Zählerstand übermitteln",
+   "Selbstablesung",
+   "Zählerstandsmitteilung"
+  ],
+  "sc-01": [
+   "Netzentgelte 2026",
+   "Netzentgelt Höhe",
+   "Netzentgelte Preisbestandteil",
+   "Netznutzung Kosten"
+  ],
+  "sc-02": [
+   "Lieferantenwechsel Dauer",
+   "Versorgerwechsel Frist",
+   "Wechselprozess Bearbeitungszeit"
+  ],
+  "sc-03": [
+   "Versorgungsunterbrechung Voraussetzungen",
+   "Sperrung Zahlungsrückstand",
+   "Sperrandrohung Mahnung",
+   "Liefersperre Zahlungsverzug"
+  ],
+  "sc-04": [
+   "Bonitätsprüfung Vertragsabschluss",
+   "Schufa Auskunft Neukunde",
+   "Kreditwürdigkeit Prüfung",
+   "Auskunftei Bonität"
+  ],
+  "sc-05": [
+   "Messstellenbetrieb Kosten",
+   "Messentgelt jährlich",
+   "Zählermiete",
+   "Messstellenbetrieb Entgelt Preisobergrenze"
+  ],
+  "sc-06": [
+   "Grundversorgung kündigen",
+   "Grundversorgung Kündigungsfrist",
+   "Grundversorgungsvertrag Kündigung",
+   "Ersatzversorgung beenden"
+  ],
+  "sc-07": [
+   "Widerrufsrecht",
+   "Widerrufsfrist Vertragsabschluss",
+   "Widerruf Fernabsatzvertrag",
+   "Vertrag widerrufen"
+  ],
+  "pa-01": [
+   "Versorgungsunterbrechung Zahlungsverzug",
+   "Stromsperre Voraussetzungen",
+   "Sperrung Zahlungsrückstand",
+   "Sperrandrohung Mahnverfahren"
+  ],
+  "pa-02": [
+   "Kündigung Stromvertrag",
+   "Kündigungsfrist",
+   "Sonderkündigungsrecht",
+   "Tarif kündigen Laufzeit"
+  ],
+  "pa-03": [
+   "Widerrufsrecht Online-Vertrag",
+   "Widerrufsfrist",
+   "Widerruf Fernabsatzvertrag",
+   "Vertrag widerrufen"
+  ],
+  "pa-04": [
+   "Abschlag Erhöhung",
+   "Abschlagszahlung Anpassung",
+   "Abschlagsanpassung Jahresabrechnung",
+   "Preiserhöhung Lastschrift"
+  ],
+  "pa-05": [
+   "Stromzähler Zuständigkeit",
+   "Messstellenbetreiber",
+   "Messstellenbetrieb Zuständigkeit",
+   "Zähler Eigentum Wartung"
+  ],
+  "pa-06": [
+   "Grundversorgungspflicht",
+   "Belieferungspflicht Ablehnung",
+   "Kontrahierungszwang",
+   "Grundversorgung Zahlungsrückstand"
+  ],
+  "pa-07": [
+   "Umzug",
+   "Umzug Vertrag mitnehmen",
+   "Umzug Sonderkündigungsrecht",
+   "Auszug Abmeldung Zählerstand"
+  ],
+  "pa-08": [
+   "Ratenzahlung",
+   "Ratenzahlungsvereinbarung",
+   "Zahlungsschwierigkeiten Stundung",
+   "Abwendungsvereinbarung"
+  ],
+  "cl-01": [
+   "Kündigungsfrist Stromvertrag",
+   "Kündigung Stromliefervertrag Frist",
+   "Kündigungsfrist Vertragslaufzeit",
+   "Sonderkündigungsrecht"
+  ],
+  "cl-02": [
+   "Kunde bezahlt Rechnung nicht",
+   "Zahlungsverzug Mahnung",
+   "Zahlungsrückstand Folgen",
+   "Mahnverfahren Versorgungsunterbrechung"
+  ],
+  "cl-03": [
+   "Smart Meter Einbau Pflicht",
+   "intelligentes Messsystem Pflichteinbau",
+   "moderne Messeinrichtung Einbau",
+   "Smart-Meter-Rollout Widerspruch"
+  ],
+  "cl-04": [
+   "Widerrufsrecht Online-Verträge",
+   "Widerrufsfrist Fernabsatzvertrag",
+   "Widerruf Vertragsabschluss Internet",
+   "Widerrufsbelehrung"
+  ],
+  "cl-05": [
+   "Berechnung monatlicher Abschlag",
+   "Abschlagszahlung Berechnung",
+   "Abschlagshöhe Jahresverbrauch",
+   "Vorauszahlung Berechnung"
+  ],
+  "cl-06": [
+   "Netzentgelt Haushaltskunden",
+   "Netznutzungsentgelt",
+   "Netzentgelte Privatkunden",
+   "Netzentgelt Strompreisbestandteil"
+  ],
+  "cl-07": [
+   "Umzug Kunde",
+   "Umzug Vertrag mitnehmen",
+   "Auszug Einzug Zählerstand",
+   "Umzug Sonderkündigungsrecht"
+  ],
+  "cl-08": [
+   "Bonitätsprüfung negativ Belieferung",
+   "Ablehnung Vertragsantrag Bonität",
+   "Grundversorgung Belieferungspflicht",
+   "Sicherheitsleistung Vorauszahlung"
+  ],
+  "ty-01": [
+   "Netzentgelt",
+   "Netznutzungsentgelt",
+   "Netzentgelte Höhe"
+  ],
+  "ty-02": [
+   "Kündigungsfrist",
+   "Kündigung Frist",
+   "Kündigungsfrist Stromvertrag"
+  ],
+  "ty-03": [
+   "Widerrufsrecht",
+   "Widerrufsfrist",
+   "Widerruf Vertrag"
+  ],
+  "ty-04": [
+   "Lieferantenwechsel Dauer",
+   "Anbieterwechsel Dauer",
+   "Versorgerwechsel Frist",
+   "Wechselprozess Bearbeitungszeit"
+  ],
+  "ty-05": [
+   "Abschlagszahlung ändern",
+   "Abschlag anpassen",
+   "Abschlagshöhe Änderung",
+   "Vorauszahlung anpassen"
+  ],
+  "ty-06": [
+   "Bonitätsprüfung",
+   "Schufa-Abfrage",
+   "Kreditwürdigkeit Prüfung"
+  ],
+  "ty-07": [
+   "Grundversorgung Preis",
+   "Grundversorgungstarif Preise",
+   "Grundversorgung Preisanpassung",
+   "Allgemeine Preise Grundversorgung"
+  ],
+  "ty-08": [
+   "Zählerstand melden",
+   "Zählerstand mitteilen",
+   "Zählerablesung",
+   "Selbstablesung"
+  ],
+  "br-01": [
+   "Vertragsabschluss",
+   "Energieliefervertrag",
+   "Vertragslaufzeit"
+  ],
+  "br-02": [
+   "Kündigungsfrist",
+   "Vertrag kündigen",
+   "Sonderkündigungsrecht"
+  ],
+  "br-03": [
+   "Kündigungsfrist",
+   "Widerrufsfrist",
+   "Zahlungsfrist",
+   "Fristen Übersicht"
+  ],
+  "br-04": [
+   "Preisanpassung",
+   "Preisbestandteile",
+   "Preisblatt Tarife",
+   "Preisänderung"
+  ],
+  "br-05": [
+   "Stromzähler",
+   "Zählerstand",
+   "Messstellenbetrieb",
+   "Zählerwechsel"
+  ],
+  "ch-01": [
+   "Konzessionsabgabe Sondervertragskunden",
+   "Konzessionsabgabe Höhe",
+   "Konzessionsabgaben Sonderkunden",
+   "KAV Konzessionsabgabenverordnung"
+  ],
+  "ch-02": [
+   "Netzentgelte Veröffentlichung Netzbetreiber",
+   "Veröffentlichung Netzentgelte Folgejahr",
+   "Netzentgelte vorläufig endgültig",
+   "Netzentgelte Veröffentlichungsfrist"
+  ],
+  "ch-03": [
+   "Netzentgelte Anteil Strompreis",
+   "Strompreiszusammensetzung Preisbestandteile",
+   "Netznutzungsentgelt Kostenanteil",
+   "Zusammensetzung Strompreis Netzkosten"
+  ],
+  "ch-04": [
+   "Jahresverbrauch Vier-Personen-Haushalt",
+   "Durchschnittsverbrauch Haushaltsgröße",
+   "Verbrauchsschätzung Personenzahl kWh",
+   "Musterhaushalt Verbrauch"
+  ],
+  "ch-05": [
+   "Abschlag senken Voraussetzungen",
+   "Abschlagszahlung reduzieren Nachweis",
+   "Abschlagsänderung Herabsetzung Grenze",
+   "Abschlag anpassen Zählerstand"
+  ],
+  "ch-06": [
+   "konkurrierende Anmeldungen Marktlokation",
+   "Doppelanmeldung Lieferantenwechsel",
+   "Anmeldekonflikt mehrere Lieferanten",
+   "Marktlokation Anmeldung Vorrang"
+  ],
+  "ch-07": [
+   "Schlussrechnung Frist Lieferantenwechsel",
+   "Schlussabrechnung Altlieferant",
+   "Endabrechnung Lieferende Frist",
+   "Abrechnung Vertragsende"
+  ],
+  "ch-08": [
+   "Zählerstand Lieferantenwechsel Frist",
+   "Zählerstandsmeldung Wechseltermin",
+   "Ablesung Wechselstichtag Zeitraum",
+   "Zählerablesung Lieferbeginn"
+  ],
+  "so-01": [
+   "Störungsnummer Netzbetreiber",
+   "Stromausfall melden",
+   "Entstördienst Notdienst",
+   "Versorgungsunterbrechung Störung"
+  ],
+  "so-02": [
+   "Mieterstromzuschlag",
+   "Mieterstrom Förderung Vergütung",
+   "Mieterstrommodell Zuschlag EEG"
+  ],
+  "so-03": [
+   "Verjährungsfrist Forderungen",
+   "Verjährung Energielieferung Ansprüche",
+   "verjährte Nachforderung Abrechnung"
+  ],
+  "so-04": [
+   "Inkasso Übergabe Forderung",
+   "Mahnverfahren Inkassounternehmen",
+   "Mahnstufen Zahlungsverzug",
+   "Forderungsmanagement Inkassoabgabe"
+  ],
+  "so-05": [
+   "Eichfrist Zähler",
+   "Eichgültigkeit moderne Messeinrichtung",
+   "Eichung Stromzähler Nacheichung",
+   "Zählerwechsel Ablauf Eichung"
+  ],
+  "so-06": [
+   "Haftung Überspannungsschaden",
+   "Geräteschaden Überspannung Netzbetreiber",
+   "Schadensersatz Spannungsschwankung",
+   "Haftung Sachschaden Netzbetreiber NAV"
+  ],
+  "so-07": [
+   "gemeinschaftliche Gebäudeversorgung",
+   "GGV Voraussetzungen",
+   "Gebäudestrom Mehrfamilienhaus Photovoltaik",
+   "Solarstrom Mehrparteienhaus Aufteilung"
+  ],
+  "so-08": [
+   "Insolvenz Kunde Forderungen",
+   "Insolvenzverfahren Forderungsanmeldung",
+   "Privatinsolvenz offene Rechnungen",
+   "Insolvenzverwalter Energielieferung"
+  ],
+  "sh-01": [
+   "LindenStrom Klassik Erstlaufzeit",
+   "Mindestlaufzeit LindenStrom Klassik",
+   "Vertragslaufzeit Tarif Klassik"
+  ],
+  "sh-02": [
+   "Arbeitspreis Grundversorgung 2025",
+   "Grundversorgungstarif Preise 2025",
+   "Preisblatt Grundversorgung",
+   "Kilowattstundenpreis Grundversorgung"
+  ],
+  "sh-03": [
+   "Kündigungsfrist Altverträge",
+   "Kündigungsfrist drei Monate",
+   "Bestandsverträge Kündigung Frist",
+   "frühere Vertragsbedingungen Kündigung"
+  ],
+  "sh-04": [
+   "Tarif Klassik",
+   "Klassik Tarifumstellung Bestandskunden",
+   "Tarif eingestellt Überführung",
+   "Tarifmigration Klassik"
+  ],
+  "sh-05": [
+   "Netzentgelt 2025",
+   "Netznutzungsentgelte 2025 Höhe",
+   "Netzentgelte Preisblatt",
+   "Netzkosten Arbeitspreis Grundpreis 2025"
+  ],
+  "sh-06": [
+   "automatische Vertragsverlängerung ein Jahr",
+   "stillschweigende Verlängerung Laufzeit",
+   "Gesetz faire Verbraucherverträge Verlängerung",
+   "Verlängerungsklausel Altverträge"
+  ],
+  "id-01": [
+   "§ 41 EnWG",
+   "Energiewirtschaftsgesetz Preisänderung Sonderkündigungsrecht",
+   "Preisanpassung Mitteilung Vertragsänderung"
+  ],
+  "id-02": [
+   "§ 19 StromGVV",
+   "Stromgrundversorgungsverordnung Unterbrechung",
+   "Versorgungssperre Grundversorgung",
+   "Stromsperre Voraussetzungen"
+  ],
+  "id-03": [
+   "§ 14a EnWG",
+   "steuerbare Verbrauchseinrichtungen Modul 2",
+   "Netzentgeltreduzierung Wärmepumpe Wallbox",
+   "reduziertes Netzentgelt prozentual"
+  ],
+  "id-04": [
+   "9,84 Cent kWh",
+   "9,84 ct Kilowattstunde"
+  ],
+  "id-05": [
+   "Marktlokations-ID",
+   "Marktlokation Identifikationsnummer",
+   "MaLo Nummer"
+  ],
+  "id-06": [
+   "OBIS-Kennzahl 1.8.1",
+   "Zählerstand Bezug Kennziffer",
+   "OBIS Kennzahlen Zählerdisplay"
+  ],
+  "id-07": [
+   "31. Dezember 2025",
+   "Stichtag 31.12.2025",
+   "Jahresende 2025"
+  ],
+  "id-08": [
+   "75 Euro Bonus",
+   "Neukundenbonus",
+   "Wechselbonus Gutschrift",
+   "Bonus Auszahlung Voraussetzungen"
+  ],
+  "id-09": [
+   "§ 312g BGB",
+   "Widerrufsrecht Fernabsatzvertrag",
+   "Widerrufsbelehrung Widerrufsfrist",
+   "Bürgerliches Gesetzbuch Widerruf"
+  ],
+  "id-10": [
+   "LFW24",
+   "Lieferantenwechsel 24 Stunden",
+   "schneller Lieferantenwechsel werktäglich"
+  ],
+  "id-11": [
+   "0800 5546330",
+   "08005546330",
+   "kostenlose Hotline Rufnummer",
+   "Telefonnummer Kundenservice"
+  ],
+  "ne-01": [
+   "Fernwärmeanschluss Kosten",
+   "Wärmeanschluss Baukostenzuschuss",
+   "Fernwärme Hausanschluss Preis"
+  ],
+  "ne-02": [
+   "Kündigungsfrist Erdgas",
+   "Gasvertrag kündigen Frist",
+   "Gaslieferung Kündigung"
+  ],
+  "ne-03": [
+   "Steckersolargerät Anmeldung",
+   "Mini-PV Marktstammdatenregister",
+   "Stecker-Solar Netzbetreiber melden",
+   "Balkonkraftwerk Registrierung"
+  ],
+  "ne-04": [
+   "Ladestation Ladetarif",
+   "Elektroauto Laden Kosten",
+   "Ladepunkt Ladekarte Preis",
+   "E-Mobilität Ladesäule"
+  ],
+  "ne-05": [
+   "Wasserhärte",
+   "Trinkwasserqualität Härtebereich",
+   "Wasser Kalkgehalt"
+  ],
+  "ne-06": [
+   "Einspeisevergütung",
+   "Solaranlage Vergütung Einspeisung",
+   "PV-Anlage Einspeisung EEG",
+   "Vergütungssatz Netzeinspeisung"
+  ],
+  "ne-07": [
+   "Urlaub beantragen",
+   "Urlaubsregelung Mitarbeiter",
+   "Betriebsvereinbarung Urlaub"
+  ]
+ }
+}

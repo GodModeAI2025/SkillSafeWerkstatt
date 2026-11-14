@@ -69,6 +69,11 @@ EXPORTED_STDLIB = frozenset({
     # switch stdout and stderr to UTF-8; it writes no files of its own.
     "sys",
 })
+# The request path SKILL.md routes Windows and quoted text through: one JSON
+# object on standard input, with a UTF-8 BOM, a \u escape and a reformulation
+# that repeats the query and is dropped.
+SELF_CHECK_REQUEST_CALL = ("search_knowledge.py", "--request", "-")
+SELF_CHECK_REQUEST = b'\xef\xbb\xbf{"query": "wiki", "also": ["\\u00dcbersicht", "Wiki"]}'
 # The self-check runs every entrypoint once inside the generated skill.
 SELF_CHECK_CALLS = (
     ("verify_knowledge.py",),
@@ -80,6 +85,7 @@ SELF_CHECK_CALLS = (
         "search_knowledge.py", "--query", "wiki", "--filter-json",
         '{"kind":"filter","conditions":[{"property":"__trust_tier","operator":"equals","value":"unverified"}]}',
     ),
+    SELF_CHECK_REQUEST_CALL,
 )
 
 
@@ -274,14 +280,17 @@ def run_self_check(skill_dir: Path) -> None:
 
     Verification alone does not import the search, so a missing library module
     would otherwise surface only when an end user asks the first question. The
-    check covers the paths in SELF_CHECK_CALLS on the exporting Python only.
+    check covers the paths in SELF_CHECK_CALLS on the exporting Python only,
+    including a request on standard input.
     """
     environment = self_check_environment()
     for call in SELF_CHECK_CALLS:
         script, *arguments = call
+        # Every call gets its own standard input, so none inherits the exporter's.
         result = subprocess.run(
             [sys.executable, "-B", "-S", "-s", str(skill_dir / "scripts" / script), *arguments],
             capture_output=True,
+            input=SELF_CHECK_REQUEST if call == SELF_CHECK_REQUEST_CALL else b"",
             cwd=str(skill_dir),
             env=environment,
             check=False,

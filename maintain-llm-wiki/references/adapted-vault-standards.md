@@ -15,7 +15,7 @@ These rules adapt the user-supplied `STANDARDS.md` to the standalone SkillSafeWe
 
 - The first meaningful mention of an existing entity or concept should be a wikilink. Later mentions may remain plain when readability benefits.
 - Use vault-relative targets, for example `[[wiki/entities/maria-example|Maria Example]]`.
-- Known aliases belong in page frontmatter. Do not assign an ambiguous short alias to multiple entities.
+- Known aliases belong in page frontmatter as a list and follow the three page-alias rules in `wiki-contract.md`. Do not assign an ambiguous short alias to multiple entities.
 - YAML lists containing wikilinks use block style and quoted values. Do not use inline unquoted wikilinks in frontmatter.
 - Do not create empty pages only to eliminate a potential graph node. Create a durable entity or concept page when there is enough source-backed knowledge to maintain it. Repeated unresolved mentions belong in `meta/questions.md` until that threshold is reached.
 

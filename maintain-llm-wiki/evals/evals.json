@@ -414,6 +414,32 @@
         "Das Entfernen geschieht nur über den bestätigten Override, nicht durch stilles Löschen einer Datei.",
         "Der Inhalt der entfernten Kopie wird berichtet, damit der Beleg nicht verloren geht."
       ]
+    },
+    {
+      "id": 36,
+      "prompt": "Unsere Kunden sagen 'Stromsperre' und 'Abschlag', im Wiki heißt es Versorgungsunterbrechung und Abschlagszahlung. Sorg dafür, dass die Suche das findet.",
+      "expected_output": "Der Skill schlägt Aliase in der Sprache der Nutzer nach den drei Regeln vor, warnt vor mehrdeutigen Alltagswörtern und trägt erst nach Bestätigung über einen Seiten-Batch ein.",
+      "files": [],
+      "expectations": [
+        "Vorschläge nennen Seite und Alias; nichts wird ohne Bestätigung geschrieben.",
+        "Wortformen (Plural, ae/ä, Kompositumteile) werden nicht als Alias vorgeschlagen.",
+        "Ein mehrdeutiges Einzelwort wie 'Abschlag' wird nicht als Seiten-Alias eingetragen; der Skill bietet eine eindeutige Alternative oder eine Phrase in CONCEPTS.md an.",
+        "Ein Alias kommt auf genau eine Seite; ein Begriff für die ganze Begriffswelt geht in deren Aliases.",
+        "aliases wird als Liste geschrieben."
+      ]
+    },
+    {
+      "id": 37,
+      "prompt": "Lint ist durch. Gibt es noch etwas zu den Aliasen?",
+      "expected_output": "Der Skill vergleicht stats.alias_review mit der Ausgangsprüfung, legt neue häufige Alias-Wörter und mehrfach vergebene Aliase mit Ort und Seitenzahl vor, meldet skalare aliases-Werte aus den Warnungen und stellt nichts davon als Lint-Fehler dar.",
+      "files": [],
+      "expectations": [
+        "Neue Einträge in common_alias_words und shared_aliases werden mit Wort, Ort und Seitenzahl vorgelegt.",
+        "Schon in der Ausgangsprüfung gelistete Einträge werden außerhalb eines Qualitätsreviews nicht erneut abgefragt.",
+        "Die Entscheidung des Anwenders wird in meta/changes.md festgehalten.",
+        "Ein skalarer aliases-Wert wird über einen bestätigten Frontmatter-Plan in eine Liste umgewandelt.",
+        "Die Statistik blockiert den Release nicht."
+      ]
     }
   ]
 }

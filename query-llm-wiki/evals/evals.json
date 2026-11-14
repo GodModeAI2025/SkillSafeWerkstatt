@@ -175,6 +175,54 @@
         "Die Antwort sagt ausdrücklich, dass der Treffer über die Korrektur von „Netzentgeld“ zu „Netzentgelt“ zustande kam; ein über einen Kompositumteil wie „Durchleitungsgebühr“ gefundener Treffer wird ebenso benannt.",
         "Wörter aus unmatched_terms führen zu einer zweiten Suche mit anderen Wörtern, und die Antwort nennt diese Wörter; die Zählwerte gelten nicht als Beleg, dass das Wiki zum Thema nichts enthält."
       ]
+    },
+    {
+      "id": 16,
+      "prompt": "How do I cancel my electricity contract when I move to another city?",
+      "expected_output": "Der Skill sucht die Frage unverändert und gibt als erste Umformulierung jeden Teil der Frage in deutschen Schlüsselbegriffen wieder, dazu kurze deutsche Fachbegriffe; die Antwort nennt alle gesuchten Umformulierungen.",
+      "files": [],
+      "expectations": [
+        "Die Suche erhält die Frage unverändert als --query und höchstens vier Umformulierungen über --also oder --request -.",
+        "Die erste Umformulierung gibt jeden Teil der Frage in kurzen deutschen Schlüsselbegriffen wieder, etwa „Stromvertrag kündigen Umzug“; sie und die übrigen sind kurze deutsche Begriffe ohne Fragewörter und keine ganzen Sätze.",
+        "Keine Umformulierung enthält Zahlen, Fristen, Namen oder Tarife, die nicht in der Frage stehen.",
+        "Die Antwort listet jede gesuchte Umformulierung in einer Zeile vor der Qualitätszeile."
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "Dürfen wir jemandem einfach den Saft abdrehen, der nicht bezahlt?",
+      "expected_output": "Der Skill ergänzt Fach- und Alltagsbegriffe als Umformulierungen, liest eine Seite aus reformulation_results vollständig, bevor er sie verwendet, und nennt die Umformulierungen.",
+      "files": [],
+      "expectations": [
+        "Die Umformulierungen variieren das Vokabular (Fachbegriff, Alltagsbegriff, Synonym) und sind kurz.",
+        "Eine Seite aus reformulation_results wird geöffnet und als Antwort bestätigt, bevor sie zitiert wird.",
+        "found_by und via werden nicht als Beleg zitiert; Beleg bleibt der Claim mit Quelle.",
+        "Die Antwort listet die gesuchten Umformulierungen."
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "Was kostet der Anschluss an die Fernwärme?",
+      "expected_output": "Der Skill meldet, dass mit diesen Wörtern und Umformulierungen in diesem Release nichts gefunden wurde, obwohl reformulation_results Seiten enthält, die er gelesen und als nicht zutreffend erkannt hat.",
+      "files": [],
+      "expectations": [
+        "Seiten aus reformulation_results heben die Fehlanzeige nur auf, wenn sie gelesen wurden und die Frage beantworten.",
+        "Die Antwort sagt nicht, das Wiki enthalte nichts zum Thema, sondern dass mit diesen Wörtern in diesem Release nichts gefunden wurde.",
+        "Eine Seite zu einem anderen Thema wird nicht als Antwort ausgegeben.",
+        "Die Antwort listet die gesuchten Umformulierungen."
+      ]
+    },
+    {
+      "id": 19,
+      "prompt": "Ich arbeite unter Windows mit PowerShell. Darf ich nach einer Preiserhöhung kündigen?",
+      "expected_output": "Der Skill übergibt Frage und Umformulierungen als ein JSON-Objekt über --request - mit \\uXXXX-Escapes statt --query und --also.",
+      "files": [],
+      "expectations": [
+        "Die Suche läuft mit --request - und einem JSON-Objekt mit query und also.",
+        "Nicht-ASCII-Zeichen und Apostrophe stehen in der Anfrage als \\uXXXX-Escapes.",
+        "Die Frage wird unverändert übergeben; die Umformulierungen folgen den Regeln.",
+        "Der Anwender wird nicht aufgefordert, einen Befehl selbst auszuführen."
+      ]
     }
   ]
 }

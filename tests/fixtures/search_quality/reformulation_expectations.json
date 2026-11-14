@@ -1,0 +1,2629 @@
+{
+  "format": "lmwiki-search-quality-reformulations/1",
+  "about": "Recorded by record_expectations.py --reformulations from the search as it was at recording time. reformulations.json holds two sets of up to four reformulations per question, written blind by agents that saw only the questions, never the wiki: the condition of a real reader agent. Every question runs once per set with its reformulations at --limit 12 and at --limit 100. merged_ranks names, per required page, its rank in results and its position in reformulation_results at limit 12 (results, block) and at limit 100 (results_100, block_100); null means absent. A page counts as found within N when its rank in results or its position in the block is at most N. floors are minimums, caps are maximums. tests/test_search_quality.py (ReformulationGate) fails when reformulations change the question's own results or coverage, when a set's merged found counts fall below its floors, when a required page leaves the merged top 3 or top 12 it held here unless accepted_regressions lists it (with set, id, path and a reason; accepted_rank holds it to that rank's bands), when the block of the seven negative questions grows beyond its cap, or when a navigation page enters the block. Caveats: the sets come from the same model family that is evaluated with them, so the numbers are optimistic; they are a regression gate and must never become a tuning target; a set is never edited to make the gate pass - a new set is added instead, and the commit explains why. Changing this file is a deliberate act: state the change and its reason in the commit message.",
+  "rank_limit": 100,
+  "default_limit": 12,
+  "sets": {
+    "A": {
+      "floors": {
+        "merged_within_3": 86,
+        "merged_within_12": 99,
+        "merged_within_100": 99
+      },
+      "caps": {
+        "negative_block_within_12": 41,
+        "navigation_in_block": 0
+      },
+      "queries": {
+        "ex-01": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ex-02": {
+          "merged_ranks": {
+            "wiki/concepts/sonderkuendigungsrecht.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ex-03": {
+          "merged_ranks": {
+            "wiki/concepts/ersatzversorgung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ex-04": {
+          "merged_ranks": {
+            "wiki/topics/jahresverbrauchsabrechnung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ex-05": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-fix12.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ex-06": {
+          "merged_ranks": {
+            "wiki/entities/schlichtungsstelle-energie.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ex-07": {
+          "merged_ranks": {
+            "wiki/concepts/steuerbare-verbrauchseinrichtung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "in-01": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "in-02": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "in-03": {
+          "merged_ranks": {
+            "wiki/concepts/zaehlerstand.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "in-04": {
+          "merged_ranks": {
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": 3,
+              "block": null,
+              "results_100": 3,
+              "block_100": null
+            }
+          }
+        },
+        "in-05": {
+          "merged_ranks": {
+            "wiki/topics/umzug.md": {
+              "results": 10,
+              "block": null,
+              "results_100": 10,
+              "block_100": null
+            }
+          }
+        },
+        "in-06": {
+          "merged_ranks": {
+            "wiki/topics/zahlungsverzug-und-mahnwesen.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "in-07": {
+          "merged_ranks": {
+            "wiki/concepts/preisanpassung.md": {
+              "results": 4,
+              "block": null,
+              "results_100": 4,
+              "block_100": null
+            }
+          }
+        },
+        "in-08": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "um-01": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "um-02": {
+          "merged_ranks": {
+            "wiki/concepts/zaehlerstand.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "um-03": {
+          "merged_ranks": {
+            "wiki/concepts/bonitaetspruefung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "um-04": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenwaerme-wp.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "um-05": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "um-06": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-oeko.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "um-07": {
+          "merged_ranks": {
+            "wiki/topics/vertrieb-an-der-haustuer.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "co-01": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "co-02": {
+          "merged_ranks": {
+            "wiki/concepts/messstellenbetrieb.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 15,
+              "block_100": null
+            }
+          }
+        },
+        "co-03": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenwaerme-wp.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "co-04": {
+          "merged_ranks": {
+            "wiki/topics/jahresverbrauchsabrechnung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "co-05": {
+          "merged_ranks": {
+            "wiki/topics/neukundenbonus.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "co-06": {
+          "merged_ranks": {
+            "wiki/concepts/marktlokation.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "co-07": {
+          "merged_ranks": {
+            "wiki/concepts/versorgungsunterbrechung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "co-08": {
+          "merged_ranks": {
+            "wiki/concepts/vertragslaufzeit.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "su-01": {
+          "merged_ranks": {
+            "wiki/concepts/preisanpassung.md": {
+              "results": 8,
+              "block": null,
+              "results_100": 8,
+              "block_100": null
+            }
+          }
+        },
+        "su-02": {
+          "merged_ranks": {
+            "wiki/concepts/intelligentes-messsystem.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "su-03": {
+          "merged_ranks": {
+            "wiki/topics/umzug.md": {
+              "results": 10,
+              "block": null,
+              "results_100": 10,
+              "block_100": null
+            }
+          }
+        },
+        "su-04": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-oeko.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "su-05": {
+          "merged_ranks": {
+            "wiki/topics/beschwerdemanagement.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "su-06": {
+          "merged_ranks": {
+            "wiki/topics/neukundenbonus.md": {
+              "results": 3,
+              "block": null,
+              "results_100": 3,
+              "block_100": null
+            }
+          }
+        },
+        "su-07": {
+          "merged_ranks": {
+            "wiki/concepts/versorgungsunterbrechung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 25,
+              "block_100": null
+            }
+          }
+        },
+        "su-08": {
+          "merged_ranks": {
+            "wiki/concepts/zaehlerstand.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "sc-01": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sc-02": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sc-03": {
+          "merged_ranks": {
+            "wiki/concepts/versorgungsunterbrechung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sc-04": {
+          "merged_ranks": {
+            "wiki/concepts/bonitaetspruefung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sc-05": {
+          "merged_ranks": {
+            "wiki/concepts/messstellenbetrieb.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sc-06": {
+          "merged_ranks": {
+            "wiki/concepts/grundversorgung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sc-07": {
+          "merged_ranks": {
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "pa-01": {
+          "merged_ranks": {
+            "wiki/concepts/versorgungsunterbrechung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 26,
+              "block_100": null
+            }
+          }
+        },
+        "pa-02": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": null,
+              "block": 2,
+              "results_100": null,
+              "block_100": 2
+            }
+          }
+        },
+        "pa-03": {
+          "merged_ranks": {
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": 9,
+              "block": null,
+              "results_100": 9,
+              "block_100": null
+            }
+          }
+        },
+        "pa-04": {
+          "merged_ranks": {
+            "wiki/concepts/abschlagszahlung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 24,
+              "block_100": null
+            }
+          }
+        },
+        "pa-05": {
+          "merged_ranks": {
+            "wiki/concepts/messstellenbetrieb.md": {
+              "results": 11,
+              "block": null,
+              "results_100": 11,
+              "block_100": null
+            }
+          }
+        },
+        "pa-06": {
+          "merged_ranks": {
+            "wiki/concepts/grundversorgung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "pa-07": {
+          "merged_ranks": {
+            "wiki/topics/umzug.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 21,
+              "block_100": null
+            }
+          }
+        },
+        "pa-08": {
+          "merged_ranks": {
+            "wiki/topics/ratenzahlung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 20,
+              "block_100": null
+            }
+          }
+        },
+        "cl-01": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "cl-02": {
+          "merged_ranks": {
+            "wiki/topics/zahlungsverzug-und-mahnwesen.md": {
+              "results": null,
+              "block": 2,
+              "results_100": null,
+              "block_100": 2
+            }
+          }
+        },
+        "cl-03": {
+          "merged_ranks": {
+            "wiki/concepts/intelligentes-messsystem.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "cl-04": {
+          "merged_ranks": {
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "cl-05": {
+          "merged_ranks": {
+            "wiki/concepts/abschlagszahlung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "cl-06": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "cl-07": {
+          "merged_ranks": {
+            "wiki/topics/umzug.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "cl-08": {
+          "merged_ranks": {
+            "wiki/concepts/bonitaetspruefung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "ty-01": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ty-02": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ty-03": {
+          "merged_ranks": {
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ty-04": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "ty-05": {
+          "merged_ranks": {
+            "wiki/concepts/abschlagszahlung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "ty-06": {
+          "merged_ranks": {
+            "wiki/concepts/bonitaetspruefung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ty-07": {
+          "merged_ranks": {
+            "wiki/concepts/grundversorgung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 23,
+              "block_100": null
+            }
+          }
+        },
+        "ty-08": {
+          "merged_ranks": {
+            "wiki/concepts/zaehlerstand.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "br-01": {
+          "merged_ranks": {
+            "wiki/concepts/vertragslaufzeit.md": {
+              "results": 3,
+              "block": null,
+              "results_100": 3,
+              "block_100": null
+            },
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": null,
+              "block": 4,
+              "results_100": 25,
+              "block_100": null
+            },
+            "wiki/topics/vertragsschluss-im-fernabsatz.md": {
+              "results": 6,
+              "block": null,
+              "results_100": 6,
+              "block_100": null
+            },
+            "wiki/comparisons/grundversorgung-und-sondervertrag.md": {
+              "results": 9,
+              "block": null,
+              "results_100": 9,
+              "block_100": null
+            },
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "br-02": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            },
+            "wiki/concepts/sonderkuendigungsrecht.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            },
+            "wiki/concepts/grundversorgung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "br-03": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            },
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": null,
+              "block": 2,
+              "results_100": 15,
+              "block_100": null
+            },
+            "wiki/concepts/preisanpassung.md": {
+              "results": 6,
+              "block": null,
+              "results_100": 6,
+              "block_100": null
+            },
+            "wiki/concepts/versorgungsunterbrechung.md": {
+              "results": 7,
+              "block": null,
+              "results_100": 7,
+              "block_100": null
+            },
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 5,
+              "block": null,
+              "results_100": 5,
+              "block_100": null
+            }
+          }
+        },
+        "br-04": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-fix12.md": {
+              "results": 8,
+              "block": null,
+              "results_100": 8,
+              "block_100": null
+            },
+            "wiki/entities/tarif-lindenstrom-basis.md": {
+              "results": 3,
+              "block": null,
+              "results_100": 3,
+              "block_100": null
+            },
+            "wiki/entities/tarif-lindenstrom-flex.md": {
+              "results": 10,
+              "block": null,
+              "results_100": 10,
+              "block_100": null
+            },
+            "wiki/concepts/netzentgelt.md": {
+              "results": 9,
+              "block": null,
+              "results_100": 9,
+              "block_100": null
+            },
+            "wiki/concepts/preisanpassung.md": {
+              "results": 6,
+              "block": null,
+              "results_100": 6,
+              "block_100": null
+            }
+          }
+        },
+        "br-05": {
+          "merged_ranks": {
+            "wiki/concepts/zaehlerstand.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            },
+            "wiki/concepts/messstellenbetrieb.md": {
+              "results": null,
+              "block": 2,
+              "results_100": 13,
+              "block_100": null
+            },
+            "wiki/concepts/intelligentes-messsystem.md": {
+              "results": 4,
+              "block": null,
+              "results_100": 4,
+              "block_100": null
+            },
+            "wiki/comparisons/moderne-messeinrichtung-und-intelligentes-messsystem.md": {
+              "results": 11,
+              "block": null,
+              "results_100": 11,
+              "block_100": null
+            }
+          }
+        },
+        "ch-01": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ch-02": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "ch-03": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ch-04": {
+          "merged_ranks": {
+            "wiki/concepts/abschlagszahlung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ch-05": {
+          "merged_ranks": {
+            "wiki/concepts/abschlagszahlung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ch-06": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ch-07": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ch-08": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "so-01": {
+          "merged_ranks": {
+            "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-02": {
+          "merged_ranks": {
+            "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-03": {
+          "merged_ranks": {
+            "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-04": {
+          "merged_ranks": {
+            "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-05": {
+          "merged_ranks": {
+            "sources/src-1e047c0a282729b8-rollout-leitfaden-intelligente-messsysteme-lf-msb-2026.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-1e047c0a282729b8-rollout-leitfaden-intelligente-messsysteme-lf-msb-2026.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-06": {
+          "merged_ranks": {
+            "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-07": {
+          "merged_ranks": {
+            "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-08": {
+          "merged_ranks": {
+            "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "sh-01": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-klassik.md": {
+              "results": 4,
+              "block": null,
+              "results_100": 4,
+              "block_100": null
+            }
+          }
+        },
+        "sh-02": {
+          "merged_ranks": {
+            "wiki/topics/preisanpassung-januar-2025.md": {
+              "results": 3,
+              "block": null,
+              "results_100": 3,
+              "block_100": null
+            }
+          }
+        },
+        "sh-03": {
+          "merged_ranks": {
+            "wiki/topics/kuendigungsfristen-alte-rechtslage.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sh-04": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-klassik.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sh-05": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sh-06": {
+          "merged_ranks": {
+            "wiki/topics/kuendigungsfristen-alte-rechtslage.md": {
+              "results": 10,
+              "block": null,
+              "results_100": 10,
+              "block_100": null
+            }
+          }
+        },
+        "id-01": {
+          "merged_ranks": {
+            "wiki/concepts/sonderkuendigungsrecht.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "id-02": {
+          "merged_ranks": {
+            "wiki/concepts/versorgungsunterbrechung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "id-03": {
+          "merged_ranks": {
+            "wiki/concepts/steuerbare-verbrauchseinrichtung.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "id-04": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "id-05": {
+          "merged_ranks": {
+            "wiki/concepts/marktlokation.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "id-06": {
+          "merged_ranks": {
+            "wiki/concepts/zaehlerstand.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "id-07": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-klassik.md": {
+              "results": 6,
+              "block": null,
+              "results_100": 6,
+              "block_100": null
+            }
+          }
+        },
+        "id-08": {
+          "merged_ranks": {
+            "wiki/topics/neukundenbonus.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "id-09": {
+          "merged_ranks": {
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "id-10": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "id-11": {
+          "merged_ranks": {
+            "wiki/entities/stadtwerke-lindenau-vertrieb.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ne-01": {
+          "merged_ranks": {}
+        },
+        "ne-02": {
+          "merged_ranks": {}
+        },
+        "ne-03": {
+          "merged_ranks": {}
+        },
+        "ne-04": {
+          "merged_ranks": {}
+        },
+        "ne-05": {
+          "merged_ranks": {}
+        },
+        "ne-06": {
+          "merged_ranks": {}
+        },
+        "ne-07": {
+          "merged_ranks": {}
+        }
+      }
+    },
+    "B": {
+      "floors": {
+        "merged_within_3": 86,
+        "merged_within_12": 98,
+        "merged_within_100": 99
+      },
+      "caps": {
+        "negative_block_within_12": 45,
+        "navigation_in_block": 0
+      },
+      "queries": {
+        "ex-01": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ex-02": {
+          "merged_ranks": {
+            "wiki/concepts/sonderkuendigungsrecht.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ex-03": {
+          "merged_ranks": {
+            "wiki/concepts/ersatzversorgung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ex-04": {
+          "merged_ranks": {
+            "wiki/topics/jahresverbrauchsabrechnung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ex-05": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-fix12.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ex-06": {
+          "merged_ranks": {
+            "wiki/entities/schlichtungsstelle-energie.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ex-07": {
+          "merged_ranks": {
+            "wiki/concepts/steuerbare-verbrauchseinrichtung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "in-01": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "in-02": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "in-03": {
+          "merged_ranks": {
+            "wiki/concepts/zaehlerstand.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "in-04": {
+          "merged_ranks": {
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": 3,
+              "block": null,
+              "results_100": 3,
+              "block_100": null
+            }
+          }
+        },
+        "in-05": {
+          "merged_ranks": {
+            "wiki/topics/umzug.md": {
+              "results": 10,
+              "block": null,
+              "results_100": 10,
+              "block_100": null
+            }
+          }
+        },
+        "in-06": {
+          "merged_ranks": {
+            "wiki/topics/zahlungsverzug-und-mahnwesen.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "in-07": {
+          "merged_ranks": {
+            "wiki/concepts/preisanpassung.md": {
+              "results": 4,
+              "block": null,
+              "results_100": 4,
+              "block_100": null
+            }
+          }
+        },
+        "in-08": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "um-01": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "um-02": {
+          "merged_ranks": {
+            "wiki/concepts/zaehlerstand.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "um-03": {
+          "merged_ranks": {
+            "wiki/concepts/bonitaetspruefung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "um-04": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenwaerme-wp.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "um-05": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "um-06": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-oeko.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "um-07": {
+          "merged_ranks": {
+            "wiki/topics/vertrieb-an-der-haustuer.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "co-01": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "co-02": {
+          "merged_ranks": {
+            "wiki/concepts/messstellenbetrieb.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 15,
+              "block_100": null
+            }
+          }
+        },
+        "co-03": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenwaerme-wp.md": {
+              "results": null,
+              "block": 3,
+              "results_100": null,
+              "block_100": 3
+            }
+          }
+        },
+        "co-04": {
+          "merged_ranks": {
+            "wiki/topics/jahresverbrauchsabrechnung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "co-05": {
+          "merged_ranks": {
+            "wiki/topics/neukundenbonus.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "co-06": {
+          "merged_ranks": {
+            "wiki/concepts/marktlokation.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "co-07": {
+          "merged_ranks": {
+            "wiki/concepts/versorgungsunterbrechung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "co-08": {
+          "merged_ranks": {
+            "wiki/concepts/vertragslaufzeit.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "su-01": {
+          "merged_ranks": {
+            "wiki/concepts/preisanpassung.md": {
+              "results": 8,
+              "block": null,
+              "results_100": 8,
+              "block_100": null
+            }
+          }
+        },
+        "su-02": {
+          "merged_ranks": {
+            "wiki/concepts/intelligentes-messsystem.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "su-03": {
+          "merged_ranks": {
+            "wiki/topics/umzug.md": {
+              "results": 10,
+              "block": null,
+              "results_100": 10,
+              "block_100": null
+            }
+          }
+        },
+        "su-04": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-oeko.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "su-05": {
+          "merged_ranks": {
+            "wiki/topics/beschwerdemanagement.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "su-06": {
+          "merged_ranks": {
+            "wiki/topics/neukundenbonus.md": {
+              "results": 3,
+              "block": null,
+              "results_100": 3,
+              "block_100": null
+            }
+          }
+        },
+        "su-07": {
+          "merged_ranks": {
+            "wiki/concepts/versorgungsunterbrechung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 25,
+              "block_100": null
+            }
+          }
+        },
+        "su-08": {
+          "merged_ranks": {
+            "wiki/concepts/zaehlerstand.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "sc-01": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sc-02": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sc-03": {
+          "merged_ranks": {
+            "wiki/concepts/versorgungsunterbrechung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sc-04": {
+          "merged_ranks": {
+            "wiki/concepts/bonitaetspruefung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sc-05": {
+          "merged_ranks": {
+            "wiki/concepts/messstellenbetrieb.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sc-06": {
+          "merged_ranks": {
+            "wiki/concepts/grundversorgung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sc-07": {
+          "merged_ranks": {
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "pa-01": {
+          "merged_ranks": {
+            "wiki/concepts/versorgungsunterbrechung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 26,
+              "block_100": null
+            }
+          }
+        },
+        "pa-02": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "pa-03": {
+          "merged_ranks": {
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": 9,
+              "block": null,
+              "results_100": 9,
+              "block_100": null
+            }
+          }
+        },
+        "pa-04": {
+          "merged_ranks": {
+            "wiki/concepts/abschlagszahlung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 24,
+              "block_100": null
+            }
+          }
+        },
+        "pa-05": {
+          "merged_ranks": {
+            "wiki/concepts/messstellenbetrieb.md": {
+              "results": 11,
+              "block": null,
+              "results_100": 11,
+              "block_100": null
+            }
+          }
+        },
+        "pa-06": {
+          "merged_ranks": {
+            "wiki/concepts/grundversorgung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "pa-07": {
+          "merged_ranks": {
+            "wiki/topics/umzug.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 21,
+              "block_100": null
+            }
+          }
+        },
+        "pa-08": {
+          "merged_ranks": {
+            "wiki/topics/ratenzahlung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 20,
+              "block_100": null
+            }
+          }
+        },
+        "cl-01": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "cl-02": {
+          "merged_ranks": {
+            "wiki/topics/zahlungsverzug-und-mahnwesen.md": {
+              "results": null,
+              "block": 2,
+              "results_100": null,
+              "block_100": 2
+            }
+          }
+        },
+        "cl-03": {
+          "merged_ranks": {
+            "wiki/concepts/intelligentes-messsystem.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "cl-04": {
+          "merged_ranks": {
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "cl-05": {
+          "merged_ranks": {
+            "wiki/concepts/abschlagszahlung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "cl-06": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "cl-07": {
+          "merged_ranks": {
+            "wiki/topics/umzug.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "cl-08": {
+          "merged_ranks": {
+            "wiki/concepts/bonitaetspruefung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "ty-01": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ty-02": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ty-03": {
+          "merged_ranks": {
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ty-04": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "ty-05": {
+          "merged_ranks": {
+            "wiki/concepts/abschlagszahlung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "ty-06": {
+          "merged_ranks": {
+            "wiki/concepts/bonitaetspruefung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ty-07": {
+          "merged_ranks": {
+            "wiki/concepts/grundversorgung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 23,
+              "block_100": null
+            }
+          }
+        },
+        "ty-08": {
+          "merged_ranks": {
+            "wiki/concepts/zaehlerstand.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "br-01": {
+          "merged_ranks": {
+            "wiki/concepts/vertragslaufzeit.md": {
+              "results": 3,
+              "block": null,
+              "results_100": 3,
+              "block_100": null
+            },
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": null,
+              "block": null,
+              "results_100": 25,
+              "block_100": null
+            },
+            "wiki/topics/vertragsschluss-im-fernabsatz.md": {
+              "results": 6,
+              "block": null,
+              "results_100": 6,
+              "block_100": null
+            },
+            "wiki/comparisons/grundversorgung-und-sondervertrag.md": {
+              "results": 9,
+              "block": null,
+              "results_100": 9,
+              "block_100": null
+            },
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "br-02": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            },
+            "wiki/concepts/sonderkuendigungsrecht.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            },
+            "wiki/concepts/grundversorgung.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "br-03": {
+          "merged_ranks": {
+            "wiki/concepts/kuendigungsfrist.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            },
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": null,
+              "block": 2,
+              "results_100": 15,
+              "block_100": null
+            },
+            "wiki/concepts/preisanpassung.md": {
+              "results": 6,
+              "block": null,
+              "results_100": 6,
+              "block_100": null
+            },
+            "wiki/concepts/versorgungsunterbrechung.md": {
+              "results": 7,
+              "block": null,
+              "results_100": 7,
+              "block_100": null
+            },
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 5,
+              "block": null,
+              "results_100": 5,
+              "block_100": null
+            }
+          }
+        },
+        "br-04": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-fix12.md": {
+              "results": 8,
+              "block": null,
+              "results_100": 8,
+              "block_100": null
+            },
+            "wiki/entities/tarif-lindenstrom-basis.md": {
+              "results": 3,
+              "block": null,
+              "results_100": 3,
+              "block_100": null
+            },
+            "wiki/entities/tarif-lindenstrom-flex.md": {
+              "results": 10,
+              "block": null,
+              "results_100": 10,
+              "block_100": null
+            },
+            "wiki/concepts/netzentgelt.md": {
+              "results": 9,
+              "block": null,
+              "results_100": 9,
+              "block_100": null
+            },
+            "wiki/concepts/preisanpassung.md": {
+              "results": 6,
+              "block": null,
+              "results_100": 6,
+              "block_100": null
+            }
+          }
+        },
+        "br-05": {
+          "merged_ranks": {
+            "wiki/concepts/zaehlerstand.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            },
+            "wiki/concepts/messstellenbetrieb.md": {
+              "results": null,
+              "block": 1,
+              "results_100": 13,
+              "block_100": null
+            },
+            "wiki/concepts/intelligentes-messsystem.md": {
+              "results": 4,
+              "block": null,
+              "results_100": 4,
+              "block_100": null
+            },
+            "wiki/comparisons/moderne-messeinrichtung-und-intelligentes-messsystem.md": {
+              "results": 11,
+              "block": null,
+              "results_100": 11,
+              "block_100": null
+            }
+          }
+        },
+        "ch-01": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ch-02": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "ch-03": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ch-04": {
+          "merged_ranks": {
+            "wiki/concepts/abschlagszahlung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ch-05": {
+          "merged_ranks": {
+            "wiki/concepts/abschlagszahlung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ch-06": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ch-07": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ch-08": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "so-01": {
+          "merged_ranks": {
+            "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-02": {
+          "merged_ranks": {
+            "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-03": {
+          "merged_ranks": {
+            "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-04": {
+          "merged_ranks": {
+            "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-05": {
+          "merged_ranks": {
+            "sources/src-1e047c0a282729b8-rollout-leitfaden-intelligente-messsysteme-lf-msb-2026.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-1e047c0a282729b8-rollout-leitfaden-intelligente-messsysteme-lf-msb-2026.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-06": {
+          "merged_ranks": {
+            "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-07": {
+          "merged_ranks": {
+            "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "so-08": {
+          "merged_ranks": {
+            "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": {
+              "results": null,
+              "block": null,
+              "results_100": null,
+              "block_100": null
+            }
+          },
+          "with_required_flags": {
+            "flags": [
+              "--include-sources"
+            ],
+            "merged_ranks": {
+              "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": {
+                "results": 1,
+                "block": null,
+                "results_100": 1,
+                "block_100": null
+              }
+            }
+          }
+        },
+        "sh-01": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-klassik.md": {
+              "results": 4,
+              "block": null,
+              "results_100": 4,
+              "block_100": null
+            }
+          }
+        },
+        "sh-02": {
+          "merged_ranks": {
+            "wiki/topics/preisanpassung-januar-2025.md": {
+              "results": 3,
+              "block": null,
+              "results_100": 3,
+              "block_100": null
+            }
+          }
+        },
+        "sh-03": {
+          "merged_ranks": {
+            "wiki/topics/kuendigungsfristen-alte-rechtslage.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sh-04": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-klassik.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sh-05": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "sh-06": {
+          "merged_ranks": {
+            "wiki/topics/kuendigungsfristen-alte-rechtslage.md": {
+              "results": 10,
+              "block": null,
+              "results_100": 10,
+              "block_100": null
+            }
+          }
+        },
+        "id-01": {
+          "merged_ranks": {
+            "wiki/concepts/sonderkuendigungsrecht.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "id-02": {
+          "merged_ranks": {
+            "wiki/concepts/versorgungsunterbrechung.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "id-03": {
+          "merged_ranks": {
+            "wiki/concepts/steuerbare-verbrauchseinrichtung.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "id-04": {
+          "merged_ranks": {
+            "wiki/concepts/netzentgelt.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "id-05": {
+          "merged_ranks": {
+            "wiki/concepts/marktlokation.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "id-06": {
+          "merged_ranks": {
+            "wiki/concepts/zaehlerstand.md": {
+              "results": null,
+              "block": 1,
+              "results_100": null,
+              "block_100": 1
+            }
+          }
+        },
+        "id-07": {
+          "merged_ranks": {
+            "wiki/entities/tarif-lindenstrom-klassik.md": {
+              "results": 6,
+              "block": null,
+              "results_100": 6,
+              "block_100": null
+            }
+          }
+        },
+        "id-08": {
+          "merged_ranks": {
+            "wiki/topics/neukundenbonus.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "id-09": {
+          "merged_ranks": {
+            "wiki/concepts/widerrufsrecht.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "id-10": {
+          "merged_ranks": {
+            "wiki/topics/lieferantenwechsel.md": {
+              "results": 2,
+              "block": null,
+              "results_100": 2,
+              "block_100": null
+            }
+          }
+        },
+        "id-11": {
+          "merged_ranks": {
+            "wiki/entities/stadtwerke-lindenau-vertrieb.md": {
+              "results": 1,
+              "block": null,
+              "results_100": 1,
+              "block_100": null
+            }
+          }
+        },
+        "ne-01": {
+          "merged_ranks": {}
+        },
+        "ne-02": {
+          "merged_ranks": {}
+        },
+        "ne-03": {
+          "merged_ranks": {}
+        },
+        "ne-04": {
+          "merged_ranks": {}
+        },
+        "ne-05": {
+          "merged_ranks": {}
+        },
+        "ne-06": {
+          "merged_ranks": {}
+        },
+        "ne-07": {
+          "merged_ranks": {}
+        }
+      }
+    }
+  },
+  "accepted_regressions": []
+}

@@ -209,6 +209,8 @@ Cluster und Begriffswelten sind bewusst getrennt:
 
 **Begriffswelten** bilden kontrolliertes Vokabular für Suche und Terminologie. Sie enthalten einen bevorzugten Begriff, Definitionen, Aliase und optionale Beziehungen zu übergeordneten oder verwandten Begriffen. Nur sie erweitern eine Anfrage um andere Wörter; Formen desselben Wortes, Kompositumteile und Tippfehler behandelt die Suche selbst (Abschnitt 5.4). Jede neue `CONCEPTS.md` nennt diese Regel. Steht in einer bestehenden `CONCEPTS.md` noch der alte Satz „Search may expand a query only through confirmed preferred terms and aliases.", meldet der Lint eine Warnung mit dem neuen Wortlaut. Sie blockiert keinen Release.
 
+Seiten-Aliase in der Sprache der Nutzer folgen drei Regeln: Wörter der Nutzer statt Wörter des Wikis (keine Wortformen), eindeutig im Fachgebiet, ein Alias auf genau einer Seite und vom Anwender bestätigt. Lint legt unter `stats.alias_review` häufige Alias-Wörter (in mindestens 10 % der Inhaltsseiten, mindestens 3) und mehrfach vergebene Aliase zur Bestätigung vor; das ist kein Fehler und blockiert keinen Release.
+
 Eine Änderung der Begriffswelt verschiebt keine Datei. Eine bestätigte Änderung des Primär-Clusters kann dagegen eine Seitenverschiebung auslösen. Der Skill schlägt Cluster und Begriffe mit Abgrenzung, Überlappungen und Beispielen vor und lässt den Anwender sie bestätigen, umbenennen, zusammenführen, teilen, neu einfärben, verknüpfen oder ablehnen.
 
 ### 4.7 Frontmatter-Vertrag
@@ -233,6 +235,8 @@ Abgelehnt werden unter anderem:
 - fehlerhafte Anführungszeichen.
 
 Fehler werden mit Zeilenbezug gemeldet. Der Skill rät bei nicht unterstütztem YAML nicht, sondern stoppt die betreffende Massenoperation oder Veröffentlichung.
+
+Ein einzelner Wert `aliases: Foo` statt einer Liste wird von der Suche als ein Alias gelesen; Lint warnt, bis er als Liste geschrieben ist.
 
 Eine typische Wiki-Seite verwendet beispielsweise:
 
@@ -409,14 +413,16 @@ Der Pflege-Skill kann einen verifizierten Release als eigenständigen Wissens-Sk
 - ist unveränderlich und nicht selbstpflegend;
 - besitzt keinen Ingest-, Pflege-, Release-, Lock- oder Restore-Code;
 - enthält nur Verifikation, Suche und Qualitätsbewertung sowie benötigte read-only Bibliotheken; welche das sind, ermittelt der Exporter aus den Importen selbst; mitkommen darf nur, was auf seiner Liste geprüfter lesender Bibliotheken steht, und jeder Import der Standardbibliothek muss auf einer zweiten geprüften Liste stehen, sodass weder ein Pflegewerkzeug noch schreibender Code in einen Export gelangt; ein neuer Import ohne Prüfung wird mit Namen abgelehnt statt stillschweigend vergessen;
-- wird erst gemeldet, wenn jedes mitgelieferte Werkzeug im erzeugten Ordner fehlerfrei gelaufen ist, auch die Suche mit Metadatenfilter; scheitert das oder irgendein späterer Schritt, werden Ordner und Paket wieder entfernt;
-- sucht mit demselben Suchkern wie der Lese-Skill (`search_core.py` mit `bm25.py` und `wordforms.py`, byte-identisch) und liefert auf demselben Release dieselbe Rangliste, dieselben Wortformen und dasselbe Zählwerk (Abschnitt 5.4); Ergebnispfade beginnen mit `references/knowledge/`, und weil die Historie nicht zum Abzug gehört, weist das Zählwerk sie als nicht mitgeliefert aus;
+- wird erst gemeldet, wenn jedes mitgelieferte Werkzeug im erzeugten Ordner fehlerfrei gelaufen ist, auch die Suche mit Metadatenfilter; der Selbsttest ruft die Suche auch mit einer JSON-Anfrage über die Standardeingabe auf; scheitert das oder irgendein späterer Schritt, werden Ordner und Paket wieder entfernt;
+- sucht mit demselben Suchkern wie der Lese-Skill (`search_core.py` mit `bm25.py` und `wordforms.py`, byte-identisch) und liefert auf demselben Release dieselbe Rangliste, dieselben Wortformen und dasselbe Zählwerk (Abschnitt 5.4) und nimmt wie der Lese-Skill Umformulierungen an (`--also`, `--request -`); Ergebnispfade beginnen mit `references/knowledge/`, und weil die Historie nicht zum Abzug gehört, weist das Zählwerk sie als nicht mitgeliefert aus;
 - erzeugt seine `SKILL.md` aus der Vorlagendatei `assets/knowledge-skill/SKILL.template.md`, in der nur Name und Beschreibung ersetzt werden; sie weist den Agenten an, die Werkzeuge mit vollem Pfad aus dem eigenen Skill-Ordner aufzurufen und das Zählwerk nach festen Regeln zu lesen;
 - bindet alle Inhalte über das ursprüngliche Release-Manifest;
 - enthält keine absoluten Quellpfade, Tokens oder transienten Locks;
 - wird als Skill-Ordner und `.skill`-Paket erzeugt.
 
 Soll der Inhalt aktualisiert werden, wird das kanonische Wiki gepflegt und veröffentlicht. Danach wird ein neuer eingefrorener Skill-Abzug erstellt; der alte Export wird nicht direkt bearbeitet.
+
+**Skalare Aliase:** Neu exportierte Wissens-Skills lesen einen einzelnen Wert `aliases: Foo` als einen Alias, wie der Lese-Skill. Bereits installierte Exporte ignorieren ihn, bis sie neu exportiert werden. Für Wikis, die Aliase als Liste schreiben, ändert sich die Rangliste nicht.
 
 **Verhaltensänderung der exportierten Suche:** Exporte vor der Einführung des gemeinsamen Suchkerns rankten mit einer eigenen, additiven Heuristik ohne BM25. Neu exportierte Wissens-Skills ranken wie der Lese-Skill; bereits installierte Exporte behalten ihr altes Verhalten, bis sie neu exportiert werden. Auf dem Test-Wiki des Präzisionstors fand die alte Heuristik knapp mehr: 49, 58 und 64 statt 47, 57 und 62 von 107 Fragen unter den ersten 3, 12 und 100, bei 17 statt 20 Top-3-Plätzen für Navigationsseiten und gleich vielen Treffern für fehlende Themen (16). Der Wechsel ist trotzdem gewollt: Es gibt nur noch eine Suche, die das Präzisionstor misst, und jede Verbesserung erreicht beide Skills.
 
@@ -664,7 +670,13 @@ Was die Schicht nicht kann: Synonyme, Umschreibungen, andere Sprachen und unrege
 
 Gemessen auf dem Test-Wiki des Präzisionstors (107 beantwortbare Fragen) stieg die Zahl der Fragen mit einer Pflichtseite auf Rang 1 von 41 auf 56. Vollständig gefunden wurden unter den ersten 3 nun 64 statt 47 Fragen, unter den ersten 12 74 statt 57 und unter den ersten 100 84 statt 62. Je Kategorie unter den ersten 12: Flexion 8 statt 3 von 8, Komposita 6 statt 4 von 8, Tippfehler 6 statt 1 von 8, Umlaut-Schreibung 7 statt 6 von 7. Der Preis: Die sieben Fragen zu Themen, die das Wiki nicht enthält, liefern unter den ersten 12 zusammen 31 statt 16 Treffer, unter den ersten 100 41 statt 16. Navigationsseiten belegen 13 statt 20 Top-3-Plätze. Von 124 Pflichtseiten rückten 43 vor, 4 fielen zurück und 77 blieben, wo sie waren. Nur eine verlor dabei einen Platz unter den ersten 3 (br-05, Rang 3 auf 4); sie steht mit Begründung in `accepted_regressions`. Die drei anderen blieben in ihren Bändern: in-05 von Rang 5 auf 10, pa-07 von 15 auf 21, sh-06 von 8 auf 10. Eine Suche dauerte auf dem Test-Wiki im Mittel 47 statt 34 Millisekunden, auf einer 500-Seiten-Kopie 413 statt 341 und mit 7,7 MB Quell-Markdown 1,03 statt 0,91 Sekunden.
 
-**Zählwerk: was die Trefferliste nicht zeigt.** Jede Suchausgabe trägt einen Block `coverage` (Format `lmwiki-search-coverage/2`). Er ergänzt nur Schlüssel; welche Treffer in welcher Reihenfolge und mit welchem Score zurückkommen, ändert er nicht. Seit Format 2 zählen die Formen eines Wortes mit; Format 1 zählte nur das Wort selbst. Er zählt, was sonst still verloren ginge:
+**Umformulierungen in einem Aufruf.** Die Suche ist lexikalisch; Synonyme, Umschreibungen und andere Sprachen steuert der Agent bei. Mit `--also` (bis zu viermal, je höchstens 200 Zeichen) oder `--request -` (ein JSON-Objekt `{"query", "also", "filter"}` über die Standardeingabe) sucht ein Aufruf die Frage und bis zu vier Umformulierungen in einem Prozess, über einen verifizierten Release und einen einmal eingelesenen Korpus. `results` bleibt genau die Rangliste der Frage; jeder Treffer nennt in `found_by`, welche Suche ihn auf welchem Rang fand. Seiten, die nur Umformulierungen innerhalb des Limits fanden, stehen getrennt in `reformulation_results`, reihum nach Rang gezogen, ohne Navigationsseiten, mit eigenem Limit. Der Agent bestätigt sie auf der Seite, bevor er sie verwendet, nennt jede Umformulierung in der Antwort, und eine Seite aus diesem Block allein hebt eine Fehlanzeige nie auf. Gleiche (nach Groß-/Kleinschreibung, Akzenten, Satzzeichen) und leere Umformulierungen werden nicht gesucht und in `dropped_formulations` genannt.
+
+Reihum heißt: erst Rang 1 jeder Umformulierung, dann Rang 2 und so weiter. Scores verschiedener Suchen sind nicht vergleichbar, Ränge schon. Eine Seite, die die Frage schon unter ihren Treffern hat, kommt nicht noch einmal; `found_by` zeigt dann, dass auch Umformulierungen sie fanden. Ungültige Eingaben lehnt die Hülle ab, bevor sie das Wiki anfasst: mehr als vier Umformulierungen, eine über 200 Zeichen, unbekannte Schlüssel, doppelte Schlüssel, kein UTF-8, ein einzelnes Surrogat-Escape, unterwegs umkodierter Text (Abschnitt 9). Dann steht nichts auf der Standardausgabe, eine Zeile auf der Fehlerausgabe, und der Exit-Code ist 1. Ein Wert, der mit `-` beginnt, wird als `--also=<Wert>` übergeben.
+
+Gemessen auf dem Test-Wiki mit zwei Sätzen von Umformulierungen, die Agenten blind geschrieben haben (sie kannten nur die Fragen, nie das Wiki, je bis zu vier pro Frage): Die Rangliste und das Zählwerk der Frage blieben in allen 228 Läufen unverändert. Als vollständig gefunden zählt eine Frage, wenn jede Pflichtseite unter den ersten N Treffern der Frage oder unter den ersten N Einträgen von `reformulation_results` steht. Diese Sicht umfasst bis zu 2N Seiten, im Mittel 5,3 bei N = 3 und rund 16 bei N = 12; der Vergleichswert ohne Umformulierungen zählt nur die N Treffer. So gezählt waren von den 107 beantwortbaren Fragen unter den ersten 3 nun 86 statt 64 vollständig gefunden (beide Sätze), unter den ersten 12 99 und 98 statt 74, unter den ersten 100 99 statt 84. Bei gleich vielen gelesenen Seiten, abwechselnd aus beiden Listen (Treffer 1, Block 1, Treffer 2, Block 2 und so weiter), sind es 83 statt 64 unter den ersten 3 und 89 statt 74 unter den ersten 12, in beiden Sätzen. In der Sicht aus beiden Listen gewannen unter den ersten 12 am meisten Fragen in anderer Sprache (8 statt 1 von 8), Umschreibungen (8 statt 3 von 8), freie Synonyme (8 statt 4 von 8), Komposita (8 statt 6 von 8), Tippfehler (8 statt 6 von 8) und breite Fragen (5 und 4 statt 1 von 5). Die acht Fragen, die nur die Quellen beantworten, fehlen ohne `--include-sources` weiter; mit dem Schalter findet sie schon die Frage allein unter den ersten 3. Der Preis: Für die sieben Fragen zu Themen, die das Wiki nicht enthält, liefert der Block 41 und 45 Seiten, bei 6 und 7 von 7 Fragen ist er nicht leer. Nur rund 6 Prozent der Block-Einträge beantwortbarer Fragen sind Seiten, die die Testdaten als passend führen. Deshalb gilt eine Seite aus dem Block erst als gefunden, wenn der Agent sie gelesen hat. Navigationsseiten im Block: 0. Ein Aufruf mit den Umformulierungen aus Satz A (meist vier) dauerte auf dem Test-Wiki im Mittel 48 statt 34 Millisekunden; die Frage und jede Umformulierung einzeln gesucht brauchten zusammen 164. Auf einer Kopie mit rund 4.500 Wiki-Seiten und 1.100 Quellen dauerte er etwa 3,1 Sekunden, fünf einzelne Aufrufe des bisherigen Suchkerns rund 19 Sekunden. Die einzelne Suche wurde schneller, weil Ausschnitte und Claims nur noch für ausgegebene Treffer entstehen: dort 2,8 statt 4,4 Sekunden. Die JSON-Ausgabe wird mit vier Umformulierungen etwa doppelt so groß (im Mittel 50 statt 24 KB). Die Sätze stammen aus derselben Modellfamilie, mit der sie gemessen werden; die Zahlen sind daher eher zu günstig.
+
+**Zählwerk: was die Trefferliste nicht zeigt.** Jede Suchausgabe trägt einen Block `coverage` (Format `lmwiki-search-coverage/3`). Er ergänzt nur Schlüssel; welche Treffer in welcher Reihenfolge und mit welchem Score zurückkommen, ändert er nicht. Format 3 zählt zusätzlich je Suche, also für die Frage und jede Umformulierung; Format 2 zählte die Formen eines Wortes mit; Format 1 zählte nur das Wort selbst. Er zählt, was sonst still verloren ginge:
 
 | Feld | Bedeutung |
 |---|---|
@@ -676,6 +688,9 @@ Gemessen auf dem Test-Wiki des Präzisionstors (107 beantwortbare Fragen) stieg 
 | `unmatched_terms` | Wörter der Frage, die in keiner durchsuchten Datei zählen, auch in keiner ihrer Formen; eine Form, die nur auf Navigationsseiten steht, zählt nicht |
 | `form_only_terms` | Wörter der Frage, die nur über eine andere Form, einen Kompositumteil oder eine Tippfehlerkorrektur getroffen haben, nie wörtlich |
 | `terms_only_in_unsearched.sources` | Suchwörter, die selbst oder in einer Wortform nur in den nicht durchsuchten Quellen stehen; ein Kompositum- oder Tippfehlertreffer im Wiki gilt dabei nicht als das Wort |
+| `formulations` | je Suche (0 ist die Frage) `matched`, `within_limit`, `truncated`, `contributed` (wie viele Einträge in `reformulation_results` diese Suche innerhalb des Limits fand), dazu ihre `query_terms` ohne `forms`, `dropped_terms`, `unmatched_terms`, `form_only_terms` und `terms_only_in_unsearched`; Eintrag 0 stimmt mit den Werten der Frage überein |
+| `reformulation_results` | Zählung des Blocks: `returned`, `candidates`, `truncated`, `omitted_count`, `omitted_top` (höchstens 20 mit Pfad, Umformulierung und Rang), `navigation_skipped` und ein fester Satz, dass der Block weder Abdeckung noch Fehlen beweist |
+| `found_by` (am Treffer) | jede Suche, die die Seite fand, mit ihrem Rang dort; der erste Eintrag eines Treffers in `results` ist immer die Frage mit seinem Rang |
 | `boundary` | fester Satz: Die Zahlen beschreiben Übereinstimmungen der genannten Wörter samt den unter `forms` genannten Formen und ausgewiesenen Kompositum- und Tippfehlertreffern und beweisen nicht, dass das Thema fehlt; andere Wörter, unregelmäßige Formen und andere Sprachen zählen nicht mit |
 
 Jeder Treffer nennt zusätzlich `matched_terms` (welche Suchwörter auf dieser Seite getroffen haben), `match_rules` (je Suchwort die Wörter dieser Seite, die gezählt haben, mit Regel und Gewicht), `claims_total` und `claims_returned` (pro Seite kommen höchstens acht Claims zurück) sowie `navigation` für `WIKI.md`, jede `index.md` und `meta/questions.md`. Navigationsseiten bleiben in der Rangliste, damit sich das Ranking nicht ändert, werden aber nie als Beleg zitiert. Die Wortzählungen ignorieren einen Metadatenfilter; wie viele Dateien er ausgeschlossen hat, steht in `filtered_out`.
@@ -786,7 +801,7 @@ Für die Suche nennt der Katalog alle Parameter, die der Helfer annimmt, auch `-
 1. Lese-Skill mit Wiki-Verzeichnis und Frage ansprechen.
 2. Release und Qualitätsstatus werden intern geprüft.
 3. `SOUL.md`, Profil, Index und Begriffswelten werden berücksichtigt.
-4. Relevante Claims und Quellenstellen werden vollständig gelesen.
+4. Der Agent formuliert die Frage bei Bedarf in der Wiki-Sprache um (höchstens vier Umformulierungen). Relevante Claims und Quellenstellen werden vollständig gelesen.
 5. Die Antwort nennt Unsicherheit, Konflikte und Quellen nachvollziehbar.
 6. Eine zweite Release-Prüfung verhindert eine Antwort aus einem veränderten Mischstand.
 
@@ -882,7 +897,9 @@ Zwei Zusagen gelten für jeden Helfer, den ein Agent direkt aufruft, auch für d
 - **Eigener Suchpfad.** Jeder Helfer setzt sein eigenes Verzeichnis an den Anfang von `sys.path`, bevor er ein Nachbarmodul importiert. Er läuft deshalb auch unter `python -I`, das Sicherheitsleitfäden für Code aus entpackten Archiven empfehlen, sowie ab Python 3.11 unter `python -P` und `PYTHONSAFEPATH=1`. Diese Modi nehmen das Skriptverzeichnis vom Suchpfad; vorher brach dann jeder Helfer mit Nachbarmodulen mit `ModuleNotFoundError` ab. Der Selbsttest des Exporters ruft die exportierten Werkzeuge mit `PYTHONSAFEPATH=1` auf.
 - **UTF-8-Ausgabe.** Jeder Helfer stellt beim Start Standardausgabe und Standardfehler auf UTF-8 um, sofern der Datenstrom das erlaubt. Unter Windows schreibt Python umgeleitete Ausgabe sonst in der ANSI-Codepage, und schon ein Zeichen wie „≥" in einer Seite brach die JSON-Ausgabe ab. Helfer, die andere Helfer aufrufen, lesen deren Ausgabe ebenfalls als UTF-8.
 
-`tests/test_entrypoints.py` prüft beides für jeden Einstieg statisch, ruft die Suche beider Skills mit `python -I` auf und liest ihre Ausgabe über eine simulierte cp1252-Umleitung.
+`tests/test_entrypoints.py` prüft beides für jeden Einstieg statisch, ruft die Suche beider Skills mit `python -I` auf, liest ihre Ausgabe über eine simulierte cp1252-Umleitung und schickt beiden eine Anfrage über die Standardeingabe in derselben Umgebung.
+
+**Anfrage über die Standardeingabe.** `--request -` liest Bytes, entfernt ein UTF-8-BOM, erkennt UTF-16 und lehnt Nicht-UTF-8 ab. Windows PowerShell 5.1 macht aus Nicht-ASCII-Zeichen in einer Pipe „?"; deshalb schreibt der Agent sie als `\u00fc`-Escapes. Ein „?" direkt vor einem Buchstaben (aus „Kündigung" wird „K?ndigung", aus „Ökostrom" „?kostrom") oder U+FFFD gilt als unterwegs umkodiert und wird abgelehnt. Ein beschädigtes Zeichen am Wortende (aus „süß" wird „s??") fällt dabei nicht auf; verlässlich schützen nur die Escapes. Abgelehnt wird auch ein einzelnes Surrogat-Escape (`\ud800` bis `\udfff` ohne Partner), weil keine UTF-8-Ausgabe es tragen kann. Exit 2 ohne Ausgabe ist ein Aufruffehler, Exit 2 mit Release-JSON `wiki_busy`.
 
 Der konkrete Aufruf der Helfer ist Aufgabe des ausführenden Agenten. Unter Claude Code dient `${CLAUDE_SKILL_DIR}` zur Auflösung des Skill-Verzeichnisses; andere Agent-Skills-Hosts lösen Dateien relativ zur geladenen `SKILL.md` auf.
 
@@ -948,6 +965,7 @@ Beispiele für den Lese-Skill:
 - „Vergleiche die historische und die aktuelle Regelung.“
 - „Welche Frontmatter-Felder kann ich für Filter verwenden?“
 - „Wie aktuell sind Qualitäts- und Cleaning-Prüfung?“
+- „Die Frage ist auf Englisch – antworte trotzdem aus dem deutschen Wiki.“
 
 ## 11. Funktionskatalog des Pflege-Skills
 
@@ -964,7 +982,7 @@ Beispiele für den Lese-Skill:
 | Restore anwenden | Bestätigte Dateien wiederherstellen | Recovery-Snapshot, Hash-Schutz |
 | Seite verschieben | Pfad ändern und interne Links nachführen | Vorschau-Hash, Bestätigung, Snapshot |
 | Sprachmigration planen | Vollständige Auswirkung ermitteln | Keine Teilmigration |
-| Lint | Struktur und Verträge prüfen | Nur sichere deterministische Reparaturen |
+| Lint | Struktur und Verträge prüfen; Alias-Statistik zur Bestätigung | Nur sichere deterministische Reparaturen |
 | Graph bauen | Graphdaten, HTML-Leseansichten und Gruppenübersichten erzeugen | Nur abgeleitete Dateien |
 | Review aufzeichnen | Tatsächliche Qualitäts-/Cleaning-Prüfung dokumentieren | Kein erfundener Zeitstempel |
 | Release | Version, Protokoll, Qualität und Manifest veröffentlichen | Strikter Lint, Manifest zuletzt |
@@ -985,7 +1003,7 @@ Beispiele für den Lese-Skill:
 | Release verifizieren | Status, Version, Release-ID und Manifest-Hash | Nein |
 | Qualität beurteilen | Lint-, Review-, Cleaning-, Fragen- und Altersstatus | Nein |
 | Frontmatter inventarisieren | Felder, Typen, Beispiele und Drift | Nein |
-| Suchen und filtern | BM25-gerankte Ergebnisse, Claims, Quellen, Facetten, Vertrauensstufe und überschrittenes Ablaufdatum | Nein |
+| Suchen und filtern | BM25-gerankte Ergebnisse, Claims, Quellen, Facetten, Vertrauensstufe und überschrittenes Ablaufdatum, Umformulierungen in einem Aufruf (`--also`, `--request -`) | Nein |
 
 Der maschinenlesbare Aktionskatalog beider Skills dient der Selbsterkennung durch Agenten. Er erweitert keine Rechte und umgeht keine Bestätigung.
 
@@ -1025,7 +1043,7 @@ Die Skills sind absichtlich konservativ:
 - OneDrive- und SharePoint-Synchronisation ersetzen keine globale Transaktions- oder Lock-Datenbank.
 - Ein eingefrorener Wissens-Skill kennt nur seinen enthaltenen Release und kann nicht feststellen, ob das kanonische Wiki inzwischen weiterentwickelt wurde.
 - Metadatenfilter grenzen Suchmengen ein, beweisen aber weder Wahrheit noch Vollständigkeit.
-- Die Suche ist lexikalisch: Sie findet Wörter und ihre regelmäßigen Formen, keine Bedeutungen. Synonyme, die weder als Seiten-Alias noch in einer Begriffswelt hinterlegt sind, Umschreibungen, andere Sprachen und unregelmäßige Formen gehen meist verloren, und ein leeres Ergebnis beweist nicht, dass ein Thema fehlt. Kompositumteile und Tippfehlerkorrekturen sind Heuristiken und können danebenliegen; jeder Treffer nennt deshalb seine Regel. Gemessene Lücken und ein Stufenplan ohne Embedding-Suche stehen in [docs/bedeutungssuche-und-vollstaendigkeit.md](docs/bedeutungssuche-und-vollstaendigkeit.md).
+- Die Suche ist lexikalisch: Sie findet Wörter und ihre regelmäßigen Formen, keine Bedeutungen. Synonyme, Umschreibungen und andere Sprachen erreichen die Suche nur über Seiten-Aliase, Begriffswelten und die Umformulierungen des Agenten; Treffer nur aus Umformulierungen sind so gut wie diese und werden getrennt ausgewiesen. Ein leeres Ergebnis beweist nicht, dass ein Thema fehlt. Kompositumteile und Tippfehlerkorrekturen sind Heuristiken und können danebenliegen; jeder Treffer nennt deshalb seine Regel. Gemessene Lücken und ein Stufenplan ohne Embedding-Suche stehen in [docs/bedeutungssuche-und-vollstaendigkeit.md](docs/bedeutungssuche-und-vollstaendigkeit.md).
 - Automatische Strukturprüfungen ersetzen kein fachliches Review durch einen zuständigen Menschen.
 - Die Erkennung einer synchronisierten Ablage ist eine Heuristik auf Pfadnamen und Umgebungsvariablen; es gibt keine unterstützte Schnittstelle zum Zustand eines Sync-Clients.
 - Ob eine veröffentlichte Datei die Ablage erreicht hat, kann der Skill nicht feststellen — nur prüfen und warnen.
@@ -1038,7 +1056,7 @@ Die Skills sind absichtlich konservativ:
 README.md
 docs/                          Analysen und Umsetzungspläne
 tests/                         Testsuite; python3 tests/run_tests.py
-tests/fixtures/search_quality/ Test-Wiki, Fragen und Erwartungen des Präzisionstors
+tests/fixtures/search_quality/ Test-Wiki, Fragen, Umformulierungen und Erwartungen beider Tore
 tools/package_skills.py        baut die .skill-Pakete reproduzierbar
 maintain-llm-wiki.skill
 maintain-llm-wiki/
@@ -1066,6 +1084,16 @@ Zur Testsuite gehört ein Präzisionstor für die Suche. `tests/fixtures/search_
 - Navigationsseiten mehr als 13 Top-3-Plätze belegen.
 
 Eine bewusst hingenommene Verschlechterung steht mit Begründung in `accepted_regressions`. Nennt der Eintrag `accepted_rank`, gilt die Seite ab dann mit diesem Rang: Verlässt sie später das Band dieses Rangs (bei Rang 4 die ersten 12), schlägt das Tor wieder an. `tests/fixtures/search_quality/record_expectations.py` zeichnet die Erwartungen neu auf. Das ist eine bewusste Entscheidung, die die Messlatte für alle späteren Änderungen verschiebt; sie gehört mit Begründung in die Commit-Nachricht.
+
+Ein zweites Tor misst die Umformulierungen. `reformulations.json` enthält zwei Sätze mit je bis zu vier Umformulierungen für jede der 114 Fragen. Agenten haben sie blind geschrieben: Sie kannten nur die Fragen, nie das Wiki, so wie ein echter Lese-Agent. `reformulation_expectations.json` hält je Satz fest, wo jede Pflichtseite in `results` und in `reformulation_results` stand. Die Klasse `ReformulationGate` in `tests/test_search_quality.py` stellt jede Frage einmal je Satz mit dessen Umformulierungen und schlägt fehl, wenn
+
+- Umformulierungen die Treffer oder das Zählwerk der Frage selbst verändern (hart),
+- weniger Fragen zusammen mit dem Block vollständig gefunden werden als aufgezeichnet (heute je Satz 86 unter den ersten 3, 99 und 98 unter den ersten 12, 99 unter den ersten 100),
+- eine Pflichtseite ihren Platz unter den ersten 3 oder 12 verliert, wobei der bessere Wert aus Rang in `results` und Position im Block zählt,
+- der Block der sieben Fragen zu fehlenden Themen größer wird (heute 41 und 45 Einträge) oder
+- eine Navigationsseite in den Block gerät (hart).
+
+`record_expectations.py --reformulations` zeichnet dieses Tor neu auf. Die Sätze stammen aus derselben Modellfamilie, mit der gemessen wird, die Zahlen sind daher eher zu günstig. Sie sind ein Regressionstor, nie ein Ziel, auf das die Suche abgestimmt wird. Ein Satz wird nie geändert, damit das Tor besteht; stattdessen kommt ein neuer Satz hinzu, und die Commit-Nachricht sagt, warum.
 
 Die Dateien unter `scripts/` sind interne, deterministische Skill-Ressourcen. `references/` enthält die ausführlichen Verträge und Arbeitsregeln. `evals/evals.json` beschreibt repräsentative Prüfszenarien für die Weiterentwicklung und bleibt außerhalb des installierbaren Archivs. Die beiden `.skill`-Dateien sind die installierbaren ZIP-basierten Pakete mit jeweils genau einem Skill-Ordner als Archivwurzel.
 

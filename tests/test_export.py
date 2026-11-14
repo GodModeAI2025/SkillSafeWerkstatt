@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "maintain-llm-wiki" / "scripts"))
 
 import export_wiki_skill  # noqa: E402
+import search_core  # noqa: E402
 from harness import MAINTAIN, REPO, build_wiki  # noqa: E402
 
 
@@ -152,13 +153,34 @@ class ExportedSkillRuns(unittest.TestCase):
                 self.assertEqual(info.date_time, expected)
                 self.assertEqual(info.external_attr, 0o100644 << 16)
 
-    def exported_search(self, *arguments: str) -> subprocess.CompletedProcess:
+    def exported_search(self, *arguments: str, stdin: bytes = b"") -> subprocess.CompletedProcess:
         return subprocess.run(
             [sys.executable, "-B", "-S", "-s", str(self.skill / "scripts" / "search_knowledge.py"), *arguments],
             capture_output=True,
+            input=stdin,
             cwd=str(self.tmp),
             env=clean_environment(),
         )
+
+    def test_the_exported_search_reads_a_request_from_stdin(self) -> None:
+        """--request - takes query, reformulations and filter as one JSON object, BOM and escapes included."""
+        request = b'\xef\xbb\xbf{"query": "Testwiki", "also": ["\\u00dcberblick", "TESTWIKI!"], "filter": {"kind": "all"}}'
+        piped = self.exported_search("--request", "-", stdin=request)
+        self.assertEqual(piped.returncode, 0, piped.stderr.decode("utf-8", errors="replace"))
+        report = json.loads(piped.stdout.decode("utf-8"))
+        flags = self.exported_search("--query", "Testwiki", "--also", "Überblick", "--also", "TESTWIKI!")
+        self.assertEqual(flags.returncode, 0, flags.stderr.decode("utf-8", errors="replace"))
+        expected = json.loads(flags.stdout.decode("utf-8"))
+        self.assertEqual(report, expected)
+        self.assertEqual([item["text"] for item in report["formulations"]], ["Testwiki", "Überblick"])
+        self.assertEqual(
+            report["dropped_formulations"],
+            [{"position": 2, "text": "TESTWIKI!", "reason": "duplicate", "duplicate_of": 0}],
+        )
+        both = self.exported_search("--request", "-", "--filter-json", '{"kind":"all"}', stdin=request)
+        self.assertEqual(both.returncode, 1)
+        self.assertEqual(both.stdout, b"")
+        self.assertIn(b"filter is given both in the request and as --filter-json", both.stderr)
 
     def test_the_exported_search_ranks_like_the_query_skill(self) -> None:
         """One shared core: same paths, order, scores, word forms, and coverage counts."""
@@ -166,6 +188,7 @@ class ExportedSkillRuns(unittest.TestCase):
             ("--query", "Wiki"),
             ("--query", "Testwiki Überblick", "--include-sources", "--limit", "100"),
             ("--query", "Testwikis Ueberblicke Wikiseiten", "--limit", "100"),
+            ("--query", "Testwiki", "--also", "Überblick", "--also", "Fragen", "--limit", "1"),
         ):
             with self.subTest(arguments=arguments):
                 exported = self.exported_search(*arguments)
@@ -191,15 +214,25 @@ class ExportedSkillRuns(unittest.TestCase):
                 )
                 for key in (
                     "format", "matched", "returned", "truncated", "omitted_count", "query_terms", "unmatched_terms",
-                    "form_only_terms",
+                    "form_only_terms", "formulations",
                 ):
                     self.assertEqual(report["coverage"][key], expected["coverage"][key], key)
+                self.assertEqual(
+                    [item["found_by"] for item in report["results"]], [item["found_by"] for item in expected["results"]]
+                )
+                self.assertEqual(
+                    [(item["path"][len(prefix):], item["via"], item["found_by"]) for item in report["reformulation_results"]],
+                    [(item["path"], item["via"], item["found_by"]) for item in expected["reformulation_results"]],
+                )
+                self.assertEqual(report["formulations"], expected["formulations"])
+                if "--also" in arguments:
+                    self.assertTrue(report["reformulation_results"], "the case must exercise the block")
 
     def test_the_exported_coverage_says_history_is_not_shipped(self) -> None:
         exported = self.exported_search("--query", "Wiki", "--limit", "1")
         self.assertEqual(exported.returncode, 0, exported.stderr.decode("utf-8", errors="replace"))
         coverage = json.loads(exported.stdout.decode("utf-8"))["coverage"]
-        self.assertEqual(coverage["format"], "lmwiki-search-coverage/2")
+        self.assertEqual(coverage["format"], search_core.COVERAGE_FORMAT)
         self.assertEqual(
             coverage["scopes"]["history"],
             {"searched": False, "shipped": False, "files": None, "files_with_a_query_term": None},
@@ -234,6 +267,9 @@ class ExportedSkillRuns(unittest.TestCase):
             "truncated", "claims_returned", "claims_total", "unmatched_terms",
             "terms_only_in_unsearched.sources", "--include-sources", "coverage.boundary",
             "match_rules", "form_only_terms", "typo",
+            "--also", "--request -", "reformulation_results", "found_by", "\\uXXXX", "at most four reformulations",
+            "200 characters", "Never let `reformulation_results` alone defeat an absence finding",
+            "List every reformulation that was searched", "references/knowledge/schema/WIKI_PROFILE.md",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
@@ -433,6 +469,18 @@ class ExportRefusesABrokenSkill(unittest.TestCase):
         )
         result = export(self.exporter, self.wiki.path, self.tmp / "out")
         self.assert_refused(result, "self-check")
+
+    def test_the_self_check_covers_the_request_path(self) -> None:
+        """SKILL.md routes Windows and quoted text through --request -; that path must run too."""
+        core = self.skill_copy / "scripts" / "search_core.py"
+        text = core.read_text(encoding="utf-8")
+        anchor = "def request_from_stdin(stream: Any) -> dict[str, Any]:\n"
+        self.assertIn(anchor, text)
+        broken = anchor + '    raise RuntimeError("request path is broken")\n'
+        core.write_text(text.replace(anchor, broken, 1), encoding="utf-8")
+        result = export(self.exporter, self.wiki.path, self.tmp / "out")
+        self.assert_refused(result, "self-check")
+        self.assertIn("request path is broken", result.stderr)
 
     @unittest.skipIf(sys.version_info < (3, 11), "PYTHONSAFEPATH exists from Python 3.11")
     def test_a_template_that_relies_on_the_script_folder_fails_the_self_check(self) -> None:

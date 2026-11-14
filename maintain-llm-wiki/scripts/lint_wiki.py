@@ -26,6 +26,7 @@ from design_contract import CLUSTER_COLORS
 
 import freshness
 import navigation
+import search_core
 import secret_screen
 import sync_artifacts
 import trust_contract
@@ -329,6 +330,109 @@ def expansion_rule_notice(path: Path) -> Optional[str]:
         f"schema/CONCEPTS.md still states the old expansion rule {OLD_EXPANSION_RULE!r}; "
         f"replace that sentence with: {EXPANSION_RULE!r}"
     )
+
+
+#: Shape of the alias review statistic in the lint report.
+ALIAS_REVIEW_FORMAT = "lmwiki-alias-review/1"
+
+
+def common_threshold(content_pages: int) -> int:
+    """From how many content pages on an alias word counts as common: a tenth of them, at least 3."""
+    return max(3, -(-content_pages // 10))
+
+
+def alias_review(
+    target: Path, wiki_files: list[Path], concept_definitions: dict[str, dict[str, str]]
+) -> dict[str, Any]:
+    """Alias words that many content pages use, and page aliases given to more than one page.
+
+    A statistic for the user to confirm, never an error or a warning: an alias
+    word that occurs in many pages lifts its page or concept for unrelated
+    questions, and an alias on several pages has no single page that should
+    rank first. Words are counted with the search's own tokenization and word
+    forms (exact, fold, stem, verb), never with compound or typo heuristics.
+    """
+    content: list[tuple[str, dict[str, Any], set[str]]] = []
+    for path in wiki_files:
+        relative = path.relative_to(target).as_posix()
+        if search_core.is_navigation(relative):
+            continue
+        try:
+            document = search_core.read_document(path, relative, forms=True)
+        except (FrontmatterError, ValueError, OSError):
+            continue  # Already reported as a page error.
+        own = set().union(*(words for field, words in document["fields"].items() if field != "aliases"))
+        content.append((relative, document["data"], own))
+    pages = len(content)
+    threshold = common_threshold(pages)
+
+    checked: list[tuple[str, str, str, str]] = []
+    shared: dict[str, dict[str, Any]] = {}
+    for relative, data, _own in content:
+        for alias in search_core.alias_values(data.get("aliases")):
+            for word in search_core.tokens(alias, drop_stopwords=False, forms=True):
+                if word not in search_core.FORM_STOPWORDS and len(word) > 1:
+                    checked.append((word, alias, "page", relative))
+            key = " ".join(search_core.tokens(alias, drop_stopwords=False))
+            if key:
+                entry = shared.setdefault(key, {"alias": alias, "pages": set()})
+                entry["pages"].add(relative)
+    for concept_id, definition in sorted(concept_definitions.items()):
+        if definition.get("status") != "active":
+            continue
+        for alias in split_pipe(definition.get("aliases", "")):
+            words = search_core.tokens(alias, drop_stopwords=False, forms=True)
+            # A concept alias of several words matches only as the whole phrase.
+            if len(words) == 1 and words[0] not in search_core.FORM_STOPWORDS and len(words[0]) > 1:
+                checked.append((words[0], alias, "concept", f"schema/CONCEPTS.md#{concept_id}"))
+
+    members = search_core.layer_members(
+        sorted({word for word, _, _, _ in checked}), [own for _, _, own in content], True
+    )
+    common: dict[tuple[str, str], dict[str, Any]] = {}
+    for word, alias, source, where in checked:
+        if (word, where) in common:
+            continue
+        found = sum(1 for _, _, own in content if not members[word].isdisjoint(own))
+        if found < threshold:
+            continue
+        common[(word, where)] = {
+            "word": word,
+            "alias": alias,
+            "source": source,
+            "where": where,
+            "pages_with_word": found,
+            "message": (
+                f"alias word '{word}' ({alias!r} on {where}) occurs in {found} of {pages} content pages; a common "
+                "word as an alias lifts this page or concept for many unrelated questions. Confirm it with the "
+                "user, narrow it, or remove it."
+            ),
+        }
+    shared_aliases = []
+    for key in sorted(shared):
+        holders = sorted(shared[key]["pages"])
+        if len(holders) < 2:
+            continue
+        alias = shared[key]["alias"]
+        shared_aliases.append(
+            {
+                "alias": alias,
+                "pages": holders,
+                "message": (
+                    f"alias {alias!r} is on {len(holders)} pages ({', '.join(holders)}); give it to the one page "
+                    "that should rank first, or move it to a concept in schema/CONCEPTS.md."
+                ),
+            }
+        )
+    return {
+        "format": ALIAS_REVIEW_FORMAT,
+        "content_pages": pages,
+        "common_threshold_pages": threshold,
+        "common_alias_words": sorted(
+            common.values(), key=lambda entry: (-entry["pages_with_word"], entry["word"], entry["where"])
+        ),
+        "shared_aliases": shared_aliases,
+    }
 
 
 def load_concepts(path: Path, errors: list[str]) -> dict[str, dict[str, str]]:
@@ -716,6 +820,16 @@ def main() -> int:
                 errors.append(f"{path}: {date_key} must use YYYY-MM-DD")
         if len(str(data.get("description", ""))) > 140:
             warnings.append(f"{path}: description exceeds 140 characters")
+        aliases = data.get("aliases")
+        if "aliases" in data and not isinstance(aliases, list):
+            # Search reads a single string as one alias; the list form is the contract.
+            if isinstance(aliases, str) and aliases.strip():
+                warnings.append(
+                    f"{path}: aliases is a single string, not a list; search reads it as the one alias {aliases!r}. "
+                    "Write it as a list item through a confirmed frontmatter plan"
+                )
+            else:
+                warnings.append(f"{path}: aliases must be a list of strings; search ignores this value")
 
         sources = data.get("sources", [])
         if not isinstance(sources, list):
@@ -961,6 +1075,8 @@ def main() -> int:
                     [page_data[path] for path in wiki_files if page_data.get(path)]
                 )
             ),
+            # For confirmation by the user; never an error or a warning.
+            "alias_review": alias_review(target, wiki_files, concept_definitions),
         },
     }
     if not args.check_only:

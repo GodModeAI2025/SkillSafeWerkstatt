@@ -472,7 +472,7 @@ class SearchBehaviour(unittest.TestCase):
         with TempPages(self.PAGES) as root:
             report = search_core.search(root, "Netzentgeld Tarif Ladesäule", limit=10)
         coverage = report["coverage"]
-        self.assertEqual(coverage["format"], "lmwiki-search-coverage/2")
+        self.assertEqual(coverage["format"], search_core.COVERAGE_FORMAT)
         terms = {item["term"]: item for item in coverage["query_terms"]}
         self.assertEqual(terms["netzentgeld"]["forms"], [{"token": "netzentgelt", "rule": "typo", "weight": 0.3, "files": 1}])
         self.assertEqual(terms["netzentgeld"]["files"]["wiki"], 1)

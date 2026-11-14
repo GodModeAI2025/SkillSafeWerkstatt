@@ -87,7 +87,7 @@ Do not cite a maintained page as if it were an original source. It may be cited 
 
 ## Search coverage
 
-Every search report carries a `coverage` block (`format: lmwiki-search-coverage/2`). It never changes which results come back or in which order; it counts what the result list leaves out, so a loss is never silent. Format 2 counts the forms of each word that the search matched; format 1, written by helpers before the word-form layer, counted the literal word only. Read the block before answering and apply these rules:
+Every search report carries a `coverage` block (`format: lmwiki-search-coverage/3`). It never changes which results come back or in which order; it counts what the result list leaves out, so a loss is never silent. Format 3 adds per-search counts for reformulations (`coverage.formulations`, `coverage.reformulation_results`); format 2 counted the forms of each word; format 1 counted the literal word only. Read the block before answering and apply these rules:
 
 - `matched` is the number of files with a positive score, `returned` the number in `results`, `omitted_count` the difference. When `truncated` is true, rerun with a higher `--limit` (at most 100), or tell the user that more matches exist than you read. `omitted_top` names up to 20 of the next matches with their scores.
 - Each result states `claims_total` (claim blocks on the page) and `claims_returned` (claim blocks in this result, at most eight, chosen by word overlap). Before answering from a page with `claims_returned` lower than `claims_total`, open the page and read all of its claim blocks. A withheld claim can hold the exception, limit, or newer status that changes the answer.
@@ -102,6 +102,39 @@ Every search report carries a `coverage` block (`format: lmwiki-search-coverage/
 - `scopes` says which layers (`wiki`, `sources`, `history`) were searched and how many of their files contain a query term. Sources are counted even when not searched; history only when searched. The counts ignore `--filter-json`; `filtered_out` says how many files a selector excluded.
 - Results with `navigation: true` are `WIKI.md`, an `index.md`, or `meta/questions.md`. They stay in the ranking to help orientation; never cite them as evidence.
 - Never read the counts as proof that a topic is absent. As `coverage.boundary` states, they describe matches of the listed terms and of the forms and disclosed compound and typo matches listed per term only; a page that uses other words, an irregular form, or another language is not counted. Say that nothing was found with these words in this release version, not that the wiki holds nothing on the topic.
+
+## Reformulations
+
+The search is lexical: it matches the words of the question and other forms of the same words, never synonyms, paraphrases, or other languages. You supply those as reformulations. The helper searches the question and every reformulation in one call over the same verified release and keeps the question's own ranking unchanged.
+
+### When to write them
+
+Write reformulations for the first search of a question unless the question already consists of terms the wiki uses: an exact term, a page title, an identifier, or a name. Then write none. Search again with different reformulations when neither the question nor any reformulation returned a page that answers it.
+
+### Rules
+
+- Pass the user's question unchanged as the query, in whatever language it was asked. Every rewording is a reformulation.
+- Write at most four reformulations per search, so at most five searches with the question. Fewer is fine.
+- Write them in the wiki's language, `wiki_language` in `schema/WIKI_PROFILE.md`. If the question is in another language, the first reformulation carries every part of the question into the wiki's language as its key terms, without question words.
+- Keep each one short: the key terms a page of this wiki would use, typically one to six words. No full sentences, no question words, no filler. The helper refuses a reformulation longer than 200 characters.
+- Vary the vocabulary: the formal or legal term, the everyday term, a common synonym, an abbreviation or its expansion, the wiki-language term for a foreign word, the corrected spelling of an obvious typo. When a preferred term or alias in `schema/CONCEPTS.md` or a page title in an index you read fits the question, use it. Do not spend a reformulation on another form of a word the question already contains, such as a plural, a case ending, or an `ae` spelling of `ä`; the search matches those.
+- Do not guess facts of the answer: no numbers, dates, amounts, names, or product names that the question does not contain.
+- Do not add a word that matches most of the wiki on its own, such as the wiki's main subject.
+- Keep a name or identifier from the question unchanged in at least one reformulation.
+
+### Passing them
+
+Pass each reformulation as one `--also`. On Windows, or when the question or a reformulation contains a quotation mark, pipe one JSON object to `--request -` instead of `--query` and `--also`: `{"query": "<question>", "also": ["<reformulation>", ...]}`, with an optional `"filter"` holding the selector in place of `--filter-json`. Write every non-ASCII character and every apostrophe as a `\uXXXX` escape. The helper refuses unknown keys, more than four reformulations, text that is not UTF-8, a lone surrogate escape, and text that looks re-encoded on the way (a `?` directly before a letter); it then prints nothing on standard output and exits with status 1. A character damaged at the end of a word passes that check, so the escapes are the only reliable protection.
+
+### Reading the result
+
+- `results` is the ranking of the question alone, the same as without reformulations. `found_by` on each result lists every search that matched the page, as an index into `formulations` (0 is the question) with the page's rank in that search. A page that several searches rank within the limit is better corroborated, but the order of `results` stays the question's.
+- `reformulation_results` holds pages that the question did not return within the limit and at least one reformulation did, taken in turn from each reformulation's best ranks, without navigation pages. `via` names the reformulation that supplied the entry's score, snippet, claims, and matched terms; scores are not comparable across searches. When `found_by` includes index 0, the question matched the page too, below the limit.
+- Treat `reformulation_results` with lower trust. Open a page and confirm that it answers the question before you use it, then cite its claims like those of any other page.
+- Never let `reformulation_results` alone defeat an absence finding. When the question found nothing that answers it, a reformulation-only page changes that conclusion only after you have read it and it answers the question. Otherwise say that nothing was found with these words in this release version, as `coverage.boundary` requires. An empty `reformulation_results` does not prove absence either.
+- `coverage.formulations` counts per search: `matched`, `within_limit`, `truncated`, `unmatched_terms`, `terms_only_in_unsearched`, and `contributed`, the number of `reformulation_results` entries that search ranked within the limit. A reformulation with `matched: 0` found nothing. When `coverage.reformulation_results.truncated` is true, more reformulation-only pages exist than were returned; rerun with a higher `--limit` (at most 100) or say so.
+- `dropped_formulations` lists reformulations that were not searched because they were empty or repeated the question or an earlier reformulation once case, accents, and punctuation are ignored.
+- List every reformulation that was searched in the answer (see Answer shape), including those that found nothing. Never list a dropped one.
 
 ## Metadata restrictions and inventory
 
@@ -137,6 +170,7 @@ Use the smallest structure that makes the result clear:
 1. direct answer;
 2. important conditions, conflicts, or uncertainty;
 3. sources.
+4. when the search used reformulations, one line listing each reformulation that was searched, for example `Gesucht auch mit: Ökostrom; Grünstromtarif`, with the label in the answer language.
 
 Add the concise wiki-quality line after this structure. It is operational provenance, not a claim sourced from wiki content, and must not be hidden merely because `SOUL.md` requests brevity.
 

@@ -24,10 +24,20 @@ disclosed heuristics, compound parts and one-edit typo corrections (see
 wordforms.py). Each result names the rule that matched in `match_rules`, and
 the coverage block lists the forms per term. `word_forms=False` runs the
 literal search exactly as it was before the word-form layer existed.
+
+A search may carry up to four reformulations of the query, written by the
+agent (synonyms, the wiki's own terms, a translation). One call reads the
+release once and ranks the query and every reformulation over it. The query's
+own `results`, `coverage` and `facets` stay exactly what they are without
+reformulations; each result only names the searches that found it in
+`found_by`. Pages that only reformulations return within the limit come back
+separately in `reformulation_results`, taken in turn by rank from each
+reformulation and never mixed into the query's ranking.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from pathlib import Path, PurePosixPath
@@ -60,7 +70,39 @@ CLAIM_BLOCK = re.compile(
 
 #: Version of the coverage block's shape. Version 2 counts word forms and adds
 #: `forms`, `forms_total`, `form_only_terms` and the per-result `match_rules`.
-COVERAGE_FORMAT = "lmwiki-search-coverage/2"
+#: Version 3 adds the per-search counts `formulations` and
+#: `reformulation_results`; every report carries them, with or without
+#: reformulations.
+COVERAGE_FORMAT = "lmwiki-search-coverage/3"
+#: At most this many reformulations per call, so at most five searches with the query.
+MAX_ALSO = 4
+#: The longest reformulation, counted after stripping surrounding whitespace.
+MAX_FORMULATION_CHARS = 200
+#: The largest request `--request -` reads from standard input.
+MAX_REQUEST_BYTES = 65536
+#: The keys a request may hold; any other key is refused.
+REQUEST_KEYS = ("query", "also", "filter")
+#: The fixed sentence that keeps a reader from taking the reformulation block for coverage.
+REFORMULATION_BOUNDARY = (
+    "These pages were returned by the agent's reformulations, not by the words of the question, and are "
+    "ordered by their rank within each reformulation, not by score. They count as found only after the "
+    "page has been read and confirmed to answer the question; neither this list nor its absence shows "
+    "whether the wiki covers the topic."
+)
+#: A question mark directly before a letter: how Windows PowerShell 5.1 pipes a
+#: non-ASCII character when its output encoding is ASCII ("K?ndigung",
+#: "?kostrom", "Gr??e"). A damaged character at the end of a word ("s??") is
+#: not caught, so the escapes stay the only reliable protection.
+RE_ENCODED = re.compile(r"\?[^\W\d_]")
+#: A lone surrogate code point: half of a character outside U+FFFF, which a
+#: JSON escape can produce but no UTF-8 output can carry.
+RE_SURROGATE = re.compile(r"[\ud800-\udfff]")
+#: Why a request with a lone surrogate escape is refused, and what to send instead.
+SURROGATE_DETAIL = (
+    "holds a lone surrogate escape; write a character outside U+FFFF as a surrogate pair, or as UTF-8"
+)
+#: How a reader learns to send text that no console code page can change.
+ESCAPE_HINT = "escape every non-ASCII character as \\uXXXX"
 #: How many forms the coverage block names per query term.
 FORMS_LISTED = 10
 #: How many matches beyond the limit the coverage block names with path and score.
@@ -80,6 +122,10 @@ NAVIGATION_FILES = frozenset({"WIKI.md", "meta/questions.md"})
 
 class QueryError(ValueError):
     """The query holds no token the search can match."""
+
+
+class RequestError(ValueError):
+    """A request or its reformulations cannot be searched; the message is ready for the user."""
 
 
 def normalized(value: str) -> str:
@@ -150,6 +196,15 @@ def candidate_paths(target: Path, include_sources: bool, include_history: bool) 
 def as_list(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value]
+    return []
+
+
+def alias_values(value: Any) -> list[str]:
+    """Page aliases as a list: a list as before, a non-empty string as one alias (lint warns), anything else none."""
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, str) and value.strip():
+        return [value]
     return []
 
 
@@ -371,7 +426,7 @@ def document_fields(data: dict[str, Any], body: str, forms: bool = False) -> dic
     """Split one document into the weighted fields BM25F scores over."""
     return {
         "title": tokens(str(data.get("title") or ""), False, forms),
-        "aliases": tokens(" ".join(as_list(data.get("aliases"))), False, forms),
+        "aliases": tokens(" ".join(alias_values(data.get("aliases"))), False, forms),
         "headings": tokens(" ".join(HEADING.findall(body)), False, forms),
         "description": tokens(
             str(data.get("description") or data.get("extraction_notes") or ""), False, forms
@@ -474,6 +529,7 @@ def term_members(
     vocabulary: dict[str, int],
     forms: bool,
     attested_elsewhere: Iterable[str] = (),
+    resolver: Optional[wordforms.Resolver] = None,
 ) -> dict[str, list[wordforms.Member]]:
     """Per query term, the tokens of the searched files that count for it, with rule and weight.
 
@@ -481,14 +537,16 @@ def term_members(
     expansions get word forms only. A term in `attested_elsewhere` occurs, as
     itself or as a word form, in a layer that was not searched; it is no typo,
     so it is never corrected to another word. Without the word-form layer
-    every term is its literal token alone.
+    every term is its literal token alone. `resolver`, when given, must be a
+    resolver over `vocabulary`; one search builds it once for all its queries.
     """
     if not forms:
         return {
             item["term"]: ([(item["term"], "exact", wordforms.WEIGHTS["exact"])] if item["term"] in vocabulary else [])
             for item in ordered_terms
         }
-    resolver = wordforms.Resolver(vocabulary, CLOSED_CLASS, FORM_STOPWORDS)
+    if resolver is None:
+        resolver = wordforms.Resolver(vocabulary, CLOSED_CLASS, FORM_STOPWORDS)
     attested = set(attested_elsewhere)
     return {
         item["term"]: resolver.resolve(
@@ -498,18 +556,29 @@ def term_members(
     }
 
 
-def layer_members(term_names: list[str], word_sets: list[set[str]], forms: bool) -> dict[str, frozenset]:
-    """Per term, the tokens of an unsearched layer that are the same word: literal and word forms only."""
+def layer_resolver(word_sets: list[set[str]], forms: bool) -> Optional[wordforms.Resolver]:
+    """A word-form resolver over the vocabulary of one unsearched layer, or None for the literal search."""
     if not forms:
-        return {term: frozenset([term]) for term in term_names}
+        return None
     vocabulary: dict[str, int] = {}
     for words in word_sets:
         for token in words:
             vocabulary[token] = vocabulary.get(token, 0) + 1
-    resolver = wordforms.Resolver(vocabulary, CLOSED_CLASS, FORM_STOPWORDS, heuristics=False)
+    return wordforms.Resolver(vocabulary, CLOSED_CLASS, FORM_STOPWORDS, heuristics=False)
+
+
+def layer_tokens(term_names: list[str], resolver: Optional[wordforms.Resolver]) -> dict[str, frozenset]:
+    """Per term, the tokens of a layer that are the same word, from that layer's `layer_resolver`."""
+    if resolver is None:
+        return {term: frozenset([term]) for term in term_names}
     return {
         term: frozenset(token for token, _, _ in resolver.resolve(term, heuristics=False)) for term in term_names
     }
+
+
+def layer_members(term_names: list[str], word_sets: list[set[str]], forms: bool) -> dict[str, frozenset]:
+    """Per term, the tokens of an unsearched layer that are the same word: literal and word forms only."""
+    return layer_tokens(term_names, layer_resolver(word_sets, forms))
 
 
 def scoring_groups(
@@ -562,46 +631,219 @@ def scoring_groups(
     return content_groups, navigation_groups, label_of
 
 
-def search(
+# -- requests and reformulations ----------------------------------------------
+
+
+def _invalid_request(detail: str) -> RequestError:
+    return RequestError(f"request is invalid: {detail}")
+
+
+def _invalid_reformulations(detail: str) -> RequestError:
+    return RequestError(f"reformulations are invalid: {detail}")
+
+
+def request_from_stdin(stream: Any) -> dict[str, Any]:
+    """Read one request from a wrapper's standard input and check it (see `read_request`).
+
+    Only the stream's bytes are read: the text layer decodes with the host's
+    locale, which differs between consoles. A terminal or a closed input is
+    refused instead of waiting for input that never comes.
+    """
+    absent = _invalid_request(
+        "--request - reads one JSON object from standard input, but standard input is a terminal or closed"
+    )
+    buffer = getattr(stream, "buffer", None)
+    if stream is None or buffer is None:
+        raise absent
+    try:
+        interactive = bool(stream.isatty())
+    except (AttributeError, ValueError, OSError):
+        interactive = False
+    if interactive:
+        raise absent
+    try:
+        raw = buffer.read(MAX_REQUEST_BYTES + 1)
+    except (OSError, ValueError) as exc:
+        raise absent from exc
+    return read_request(raw or b"")
+
+
+def _request_text(raw: bytes) -> str:
+    """The request bytes as text: UTF-8 with or without BOM, or UTF-16 as PowerShell may send it."""
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw, encoding = raw[3:], "utf-8"
+    elif raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        encoding = "utf-16"
+    elif len(raw) > 1 and raw[1] == 0:
+        encoding = "utf-16-le"
+    elif raw[:1] == b"\x00":
+        encoding = "utf-16-be"
+    else:
+        encoding = "utf-8"
+    try:
+        return raw.decode(encoding)
+    except UnicodeDecodeError as exc:
+        raise _invalid_request(f"not UTF-8 text; send UTF-8, or {ESCAPE_HINT}") from exc
+
+
+def read_request(raw: bytes) -> dict[str, Any]:
+    """Decode and check one request object `{"query": ..., "also": [...], "filter": {...}}`.
+
+    Returns `query` exactly as given, `also` as a list (empty when absent) and
+    `filter` as the given object or None when absent. The selector itself is
+    validated by the wrapper, like `--filter-json`. Raises RequestError with a
+    message ready for the user.
+    """
+    if len(raw) > MAX_REQUEST_BYTES:
+        raise _invalid_request(f"request exceeds {MAX_REQUEST_BYTES} bytes")
+    text = _request_text(raw).lstrip("﻿").strip()
+    if not text:
+        raise _invalid_request("empty input; pipe one JSON object to --request -")
+
+    def unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        found: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in found:
+                raise _invalid_request(f"duplicate key '{key}'")
+            found[key] = item
+        return found
+
+    def no_constant(_name: str) -> Any:
+        raise _invalid_request("NaN and Infinity are not JSON")
+
+    try:
+        value = json.loads(text, object_pairs_hook=unique_keys, parse_constant=no_constant)
+    except json.JSONDecodeError as exc:
+        raise _invalid_request(f"not valid JSON: {exc.msg} (line {exc.lineno} column {exc.colno})") from exc
+    except RecursionError as exc:
+        raise _invalid_request("not valid JSON: nested too deeply") from exc
+    if not isinstance(value, dict):
+        raise _invalid_request("the top level must be a JSON object")
+    for key in value:
+        if key not in REQUEST_KEYS:
+            raise _invalid_request(f"unknown key '{key}'; allowed keys are {', '.join(REQUEST_KEYS)}")
+    query = value.get("query")
+    if not isinstance(query, str) or not query.strip():
+        raise _invalid_request("query must be a non-empty string")
+    also = value.get("also", [])
+    if not isinstance(also, list):
+        raise _invalid_request("also must be a list of strings")
+    for index, item in enumerate(also):
+        if not isinstance(item, str):
+            raise _invalid_request(f"also[{index}] must be a string")
+    selector = value.get("filter")
+    if "filter" in value and not isinstance(selector, dict):
+        raise _invalid_request("filter must be a JSON object (a selector)")
+    fields = [("query", query)] + [(f"also[{index}]", item) for index, item in enumerate(also)]
+    for field, item in fields:
+        if RE_SURROGATE.search(item):
+            raise _invalid_request(f"{field} {SURROGATE_DETAIL}")
+        if "�" in item or RE_ENCODED.search(item):
+            raise _invalid_request(
+                f"{field} looks re-encoded on the way (a ? before a letter, or U+FFFD); {ESCAPE_HINT}"
+            )
+    # The selector is printed back with the result, so it must be printable too.
+    if selector is not None and any(RE_SURROGATE.search(text) for text in _json_strings(selector)):
+        raise _invalid_request(f"filter {SURROGATE_DETAIL}")
+    return {"query": query, "also": list(also), "filter": selector}
+
+
+def _json_strings(value: Any) -> list[str]:
+    """Every string in a decoded JSON value, object keys included, collected without recursion."""
+    found: list[str] = []
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            found.append(item)
+        elif isinstance(item, dict):
+            pending.extend(item.keys())
+            pending.extend(item.values())
+        elif isinstance(item, list):
+            pending.extend(item)
+    return found
+
+
+def check_also(also: list[str]) -> None:
+    """Refuse more than MAX_ALSO reformulations or one longer than MAX_FORMULATION_CHARS after stripping."""
+    if len(also) > MAX_ALSO:
+        raise _invalid_reformulations(
+            f"at most {MAX_ALSO} reformulations may be given ({MAX_ALSO + 1} searches including the query); "
+            f"got {len(also)}"
+        )
+    for position, entry in enumerate(also, 1):
+        if not isinstance(entry, str):
+            raise _invalid_reformulations(f"reformulation {position} is not a string")
+        length = len(entry.strip())
+        if length > MAX_FORMULATION_CHARS:
+            raise _invalid_reformulations(
+                f"reformulation {position} is longer than {MAX_FORMULATION_CHARS} characters ({length})"
+            )
+
+
+def formulation_key(text: str) -> str:
+    """The words of a formulation in order, without case, accents or punctuation: what makes two the same search."""
+    return " ".join(TOKEN.findall(normalized(text)))
+
+
+def plan_formulations(query: str, also: list[str]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The searches of one call: the query first, then every reformulation that adds a search.
+
+    A reformulation without a word, or with the same words in the same order
+    as the query or an earlier kept reformulation, is dropped and reported with
+    its 1-based `position` in the given list. Kept entries are numbered
+    consecutively from 0, the query. Raises RequestError through `check_also`.
+    """
+    check_also(also)
+    kept: list[dict[str, Any]] = [{"index": 0, "text": query, "origin": "query"}]
+    seen = {formulation_key(query): 0}
+    dropped: list[dict[str, Any]] = []
+    for position, raw in enumerate(also, 1):
+        text = raw.strip()
+        key = formulation_key(text)
+        if not key:
+            dropped.append({"position": position, "text": text, "reason": "empty", "duplicate_of": None})
+            continue
+        if key in seen:
+            dropped.append({"position": position, "text": text, "reason": "duplicate", "duplicate_of": seen[key]})
+            continue
+        seen[key] = len(kept)
+        kept.append({"index": len(kept), "text": text, "origin": "also"})
+    return kept, dropped
+
+
+# -- one release, any number of queries ------------------------------------------
+
+
+class LoadedRelease:
+    """Everything a search reads from one release that does not depend on the query.
+
+    `load()` builds it once per call: every searched file read, parsed and
+    tokenized, the selector applied, the unsearched layers counted, the
+    vocabularies, the word-form resolvers and the BM25 corpus statistics.
+    `rank()` ranks any number of queries over it without reading a file again.
+    """
+
+    def __init__(self, **fields: Any) -> None:
+        self.__dict__.update(fields)
+
+
+def load(
     root: Path,
-    query: str,
     *,
-    limit: int = 12,
     include_sources: bool = False,
     include_history: bool = False,
     selector: Optional[dict[str, Any]] = None,
     history_shipped: bool = True,
     path_prefix: str = "",
     word_forms: bool = True,
-) -> dict[str, Any]:
-    """Rank the release under `root` for `query` and account for what is not shown.
-
-    `selector` must already be validated by `wiki_filters.validate_selector`.
-    `history_shipped=False` describes a release that carries no history layer,
-    such as an exported knowledge skill. `path_prefix` is prepended to every
-    path the report names; selectors, scopes and navigation are decided on the
-    release-relative path. `word_forms=False` runs the literal search without
-    the word-form layer, for measurement and tests; the helpers never pass it.
-
-    Returns `searched_files`, `filtered_out`, `matched_concepts`,
-    `expanded_terms`, `facets` (over every match), `results` (at most `limit`),
-    `coverage`, and `parser_errors`. A caller must not report results when
-    `parser_errors` is non-empty. Raises QueryError for a query without a
-    searchable token and ValueError for an impossible option.
-    """
-    if limit < 1:
-        raise ValueError("limit must be at least 1")
+) -> LoadedRelease:
+    """Read the release under `root` once for every query a call ranks (see `search` for the options)."""
     if include_history and not history_shipped:
         raise ValueError("this release ships no history layer to search")
     selector = selector if selector is not None else {"kind": "all"}
     forms = bool(word_forms)
-
     concept_definitions = controlled_concepts(root / "schema/CONCEPTS.md")
-    query_token_set, matched_concepts, expanded_terms = expand_query(query, concept_definitions, forms)
-    if not query_token_set:
-        raise QueryError("query must contain at least one searchable token")
-    ordered_terms, dropped_terms = query_terms(query, expanded_terms, forms)
-    term_names = [item["term"] for item in ordered_terms]
 
     searched_scopes = {"wiki": True, "sources": include_sources, "history": include_history}
     # Sources are always counted, searched or not; history only when searched.
@@ -641,7 +883,7 @@ def search(
                 "data": document["data"],
                 "title": document["title"],
                 "body": document["body"],
-                "claims": claims_in(document["raw_body"]),
+                "raw_body": document["raw_body"],
                 "fields": document["fields"],
                 "words": document["words"],
                 "navigation": navigation,
@@ -655,23 +897,6 @@ def search(
                 scope_files[scope] += 1
                 unsearched.setdefault(scope, []).append(unsearched_words(path, relative, forms))
 
-    files_with_term = {scope: 0 for scope in SCOPES}
-    term_files = {scope: {term: 0 for term in term_names} for scope in SCOPES}
-
-    def account(scope: str, words: set[str], tokens_of: dict[str, frozenset]) -> None:
-        present = [term for term in term_names if not tokens_of[term].isdisjoint(words)]
-        for term in present:
-            term_files[scope][term] += 1
-        if present:
-            files_with_term[scope] += 1
-
-    # Unsearched layers count the literal token and its word forms only.
-    for scope, word_sets in unsearched.items():
-        tokens_of = layer_members(term_names, word_sets, forms)
-        for words in word_sets:
-            account(scope, words, tokens_of)
-    attested_unsearched = {term for term in term_names if any(term_files[scope][term] for scope in unsearched)}
-
     # Which tokens count for which term is decided on every searched file,
     # before the selector, so a selector never changes what a word matches.
     # Navigation pages route to content and are never cited; on them only the
@@ -683,7 +908,127 @@ def search(
             vocabulary[token] = vocabulary.get(token, 0) + 1
             if not navigation:
                 content_vocabulary[token] = content_vocabulary.get(token, 0) + 1
-    members_of = term_members(ordered_terms, vocabulary, forms, attested_unsearched)
+    return LoadedRelease(
+        root=root,
+        forms=forms,
+        include_sources=include_sources,
+        history_shipped=history_shipped,
+        path_prefix=path_prefix,
+        concept_definitions=concept_definitions,
+        searched_scopes=searched_scopes,
+        counted_scopes=counted_scopes,
+        scope_files=scope_files,
+        searched=searched,
+        filtered_out=filtered_out,
+        parser_errors=parser_errors,
+        searched_words=searched_words,
+        candidates=candidates,
+        unsearched=unsearched,
+        # Unsearched layers count the literal token and its word forms only.
+        layer_resolvers={scope: layer_resolver(word_sets, forms) for scope, word_sets in unsearched.items()},
+        vocabulary=vocabulary,
+        content_vocabulary=content_vocabulary,
+        resolver=wordforms.Resolver(vocabulary, CLOSED_CLASS, FORM_STOPWORDS) if forms else None,
+        corpus=bm25.Corpus(candidate["fields"] for candidate in candidates),
+    )
+
+
+def candidate_phrase(candidate: dict[str, Any]) -> str:
+    """A candidate's body as space-joined tokens for the phrase signal, built once per call."""
+    phrase = candidate.get("phrase")
+    if phrase is None:
+        phrase = candidate["phrase"] = " ".join(candidate["fields"]["body"])
+    return phrase
+
+
+def candidate_claims(candidate: dict[str, Any]) -> list[dict[str, Any]]:
+    """A candidate's claim blocks, parsed once per call and only for printed entries."""
+    claims = candidate.get("claims")
+    if claims is None:
+        claims = candidate["claims"] = claims_in(candidate["raw_body"])
+    return claims
+
+
+class Ranking:
+    """One query ranked over a loaded release.
+
+    `ordered` holds every match sorted by score, then path, as result objects
+    whose `snippet`, `claims`, `claims_total` and `claims_returned` are still
+    empty; `full(i)` returns entry i completed. `rank_of` maps each matched
+    path to its 1-based rank. `coverage`, `facets`, `matched_concepts` and
+    `expanded_terms` describe this query alone.
+    """
+
+    def __init__(
+        self,
+        matches: list[tuple[dict[str, Any], dict[str, Any], bool]],
+        highlight: Any,
+        forms: bool,
+        coverage: dict[str, Any],
+        matched_concepts: list[str],
+        expanded_terms: list[str],
+    ) -> None:
+        self.ordered = [result for result, _, _ in matches]
+        self._pending = [(candidate, concept_match) for _, candidate, concept_match in matches]
+        self._highlight = highlight
+        self._forms = forms
+        self.rank_of = {result["path"]: number for number, result in enumerate(self.ordered, 1)}
+        self.coverage = coverage
+        self.facets = facets(self.ordered)
+        self.matched_concepts = matched_concepts
+        self.expanded_terms = expanded_terms
+
+    def full(self, index: int) -> dict[str, Any]:
+        """Entry `index` of `ordered` with its snippet and claims, as a new object."""
+        result = dict(self.ordered[index])
+        candidate, concept_match = self._pending[index]
+        page_claims = candidate_claims(candidate)
+        claims = relevant_claims(page_claims, self._highlight, concept_match, self._forms)
+        result["snippet"] = best_snippet(candidate["body"], self._highlight, self._forms)
+        result["claims"] = claims
+        result["claims_total"] = len(page_claims)
+        result["claims_returned"] = len(claims)
+        return result
+
+
+def rank(loaded: LoadedRelease, query: str, *, limit: int) -> Ranking:
+    """Rank one query over a loaded release and account for what its top `limit` does not show.
+
+    Raises QueryError for a query without a searchable token.
+    """
+    forms = loaded.forms
+    query_token_set, matched_concepts, expanded_terms = expand_query(query, loaded.concept_definitions, forms)
+    if not query_token_set:
+        raise QueryError("query must contain at least one searchable token")
+    ordered_terms, dropped_terms = query_terms(query, expanded_terms, forms)
+    term_names = [item["term"] for item in ordered_terms]
+    searched_scopes = loaded.searched_scopes
+    counted_scopes = loaded.counted_scopes
+    include_sources = loaded.include_sources
+    vocabulary = loaded.vocabulary
+    content_vocabulary = loaded.content_vocabulary
+    candidates = loaded.candidates
+
+    files_with_term = {scope: 0 for scope in SCOPES}
+    term_files = {scope: {term: 0 for term in term_names} for scope in SCOPES}
+
+    def account(scope: str, words: set[str], tokens_of: dict[str, frozenset]) -> None:
+        present = [term for term in term_names if not tokens_of[term].isdisjoint(words)]
+        for term in present:
+            term_files[scope][term] += 1
+        if present:
+            files_with_term[scope] += 1
+
+    # Unsearched layers count the literal token and its word forms only.
+    for scope, word_sets in loaded.unsearched.items():
+        tokens_of = layer_tokens(term_names, loaded.layer_resolvers[scope])
+        for words in word_sets:
+            account(scope, words, tokens_of)
+    attested_unsearched = {
+        term for term in term_names if any(term_files[scope][term] for scope in loaded.unsearched)
+    }
+
+    members_of = term_members(ordered_terms, vocabulary, forms, attested_unsearched, loaded.resolver)
     member_tokens = {term: frozenset(token for token, _, _ in members_of[term]) for term in term_names}
     literal_tokens = {
         term: frozenset(token for token, rule, _ in members_of[term] if rule == "exact") for term in term_names
@@ -694,12 +1039,12 @@ def search(
         for term in term_names
     }
     same_word_searched: set[str] = set()
-    for scope, words, navigation in searched_words:
+    for scope, words, navigation in loaded.searched_words:
         account(scope, words, literal_tokens if navigation else member_tokens)
         same_word = literal_tokens if navigation else form_tokens
         same_word_searched.update(term for term in term_names if not same_word[term].isdisjoint(words))
 
-    corpus = bm25.Corpus(candidate["fields"] for candidate in candidates)
+    corpus = loaded.corpus
     matched_concept_set = set(matched_concepts)
     query_phrase = " ".join(tokens(query, False, forms))
     groups: Optional[list[bm25.TermGroup]] = None
@@ -714,15 +1059,19 @@ def search(
         for term in term_names:
             for token in sorted(member_tokens[term]):
                 highlight.setdefault(token, label_of[term])
+    # A file holding no token that counts for any term scores 0, because the
+    # ranking never turns a non-match into a match; it is not scored at all.
+    scored_tokens = frozenset().union(*member_tokens.values()) if forms else frozenset(query_token_set)
 
-    results: list[dict[str, Any]] = []
+    path_prefix = loaded.path_prefix
+    matches: list[tuple[dict[str, Any], dict[str, Any], bool]] = []
     for candidate in candidates:
+        if candidate["words"].isdisjoint(scored_tokens):
+            continue
         data = candidate["data"]
         relative = candidate["relative"]
-        searchable_body = candidate["body"]
-        page_claims = candidate["claims"]
         document_concepts = set(as_list(data.get("concepts")))
-        phrase_match = has_phrase(query_phrase, " ".join(tokens(searchable_body, False, forms)), forms)
+        phrase_match = has_phrase(query_phrase, candidate_phrase(candidate), forms)
         counted: dict[str, list[str]] = {}
         score = bm25.score(
             corpus,
@@ -742,41 +1091,41 @@ def search(
             counted_tokens = {term: set(counted.get(label_of[term], ())) & allowed[term] for term in term_names}
         else:
             counted_tokens = {term: {term} & candidate["words"] for term in term_names}
-        claims = relevant_claims(page_claims, highlight, bool(document_concepts & matched_concept_set), forms)
-        results.append(
-            {
-                "path": path_prefix + relative,
-                "title": candidate["title"],
-                "id": str(data.get("id") or data.get("source_id") or ""),
-                "type": str(data.get("type") or ("source" if relative.startswith("sources/") else "")),
-                "status": str(data.get("status") or ""),
-                "date": str(data.get("date") or data.get("updated") or ""),
-                "description": str(data.get("description") or data.get("extraction_notes") or ""),
-                "language": str(data.get("language") or data.get("content_language") or ""),
-                "sources": as_list(data.get("sources")),
-                "clusters": as_list(data.get("clusters")),
-                "concepts": as_list(data.get("concepts")),
-                "tags": as_list(data.get("tags")),
-                "score": round(score, 2),
-                "trust_tier": trust_contract.trust_tier(data),
-                "stale_after": str(data.get(freshness.STALE_AFTER) or ""),
-                "past_expiry": freshness.is_stale(data),
-                "snippet": best_snippet(searchable_body, highlight, forms),
-                "claims": claims,
-                "matched_terms": [term for term in term_names if member_tokens[term] & counted_tokens[term]],
-                "match_rules": [
-                    {"term": term, "token": token, "rule": rule, "weight": weight}
-                    for term in term_names
-                    for token, rule, weight in members_of[term]
-                    if token in counted_tokens[term]
-                ],
-                "claims_total": len(page_claims),
-                "claims_returned": len(claims),
-                "navigation": candidate["navigation"],
-            }
-        )
+        result = {
+            "path": path_prefix + relative,
+            "title": candidate["title"],
+            "id": str(data.get("id") or data.get("source_id") or ""),
+            "type": str(data.get("type") or ("source" if relative.startswith("sources/") else "")),
+            "status": str(data.get("status") or ""),
+            "date": str(data.get("date") or data.get("updated") or ""),
+            "description": str(data.get("description") or data.get("extraction_notes") or ""),
+            "language": str(data.get("language") or data.get("content_language") or ""),
+            "sources": as_list(data.get("sources")),
+            "clusters": as_list(data.get("clusters")),
+            "concepts": as_list(data.get("concepts")),
+            "tags": as_list(data.get("tags")),
+            "score": round(score, 2),
+            "trust_tier": trust_contract.trust_tier(data),
+            "stale_after": str(data.get(freshness.STALE_AFTER) or ""),
+            "past_expiry": freshness.is_stale(data),
+            # Filled by Ranking.full() for entries that are printed.
+            "snippet": None,
+            "claims": None,
+            "matched_terms": [term for term in term_names if member_tokens[term] & counted_tokens[term]],
+            "match_rules": [
+                {"term": term, "token": token, "rule": rule, "weight": weight}
+                for term in term_names
+                for token, rule, weight in members_of[term]
+                if token in counted_tokens[term]
+            ],
+            "claims_total": None,
+            "claims_returned": None,
+            "navigation": candidate["navigation"],
+        }
+        matches.append((result, candidate, bool(document_concepts & matched_concept_set)))
 
-    results.sort(key=lambda item: (-float(item["score"]), str(item["path"])))
+    matches.sort(key=lambda match: (-float(match[0]["score"]), str(match[0]["path"])))
+    results = [result for result, _, _ in matches]
     returned = results[:limit]
     omitted = results[limit:]
 
@@ -803,7 +1152,7 @@ def search(
 
     coverage = {
         "format": COVERAGE_FORMAT,
-        "searched_files": searched,
+        "searched_files": loaded.searched,
         "matched": len(results),
         "returned": len(returned),
         "truncated": len(results) > len(returned),
@@ -812,8 +1161,8 @@ def search(
         "scopes": {
             scope: {
                 "searched": searched_scopes[scope],
-                "shipped": history_shipped if scope == "history" else True,
-                "files": scope_files[scope] if counted_scopes[scope] else None,
+                "shipped": loaded.history_shipped if scope == "history" else True,
+                "files": loaded.scope_files[scope] if counted_scopes[scope] else None,
                 "files_with_a_query_term": files_with_term[scope] if counted_scopes[scope] else None,
             }
             for scope in SCOPES
@@ -847,13 +1196,174 @@ def search(
         },
         "boundary": COVERAGE_BOUNDARY,
     }
+    return Ranking(matches, highlight, forms, coverage, matched_concepts, expanded_terms)
+
+
+def found_by(rankings: list[Ranking], path: str) -> list[dict[str, int]]:
+    """Every search whose ranking holds `path`, with the page's rank there, in formulation order."""
+    return [
+        {"formulation": index, "rank": ranking.rank_of[path]}
+        for index, ranking in enumerate(rankings)
+        if path in ranking.rank_of
+    ]
+
+
+def search(
+    root: Path,
+    query: str,
+    *,
+    also: Iterable[str] = (),
+    limit: int = 12,
+    include_sources: bool = False,
+    include_history: bool = False,
+    selector: Optional[dict[str, Any]] = None,
+    history_shipped: bool = True,
+    path_prefix: str = "",
+    word_forms: bool = True,
+) -> dict[str, Any]:
+    """Rank the release under `root` for `query` and its reformulations, and account for what is not shown.
+
+    `also` holds at most MAX_ALSO reformulations (see `plan_formulations`).
+    `selector` must already be validated by `wiki_filters.validate_selector`.
+    `history_shipped=False` describes a release that carries no history layer,
+    such as an exported knowledge skill. `path_prefix` is prepended to every
+    path the report names; selectors, scopes and navigation are decided on the
+    release-relative path. `word_forms=False` runs the literal search without
+    the word-form layer, for measurement and tests; the helpers never pass it.
+
+    The release is read once and every formulation is ranked over it. The
+    query's `matched_concepts`, `expanded_terms`, `facets` (over every match),
+    `results` (at most `limit`) and `coverage` are exactly those of a search
+    without reformulations, plus `found_by` on each result and the coverage
+    keys `formulations` and `reformulation_results`. `reformulation_results`
+    holds at most `limit` pages that only reformulations returned within the
+    limit, without navigation pages. Also returned: `searched_files`,
+    `filtered_out`, `formulations`, `dropped_formulations` and
+    `parser_errors`. A caller must not report results when `parser_errors` is
+    non-empty. Raises QueryError for a query without a searchable token,
+    RequestError for invalid reformulations and ValueError for an impossible
+    option.
+    """
+    if limit < 1:
+        raise ValueError("limit must be at least 1")
+    if include_history and not history_shipped:
+        raise ValueError("this release ships no history layer to search")
+    also = list(also)
+    kept, dropped = plan_formulations(query, also)
+    if not TOKEN.findall(normalized(query)):
+        raise QueryError("query must contain at least one searchable token")
+    loaded = load(
+        root,
+        include_sources=include_sources,
+        include_history=include_history,
+        selector=selector,
+        history_shipped=history_shipped,
+        path_prefix=path_prefix,
+        word_forms=word_forms,
+    )
+    rankings = [rank(loaded, query, limit=limit)]
+    formulations = [kept[0]]
+    dropped_positions = {item["position"] for item in dropped}
+    kept_positions = [position for position in range(1, len(also) + 1) if position not in dropped_positions]
+    for entry, position in zip(kept[1:], kept_positions):
+        try:
+            ranking = rank(loaded, entry["text"], limit=limit)
+        except QueryError:
+            # Defensive: plan_formulations already drops text without a word.
+            dropped.append({"position": position, "text": entry["text"], "reason": "empty", "duplicate_of": None})
+            continue
+        formulations.append({**entry, "index": len(formulations)})
+        rankings.append(ranking)
+    dropped.sort(key=lambda item: item["position"])
+
+    first = rankings[0]
+    results: list[dict[str, Any]] = []
+    for index in range(min(limit, len(first.ordered))):
+        result = first.full(index)
+        result["found_by"] = found_by(rankings, result["path"])
+        results.append(result)
+
+    # Pages only reformulations return within the limit, taken in turn by
+    # rank: scores of different searches are not comparable, ranks are.
+    shown = {result["path"] for result in results}
+    pool: list[tuple[str, int, int]] = []
+    seen: set[str] = set()
+    navigation_skipped: set[str] = set()
+    for position in range(1, limit + 1):
+        for formulation, ranking in enumerate(rankings[1:], 1):
+            if position > len(ranking.ordered):
+                continue
+            item = ranking.ordered[position - 1]
+            path = item["path"]
+            if path in shown or path in seen:
+                continue
+            if item["navigation"]:
+                navigation_skipped.add(path)
+                continue
+            seen.add(path)
+            pool.append((path, formulation, position))
+    block: list[dict[str, Any]] = []
+    for path, via, position in pool[:limit]:
+        entry = rankings[via].full(position - 1)
+        entry["found_by"] = found_by(rankings, path)
+        entry["via"] = via
+        block.append(entry)
+    omitted = pool[limit:]
+
+    coverage = dict(first.coverage)
+    coverage["formulations"] = [
+        {
+            "formulation": index,
+            "matched": ranking.coverage["matched"],
+            "within_limit": min(ranking.coverage["matched"], limit),
+            "truncated": ranking.coverage["matched"] > limit,
+            "contributed": sum(
+                1
+                for entry in block
+                if any(hit["formulation"] == index and hit["rank"] <= limit for hit in entry["found_by"])
+            ),
+            "query_terms": [
+                {key: value for key, value in item.items() if key != "forms"}
+                for item in ranking.coverage["query_terms"]
+            ],
+            "dropped_terms": ranking.coverage["dropped_terms"],
+            "unmatched_terms": ranking.coverage["unmatched_terms"],
+            "form_only_terms": ranking.coverage["form_only_terms"],
+            "terms_only_in_unsearched": ranking.coverage["terms_only_in_unsearched"],
+        }
+        for index, ranking in enumerate(rankings)
+    ]
+    coverage["reformulation_results"] = {
+        "returned": len(block),
+        "candidates": len(pool),
+        "truncated": len(pool) > len(block),
+        "omitted_count": len(omitted),
+        "omitted_top": [
+            {"path": path, "formulation": formulation, "rank": position}
+            for path, formulation, position in omitted[:OMITTED_TOP_LIMIT]
+        ],
+        "navigation_skipped": len(navigation_skipped),
+        "boundary": REFORMULATION_BOUNDARY,
+    }
     return {
-        "searched_files": searched,
-        "filtered_out": filtered_out,
-        "matched_concepts": matched_concepts,
-        "expanded_terms": expanded_terms,
-        "facets": facets(results),
-        "results": returned,
+        "searched_files": loaded.searched,
+        "filtered_out": loaded.filtered_out,
+        "formulations": [
+            {
+                "index": entry["index"],
+                "text": entry["text"],
+                "origin": entry["origin"],
+                "matched_concepts": ranking.matched_concepts,
+                "expanded_terms": ranking.expanded_terms,
+            }
+            for entry, ranking in zip(formulations, rankings)
+        ],
+        "dropped_formulations": dropped,
+        "matched_concepts": first.matched_concepts,
+        "expanded_terms": first.expanded_terms,
+        "facets": first.facets,
+        "results": results,
+        "reformulation_results": block,
         "coverage": coverage,
-        "parser_errors": parser_errors,
+        "parser_errors": loaded.parser_errors,
     }

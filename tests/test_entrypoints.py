@@ -376,6 +376,30 @@ class IsolatedAndLegacyCodePageHosts(unittest.TestCase):
                 for character in OUTSIDE_CP1252:
                     self.assertIn(character, text)
 
+    def test_a_request_on_stdin_survives_a_cp1252_environment(self) -> None:
+        """--request - reads bytes: a legacy code page on the text layer changes nothing."""
+        request = json.dumps(
+            {"query": QUERY_WORD, "also": ["Anschlussleistung ≥ Grenzwert"]}, ensure_ascii=False
+        ).encode("utf-8")
+        calls = {
+            "query skill": [str(QUERY / "search_wiki.py"), "--target", str(self.wiki.path), "--request", "-"],
+            "exported skill": [str(self.skill / "scripts" / "search_knowledge.py"), "--request", "-"],
+        }
+        for label, command in calls.items():
+            with self.subTest(search=label):
+                result = subprocess.run(
+                    [sys.executable, "-B", *command],
+                    input=request,
+                    capture_output=True,
+                    cwd=str(self.elsewhere),
+                    env=subprocess_environment(PYTHONIOENCODING="cp1252"),
+                )
+                report = decode_json(self, result)
+                self.assertEqual(
+                    [item["text"] for item in report["formulations"]], [QUERY_WORD, "Anschlussleistung ≥ Grenzwert"]
+                )
+                self.assertTrue(report["results"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
