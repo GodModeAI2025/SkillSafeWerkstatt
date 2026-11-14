@@ -6,8 +6,15 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from datetime import date
 from pathlib import Path
+
+# Siblings are imported from this folder even where the interpreter leaves it
+# off sys.path: python -I, python -P, PYTHONSAFEPATH=1.
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
 
 from identity_contract import IdentityError, load_plan, require_plan_language
 from wiki_lock import require_lock
@@ -482,4 +489,8 @@ tags:
 
 
 if __name__ == "__main__":
+    # Windows pipes default to the ANSI code page; output is UTF-8 everywhere.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors=_stream.errors)
     raise SystemExit(main())

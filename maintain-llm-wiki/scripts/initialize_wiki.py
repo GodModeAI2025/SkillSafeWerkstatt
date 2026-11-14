@@ -12,6 +12,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Siblings are imported from this folder even where the interpreter leaves it
+# off sys.path: python -I, python -P, PYTHONSAFEPATH=1.
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
 import portable_io
 from typing import Any
 from uuid import uuid4
@@ -53,7 +59,8 @@ def failure_detail(completed: "subprocess.CompletedProcess[str]") -> str:
 
 
 def run_json(stage: str, command: list[str]) -> dict[str, Any]:
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    # Every helper prints UTF-8 (see its __main__ block), whatever the host code page.
+    completed = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", check=False)
     if completed.returncode != 0:
         raise InitializationFailure(stage, failure_detail(completed))
     try:
@@ -293,4 +300,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Windows pipes default to the ANSI code page; output is UTF-8 everywhere.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors=_stream.errors)
     raise SystemExit(main())

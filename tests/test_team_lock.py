@@ -558,7 +558,7 @@ class SimultaneousAcquisition(unittest.TestCase):
                          "--maintainer", who,
                          "--token-file", str(vault.token(who))],
                         cwd=str(MAINTAIN), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                        text=True,
+                        encoding="utf-8",
                     )
                     for who in (ALICE, BOB)
                 ]

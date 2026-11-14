@@ -65,6 +65,7 @@ Das Zielverzeichnis ist die kanonische Arbeitskopie. Ob es später lokal bleibt,
 | Release erzeugen | Ja | Nein |
 | Fragen beantworten | Nur soweit für die Pflege erforderlich | Ja |
 | Metadatenfilter und Facetten | Für Auswahl und Pflege | Für Suche und Auswertung |
+| Suche mit Zählwerk (`coverage`) | Nein; ein exportierter Wissens-Skill nutzt denselben Suchkern | Ja, in jeder Suche |
 | Eingefrorenen Wissens-Skill exportieren | Ja | Nein |
 | Seiten als geprüft aufzeichnen | Ja, mit Bestätigung | Nein, nur Stufe lesen und nennen |
 | Konfliktkopien auflösen | Ja, nach Vergleich und Bestätigung | Nein, nur melden |
@@ -409,11 +410,15 @@ Der Pflege-Skill kann einen verifizierten Release als eigenständigen Wissens-Sk
 - besitzt keinen Ingest-, Pflege-, Release-, Lock- oder Restore-Code;
 - enthält nur Verifikation, Suche und Qualitätsbewertung sowie benötigte read-only Bibliotheken; welche das sind, ermittelt der Exporter aus den Importen selbst; mitkommen darf nur, was auf seiner Liste geprüfter lesender Bibliotheken steht, und jeder Import der Standardbibliothek muss auf einer zweiten geprüften Liste stehen, sodass weder ein Pflegewerkzeug noch schreibender Code in einen Export gelangt; ein neuer Import ohne Prüfung wird mit Namen abgelehnt statt stillschweigend vergessen;
 - wird erst gemeldet, wenn jedes mitgelieferte Werkzeug im erzeugten Ordner fehlerfrei gelaufen ist, auch die Suche mit Metadatenfilter; scheitert das oder irgendein späterer Schritt, werden Ordner und Paket wieder entfernt;
+- sucht mit demselben Suchkern wie der Lese-Skill (`search_core.py` mit `bm25.py`, byte-identisch) und liefert auf demselben Release dieselbe Rangliste und dasselbe Zählwerk (Abschnitt 5.4); Ergebnispfade beginnen mit `references/knowledge/`, und weil die Historie nicht zum Abzug gehört, weist das Zählwerk sie als nicht mitgeliefert aus;
+- erzeugt seine `SKILL.md` aus der Vorlagendatei `assets/knowledge-skill/SKILL.template.md`, in der nur Name und Beschreibung ersetzt werden; sie weist den Agenten an, die Werkzeuge mit vollem Pfad aus dem eigenen Skill-Ordner aufzurufen und das Zählwerk nach festen Regeln zu lesen;
 - bindet alle Inhalte über das ursprüngliche Release-Manifest;
 - enthält keine absoluten Quellpfade, Tokens oder transienten Locks;
 - wird als Skill-Ordner und `.skill`-Paket erzeugt.
 
 Soll der Inhalt aktualisiert werden, wird das kanonische Wiki gepflegt und veröffentlicht. Danach wird ein neuer eingefrorener Skill-Abzug erstellt; der alte Export wird nicht direkt bearbeitet.
+
+**Verhaltensänderung der exportierten Suche:** Exporte vor der Einführung des gemeinsamen Suchkerns rankten mit einer eigenen, additiven Heuristik ohne BM25. Neu exportierte Wissens-Skills ranken wie der Lese-Skill; bereits installierte Exporte behalten ihr altes Verhalten, bis sie neu exportiert werden. Auf dem Test-Wiki des Präzisionstors fand die alte Heuristik knapp mehr: 49, 58 und 64 statt 47, 57 und 62 von 107 Fragen unter den ersten 3, 12 und 100, bei 17 statt 20 Top-3-Plätzen für Navigationsseiten und gleich vielen Treffern für fehlende Themen (16). Der Wechsel ist trotzdem gewollt: Es gibt nur noch eine Suche, die das Präzisionstor misst, und jede Verbesserung erreicht beide Skills.
 
 ### 4.17 Gestufte Orientierung
 
@@ -644,6 +649,29 @@ Die Suche läuft in mehreren Ebenen:
 
 Der Skill unterscheidet in der Antwort zwischen belegter Tatsache, gepflegter Synthese, Schlussfolgerung und offener Frage. Wenn das Wiki die Antwort nicht trägt, benennt er die Lücke statt sie aus allgemeinem Wissen zu füllen.
 
+Gerankt wird mit BM25F über Titel, Aliase, Überschriften, Beschreibung und Text. Standardmäßig kommen 12 Treffer zurück, mit `--limit` bis zu 100. Ranking, Claims, Ausschnitte und Zählwerk stammen aus einem gemeinsamen Suchkern (`search_core.py` mit `bm25.py`). Er liegt byte-identisch in beiden Skills, und der Exporter kopiert ihn in jeden eingefrorenen Wissens-Skill. `search_wiki.py` ist nur noch die Befehlszeilenhülle, die den Release vor und nach der Suche prüft. Mit `--expect-manifest-sha256` bindet sich jede Suche an den zu Beginn verifizierten Release; ein anderer Stand meldet `snapshot_changed`, sodass eine Antwort nicht unbemerkt zwei Releases mischt.
+
+**Zählwerk: was die Trefferliste nicht zeigt.** Jede Suchausgabe trägt einen Block `coverage` (Format `lmwiki-search-coverage/1`). Er ergänzt nur Schlüssel; welche Treffer in welcher Reihenfolge und mit welchem Score zurückkommen, ändert er nicht. Er zählt, was sonst still verloren ginge:
+
+| Feld | Bedeutung |
+|---|---|
+| `matched`, `returned`, `truncated`, `omitted_count` | Treffer insgesamt, zurückgegeben, ob abgeschnitten wurde und wie viele fehlen; es gilt `returned + omitted_count = matched` |
+| `omitted_top` | höchstens 20 der nächsten Treffer mit Pfad und Score |
+| `scopes` | je Schicht (Wiki, Quellen, Historie): durchsucht oder nicht, Zahl der Dateien und Zahl der Dateien mit einem Suchwort; Quellen werden immer gezählt, die Historie nur, wenn sie durchsucht wird |
+| `query_terms` | jedes Suchwort mit Herkunft (`query` oder `concept-expansion`) und Dateizahl je Schicht |
+| `dropped_terms` | Wörter der Frage, die nicht gesucht wurden (Stoppwort, Einzelzeichen) |
+| `unmatched_terms` | Wörter der Frage, die in keiner durchsuchten Datei vorkommen |
+| `terms_only_in_unsearched.sources` | Suchwörter, die nur in den nicht durchsuchten Quellen stehen |
+| `boundary` | fester Satz: Die Zahlen beschreiben Wortübereinstimmungen und beweisen nicht, dass das Thema fehlt |
+
+Jeder Treffer nennt zusätzlich `matched_terms` (welche Suchwörter auf dieser Seite vorkommen), `claims_total` und `claims_returned` (pro Seite kommen höchstens acht Claims zurück) sowie `navigation` für `WIKI.md`, jede `index.md` und `meta/questions.md`. Navigationsseiten bleiben in der Rangliste, damit sich das Ranking nicht ändert, werden aber nie als Beleg zitiert. Die Wortzählungen ignorieren einen Metadatenfilter; wie viele Dateien er ausgeschlossen hat, steht in `filtered_out`.
+
+Daraus folgen feste Leseregeln, die in `SKILL.md`, im Antwortvertrag und in der exportierten `SKILL.md` stehen: Bei `truncated` erhöht der Agent `--limit` (höchstens 100) oder sagt, dass es weitere Treffer gibt. Vor einer Antwort aus einer Seite mit zurückgehaltenen Claims liest er alle ihre Claim-Blöcke. Bei `unmatched_terms` sucht er mit anderen Wörtern weiter, bevor er etwas folgert, und bei `terms_only_in_unsearched.sources` wiederholt er die Suche mit `--include-sources`. Die Zahlen gelten nie als Beweis, dass das Wiki zu einem Thema nichts enthält: Eine Seite mit anderen Wörtern, einer anderen Wortform oder in einer anderen Sprache zählt nicht mit.
+
+Weil die Quellen auch ohne `--include-sources` gezählt werden, liest jede Suche alle Quelldateien. Der Lese-Skill schreibt weder Index noch Cache, also zahlt jede Suche diese Arbeit neu, und sie wächst mit der Menge an Quell-Markdown. Auf dem Entwicklungsrechner kostete das Zählen bei 7,7 MB Quell-Markdown rund 0,5 Sekunden je Suche, also etwa 0,07 Sekunden je Megabyte; eine Suche mit `--include-sources` dauerte dort etwa doppelt so lange.
+
+Ein Präzisionstor (`tests/test_search_quality.py`, Abschnitt 15) misst die Suche auf einem synthetischen Test-Wiki mit 114 Fragen. Es schlägt fehl, wenn eine Frage, deren erster Treffer bei der Aufzeichnung eine Pflichtseite war, keine Pflichtseite mehr auf Rang 1 hat, wenn eine Pflichtseite die ersten 3 oder die ersten 12 verlässt, in denen sie stand, oder wenn eine aufgezeichnete Unter- oder Obergrenze verletzt wird. Verschiebungen innerhalb dieser Bänder, etwa von Rang 2 auf Rang 3 oder von Rang 4 auf Rang 9, erkennt es nicht.
+
 ### 5.5 Metadatenfilter und Facetten
 
 Der Lese-Skill kann Suchmengen kontrolliert einschränken, beispielsweise nach:
@@ -692,7 +720,7 @@ Der Lese-Skill beschreibt maschinenlesbar genau fünf Aktionsgruppen:
 - Frontmatter inventarisieren;
 - suchen und filtern.
 
-Der Katalog enthält keine Pflege-, Cleaning-, Snapshot-, Restore-, Lock- oder Schreibaktion.
+Für die Suche nennt der Katalog alle Parameter, die der Helfer annimmt, auch `--limit` und `--expect-manifest-sha256`. Nur das Ziel `--target`, das jede Aktion verlangt, steht wie bei allen Aktionen in keinem Eintrag. Der Katalog enthält keine Pflege-, Cleaning-, Snapshot-, Restore-, Lock- oder Schreibaktion.
 
 ## 6. Vollständiger Arbeitszyklus
 
@@ -834,6 +862,13 @@ Die `evals/`-Verzeichnisse in den entpackten Entwicklungsordnern enthalten Tests
 ### macOS und Windows
 
 Die eingebauten Helfer verwenden Python 3.9 oder neuer und ausschließlich die Standardbibliothek. Sie sind nicht auf Bash, POSIX-Shebangs oder ausführbare Dateirechte angewiesen. Pfade werden intern plattformgerecht aufgelöst und in erzeugten Daten als relative POSIX-Pfade gespeichert.
+
+Zwei Zusagen gelten für jeden Helfer, den ein Agent direkt aufruft, auch für die Werkzeuge eines exportierten Wissens-Skills:
+
+- **Eigener Suchpfad.** Jeder Helfer setzt sein eigenes Verzeichnis an den Anfang von `sys.path`, bevor er ein Nachbarmodul importiert. Er läuft deshalb auch unter `python -I`, das Sicherheitsleitfäden für Code aus entpackten Archiven empfehlen, sowie ab Python 3.11 unter `python -P` und `PYTHONSAFEPATH=1`. Diese Modi nehmen das Skriptverzeichnis vom Suchpfad; vorher brach dann jeder Helfer mit Nachbarmodulen mit `ModuleNotFoundError` ab. Der Selbsttest des Exporters ruft die exportierten Werkzeuge mit `PYTHONSAFEPATH=1` auf.
+- **UTF-8-Ausgabe.** Jeder Helfer stellt beim Start Standardausgabe und Standardfehler auf UTF-8 um, sofern der Datenstrom das erlaubt. Unter Windows schreibt Python umgeleitete Ausgabe sonst in der ANSI-Codepage, und schon ein Zeichen wie „≥" in einer Seite brach die JSON-Ausgabe ab. Helfer, die andere Helfer aufrufen, lesen deren Ausgabe ebenfalls als UTF-8.
+
+`tests/test_entrypoints.py` prüft beides für jeden Einstieg statisch, ruft die Suche beider Skills mit `python -I` auf und liest ihre Ausgabe über eine simulierte cp1252-Umleitung.
 
 Der konkrete Aufruf der Helfer ist Aufgabe des ausführenden Agenten. Unter Claude Code dient `${CLAUDE_SKILL_DIR}` zur Auflösung des Skill-Verzeichnisses; andere Agent-Skills-Hosts lösen Dateien relativ zur geladenen `SKILL.md` auf.
 
@@ -989,6 +1024,7 @@ Die Skills sind absichtlich konservativ:
 README.md
 docs/                          Analysen und Umsetzungspläne
 tests/                         Testsuite; python3 tests/run_tests.py
+tests/fixtures/search_quality/ Test-Wiki, Fragen und Erwartungen des Präzisionstors
 tools/package_skills.py        baut die .skill-Pakete reproduzierbar
 maintain-llm-wiki.skill
 maintain-llm-wiki/
@@ -1006,6 +1042,16 @@ query-llm-wiki/
 ```
 
 Die Testsuite läuft ohne Fremdbibliotheken mit `python3 tests/run_tests.py` und treibt die echten gebündelten Helfer über einen vollständigen Lebenszyklus. `tools/package_skills.py` baut beide `.skill`-Pakete reproduzierbar und schließt `evals/` aus; `--check` prüft, ob die eingecheckten Pakete aktuell sind.
+
+Zur Testsuite gehört ein Präzisionstor für die Suche. `tests/fixtures/search_quality/` enthält ein synthetisches deutschsprachiges Test-Wiki eines fiktiven Stadtwerks (45 Inhaltsseiten, 11 Quellen, 8 Begriffswelten) als Python-Datenmodule, den Bauhelfer `build_fixture.py`, 114 Fragen mit Pflichtseiten (`ground_truth.json`) und die aufgezeichneten Erwartungen (`expectations.json`). Der Bauhelfer veröffentlicht das Wiki mit den echten Helfern in ein Verzeichnis außerhalb des Repositorys (`--out`) und schreibt nichts ins Repository, auch keine Bytecode-Caches neben den Helfern. `tests/test_search_quality.py` baut es in ein temporäres Verzeichnis, stellt alle Fragen und schlägt fehl, wenn
+
+- eine Frage, deren erster Treffer eine Pflichtseite war, keine Pflichtseite mehr auf Rang 1 hat (zwei Pflichtseiten dürfen die Plätze tauschen),
+- eine Pflichtseite ihren Platz unter den ersten 3 oder unter den ersten 12 verliert,
+- weniger Fragen eine Pflichtseite auf Rang 1 haben oder vollständig gefunden werden als aufgezeichnet (heute 41 Fragen mit einer Pflichtseite auf Rang 1 sowie 47, 57 und 62 von 107 beantwortbaren Fragen unter den ersten 3, 12 und 100),
+- die sieben Fragen zu Themen, die das Wiki nicht enthält, zusammen mehr als 16 Treffer unter den ersten 12 liefern oder
+- Navigationsseiten mehr als 20 Top-3-Plätze belegen.
+
+Eine bewusst hingenommene Verschlechterung steht mit Begründung in `accepted_regressions`. `tests/fixtures/search_quality/record_expectations.py` zeichnet die Erwartungen neu auf. Das ist eine bewusste Entscheidung, die die Messlatte für alle späteren Änderungen verschiebt; sie gehört mit Begründung in die Commit-Nachricht.
 
 Die Dateien unter `scripts/` sind interne, deterministische Skill-Ressourcen. `references/` enthält die ausführlichen Verträge und Arbeitsregeln. `evals/evals.json` beschreibt repräsentative Prüfszenarien für die Weiterentwicklung und bleibt außerhalb des installierbaren Archivs. Die beiden `.skill`-Dateien sind die installierbaren ZIP-basierten Pakete mit jeweils genau einem Skill-Ordner als Archivwurzel.
 

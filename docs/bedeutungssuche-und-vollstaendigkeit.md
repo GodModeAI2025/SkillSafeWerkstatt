@@ -440,6 +440,9 @@ Exporttests, statische Prüfungen für die Vorlagen und Python-3.9-Grammatikprü
    Einstiegen.
 4. Die Testfragen-Batterie als Messinstrument ins Repository, siehe Entscheidung E4. Dazu ein
    **Präzisionstor** als Test:
+   - Eine Frage, deren erster Treffer heute eine Pflichtseite ist, behält eine Pflichtseite auf
+     Rang 1. (Nachgetragen nach der Prüfung von Stufe 1: Ohne diese Regel blieben Verluste von
+     Rang 1 auf Rang 2 oder 3 unbemerkt, genau die Fehler, die Befund 2 für Stufe 2 nennt.)
    - Keine Pflichtseite, die heute unter den ersten 3 steht, verlässt sie.
    - Keine Pflichtseite fällt aus dem Standardlimit.
    - Navigationsseiten gewinnen keine Top-3-Plätze.

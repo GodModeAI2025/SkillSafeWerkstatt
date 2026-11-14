@@ -1,0 +1,657 @@
+{
+  "format": "lmwiki-search-quality-expectations/1",
+  "about": "Recorded by record_expectations.py from the search as it was at recording time. A rank is the 1-based position of a required page at --limit 100 (null: not among the first 100), without flags unless with_required_flags says otherwise. floors are minimums, caps are maximums. tests/test_search_quality.py fails when a query whose first result is a required page here no longer has a required page first, or when a required page leaves the top 3 or the top 12 it held here, unless accepted_regressions lists that page with a reason. Changing this file is a deliberate act: state the change and its reason in the commit message.",
+  "rank_limit": 100,
+  "default_limit": 12,
+  "floors": {
+    "answerable_queries": 107,
+    "required_first_result": 41,
+    "all_must_find_within_3": 47,
+    "all_must_find_within_12": 57,
+    "all_must_find_within_100": 62
+  },
+  "caps": {
+    "negative_results_within_12": 16,
+    "navigation_in_top_3": 20
+  },
+  "queries": {
+    "ex-01": {
+      "must_find_ranks": {
+        "wiki/concepts/netzentgelt.md": 1
+      }
+    },
+    "ex-02": {
+      "must_find_ranks": {
+        "wiki/concepts/sonderkuendigungsrecht.md": 1
+      }
+    },
+    "ex-03": {
+      "must_find_ranks": {
+        "wiki/concepts/ersatzversorgung.md": 1
+      }
+    },
+    "ex-04": {
+      "must_find_ranks": {
+        "wiki/topics/jahresverbrauchsabrechnung.md": 1
+      }
+    },
+    "ex-05": {
+      "must_find_ranks": {
+        "wiki/entities/tarif-lindenstrom-fix12.md": 1
+      }
+    },
+    "ex-06": {
+      "must_find_ranks": {
+        "wiki/entities/schlichtungsstelle-energie.md": 1
+      }
+    },
+    "ex-07": {
+      "must_find_ranks": {
+        "wiki/concepts/steuerbare-verbrauchseinrichtung.md": 1
+      }
+    },
+    "in-01": {
+      "must_find_ranks": {
+        "wiki/concepts/netzentgelt.md": 24
+      }
+    },
+    "in-02": {
+      "must_find_ranks": {
+        "wiki/concepts/kuendigungsfrist.md": null
+      }
+    },
+    "in-03": {
+      "must_find_ranks": {
+        "wiki/concepts/zaehlerstand.md": null
+      }
+    },
+    "in-04": {
+      "must_find_ranks": {
+        "wiki/concepts/widerrufsrecht.md": 9
+      }
+    },
+    "in-05": {
+      "must_find_ranks": {
+        "wiki/topics/umzug.md": 5
+      }
+    },
+    "in-06": {
+      "must_find_ranks": {
+        "wiki/topics/zahlungsverzug-und-mahnwesen.md": null
+      }
+    },
+    "in-07": {
+      "must_find_ranks": {
+        "wiki/concepts/preisanpassung.md": null
+      }
+    },
+    "in-08": {
+      "must_find_ranks": {
+        "wiki/topics/lieferantenwechsel.md": 4
+      }
+    },
+    "um-01": {
+      "must_find_ranks": {
+        "wiki/concepts/kuendigungsfrist.md": 2
+      }
+    },
+    "um-02": {
+      "must_find_ranks": {
+        "wiki/concepts/zaehlerstand.md": 1
+      }
+    },
+    "um-03": {
+      "must_find_ranks": {
+        "wiki/concepts/bonitaetspruefung.md": 1
+      }
+    },
+    "um-04": {
+      "must_find_ranks": {
+        "wiki/entities/tarif-lindenwaerme-wp.md": 2
+      }
+    },
+    "um-05": {
+      "must_find_ranks": {
+        "wiki/topics/lieferantenwechsel.md": 1
+      }
+    },
+    "um-06": {
+      "must_find_ranks": {
+        "wiki/entities/tarif-lindenstrom-oeko.md": null
+      }
+    },
+    "um-07": {
+      "must_find_ranks": {
+        "wiki/topics/vertrieb-an-der-haustuer.md": 1
+      }
+    },
+    "co-01": {
+      "must_find_ranks": {
+        "wiki/concepts/kuendigungsfrist.md": 2
+      }
+    },
+    "co-02": {
+      "must_find_ranks": {
+        "wiki/concepts/messstellenbetrieb.md": null
+      }
+    },
+    "co-03": {
+      "must_find_ranks": {
+        "wiki/entities/tarif-lindenwaerme-wp.md": null
+      }
+    },
+    "co-04": {
+      "must_find_ranks": {
+        "wiki/topics/jahresverbrauchsabrechnung.md": null
+      }
+    },
+    "co-05": {
+      "must_find_ranks": {
+        "wiki/topics/neukundenbonus.md": null
+      }
+    },
+    "co-06": {
+      "must_find_ranks": {
+        "wiki/concepts/marktlokation.md": 2
+      }
+    },
+    "co-07": {
+      "must_find_ranks": {
+        "wiki/concepts/versorgungsunterbrechung.md": 1
+      }
+    },
+    "co-08": {
+      "must_find_ranks": {
+        "wiki/concepts/vertragslaufzeit.md": 1
+      }
+    },
+    "su-01": {
+      "must_find_ranks": {
+        "wiki/concepts/preisanpassung.md": null
+      }
+    },
+    "su-02": {
+      "must_find_ranks": {
+        "wiki/concepts/intelligentes-messsystem.md": 1
+      }
+    },
+    "su-03": {
+      "must_find_ranks": {
+        "wiki/topics/umzug.md": null
+      }
+    },
+    "su-04": {
+      "must_find_ranks": {
+        "wiki/entities/tarif-lindenstrom-oeko.md": null
+      }
+    },
+    "su-05": {
+      "must_find_ranks": {
+        "wiki/topics/beschwerdemanagement.md": null
+      }
+    },
+    "su-06": {
+      "must_find_ranks": {
+        "wiki/topics/neukundenbonus.md": 8
+      }
+    },
+    "su-07": {
+      "must_find_ranks": {
+        "wiki/concepts/versorgungsunterbrechung.md": null
+      }
+    },
+    "su-08": {
+      "must_find_ranks": {
+        "wiki/concepts/zaehlerstand.md": null
+      }
+    },
+    "sc-01": {
+      "must_find_ranks": {
+        "wiki/concepts/netzentgelt.md": 1
+      }
+    },
+    "sc-02": {
+      "must_find_ranks": {
+        "wiki/topics/lieferantenwechsel.md": 1
+      }
+    },
+    "sc-03": {
+      "must_find_ranks": {
+        "wiki/concepts/versorgungsunterbrechung.md": 1
+      }
+    },
+    "sc-04": {
+      "must_find_ranks": {
+        "wiki/concepts/bonitaetspruefung.md": 1
+      }
+    },
+    "sc-05": {
+      "must_find_ranks": {
+        "wiki/concepts/messstellenbetrieb.md": 2
+      }
+    },
+    "sc-06": {
+      "must_find_ranks": {
+        "wiki/concepts/grundversorgung.md": 1
+      }
+    },
+    "sc-07": {
+      "must_find_ranks": {
+        "wiki/concepts/widerrufsrecht.md": 1
+      }
+    },
+    "pa-01": {
+      "must_find_ranks": {
+        "wiki/concepts/versorgungsunterbrechung.md": 26
+      }
+    },
+    "pa-02": {
+      "must_find_ranks": {
+        "wiki/concepts/kuendigungsfrist.md": null
+      }
+    },
+    "pa-03": {
+      "must_find_ranks": {
+        "wiki/concepts/widerrufsrecht.md": 9
+      }
+    },
+    "pa-04": {
+      "must_find_ranks": {
+        "wiki/concepts/abschlagszahlung.md": 24
+      }
+    },
+    "pa-05": {
+      "must_find_ranks": {
+        "wiki/concepts/messstellenbetrieb.md": 39
+      }
+    },
+    "pa-06": {
+      "must_find_ranks": {
+        "wiki/concepts/grundversorgung.md": 5
+      }
+    },
+    "pa-07": {
+      "must_find_ranks": {
+        "wiki/topics/umzug.md": 15
+      }
+    },
+    "pa-08": {
+      "must_find_ranks": {
+        "wiki/topics/ratenzahlung.md": null
+      }
+    },
+    "cl-01": {
+      "must_find_ranks": {
+        "wiki/concepts/kuendigungsfrist.md": null
+      }
+    },
+    "cl-02": {
+      "must_find_ranks": {
+        "wiki/topics/zahlungsverzug-und-mahnwesen.md": null
+      }
+    },
+    "cl-03": {
+      "must_find_ranks": {
+        "wiki/concepts/intelligentes-messsystem.md": null
+      }
+    },
+    "cl-04": {
+      "must_find_ranks": {
+        "wiki/concepts/widerrufsrecht.md": null
+      }
+    },
+    "cl-05": {
+      "must_find_ranks": {
+        "wiki/concepts/abschlagszahlung.md": null
+      }
+    },
+    "cl-06": {
+      "must_find_ranks": {
+        "wiki/concepts/netzentgelt.md": 1
+      }
+    },
+    "cl-07": {
+      "must_find_ranks": {
+        "wiki/topics/umzug.md": null
+      }
+    },
+    "cl-08": {
+      "must_find_ranks": {
+        "wiki/concepts/bonitaetspruefung.md": null
+      }
+    },
+    "ty-01": {
+      "must_find_ranks": {
+        "wiki/concepts/netzentgelt.md": null
+      }
+    },
+    "ty-02": {
+      "must_find_ranks": {
+        "wiki/concepts/kuendigungsfrist.md": null
+      }
+    },
+    "ty-03": {
+      "must_find_ranks": {
+        "wiki/concepts/widerrufsrecht.md": null
+      }
+    },
+    "ty-04": {
+      "must_find_ranks": {
+        "wiki/topics/lieferantenwechsel.md": null
+      }
+    },
+    "ty-05": {
+      "must_find_ranks": {
+        "wiki/concepts/abschlagszahlung.md": null
+      }
+    },
+    "ty-06": {
+      "must_find_ranks": {
+        "wiki/concepts/bonitaetspruefung.md": null
+      }
+    },
+    "ty-07": {
+      "must_find_ranks": {
+        "wiki/concepts/grundversorgung.md": null
+      }
+    },
+    "ty-08": {
+      "must_find_ranks": {
+        "wiki/concepts/zaehlerstand.md": 1
+      }
+    },
+    "br-01": {
+      "must_find_ranks": {
+        "wiki/concepts/vertragslaufzeit.md": 4,
+        "wiki/concepts/kuendigungsfrist.md": null,
+        "wiki/topics/vertragsschluss-im-fernabsatz.md": 11,
+        "wiki/comparisons/grundversorgung-und-sondervertrag.md": 19,
+        "wiki/concepts/widerrufsrecht.md": 2
+      }
+    },
+    "br-02": {
+      "must_find_ranks": {
+        "wiki/concepts/kuendigungsfrist.md": 1,
+        "wiki/concepts/sonderkuendigungsrecht.md": 3,
+        "wiki/concepts/grundversorgung.md": null
+      }
+    },
+    "br-03": {
+      "must_find_ranks": {
+        "wiki/concepts/kuendigungsfrist.md": 1,
+        "wiki/concepts/widerrufsrecht.md": null,
+        "wiki/concepts/preisanpassung.md": 6,
+        "wiki/concepts/versorgungsunterbrechung.md": 7,
+        "wiki/topics/lieferantenwechsel.md": 5
+      }
+    },
+    "br-04": {
+      "must_find_ranks": {
+        "wiki/entities/tarif-lindenstrom-fix12.md": null,
+        "wiki/entities/tarif-lindenstrom-basis.md": null,
+        "wiki/entities/tarif-lindenstrom-flex.md": null,
+        "wiki/concepts/netzentgelt.md": null,
+        "wiki/concepts/preisanpassung.md": null
+      }
+    },
+    "br-05": {
+      "must_find_ranks": {
+        "wiki/concepts/zaehlerstand.md": 1,
+        "wiki/concepts/messstellenbetrieb.md": null,
+        "wiki/concepts/intelligentes-messsystem.md": 3,
+        "wiki/comparisons/moderne-messeinrichtung-und-intelligentes-messsystem.md": null
+      }
+    },
+    "ch-01": {
+      "must_find_ranks": {
+        "wiki/concepts/netzentgelt.md": 1
+      }
+    },
+    "ch-02": {
+      "must_find_ranks": {
+        "wiki/concepts/netzentgelt.md": 2
+      }
+    },
+    "ch-03": {
+      "must_find_ranks": {
+        "wiki/concepts/netzentgelt.md": 1
+      }
+    },
+    "ch-04": {
+      "must_find_ranks": {
+        "wiki/concepts/abschlagszahlung.md": 1
+      }
+    },
+    "ch-05": {
+      "must_find_ranks": {
+        "wiki/concepts/abschlagszahlung.md": 1
+      }
+    },
+    "ch-06": {
+      "must_find_ranks": {
+        "wiki/topics/lieferantenwechsel.md": 1
+      }
+    },
+    "ch-07": {
+      "must_find_ranks": {
+        "wiki/topics/lieferantenwechsel.md": 1
+      }
+    },
+    "ch-08": {
+      "must_find_ranks": {
+        "wiki/topics/lieferantenwechsel.md": 1
+      }
+    },
+    "so-01": {
+      "must_find_ranks": {
+        "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md": null
+      },
+      "with_required_flags": {
+        "flags": [
+          "--include-sources"
+        ],
+        "must_find_ranks": {
+          "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md": 1
+        }
+      }
+    },
+    "so-02": {
+      "must_find_ranks": {
+        "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md": null
+      },
+      "with_required_flags": {
+        "flags": [
+          "--include-sources"
+        ],
+        "must_find_ranks": {
+          "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md": 1
+        }
+      }
+    },
+    "so-03": {
+      "must_find_ranks": {
+        "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": null
+      },
+      "with_required_flags": {
+        "flags": [
+          "--include-sources"
+        ],
+        "must_find_ranks": {
+          "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": 1
+        }
+      }
+    },
+    "so-04": {
+      "must_find_ranks": {
+        "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": null
+      },
+      "with_required_flags": {
+        "flags": [
+          "--include-sources"
+        ],
+        "must_find_ranks": {
+          "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": 1
+        }
+      }
+    },
+    "so-05": {
+      "must_find_ranks": {
+        "sources/src-1e047c0a282729b8-rollout-leitfaden-intelligente-messsysteme-lf-msb-2026.md": null
+      },
+      "with_required_flags": {
+        "flags": [
+          "--include-sources"
+        ],
+        "must_find_ranks": {
+          "sources/src-1e047c0a282729b8-rollout-leitfaden-intelligente-messsysteme-lf-msb-2026.md": 1
+        }
+      }
+    },
+    "so-06": {
+      "must_find_ranks": {
+        "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md": null
+      },
+      "with_required_flags": {
+        "flags": [
+          "--include-sources"
+        ],
+        "must_find_ranks": {
+          "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md": 1
+        }
+      }
+    },
+    "so-07": {
+      "must_find_ranks": {
+        "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md": null
+      },
+      "with_required_flags": {
+        "flags": [
+          "--include-sources"
+        ],
+        "must_find_ranks": {
+          "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md": 1
+        }
+      }
+    },
+    "so-08": {
+      "must_find_ranks": {
+        "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": null
+      },
+      "with_required_flags": {
+        "flags": [
+          "--include-sources"
+        ],
+        "must_find_ranks": {
+          "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md": 1
+        }
+      }
+    },
+    "sh-01": {
+      "must_find_ranks": {
+        "wiki/entities/tarif-lindenstrom-klassik.md": 4
+      }
+    },
+    "sh-02": {
+      "must_find_ranks": {
+        "wiki/topics/preisanpassung-januar-2025.md": 6
+      }
+    },
+    "sh-03": {
+      "must_find_ranks": {
+        "wiki/topics/kuendigungsfristen-alte-rechtslage.md": 1
+      }
+    },
+    "sh-04": {
+      "must_find_ranks": {
+        "wiki/entities/tarif-lindenstrom-klassik.md": 1
+      }
+    },
+    "sh-05": {
+      "must_find_ranks": {
+        "wiki/concepts/netzentgelt.md": 1
+      }
+    },
+    "sh-06": {
+      "must_find_ranks": {
+        "wiki/topics/kuendigungsfristen-alte-rechtslage.md": 8
+      }
+    },
+    "id-01": {
+      "must_find_ranks": {
+        "wiki/concepts/sonderkuendigungsrecht.md": 1
+      }
+    },
+    "id-02": {
+      "must_find_ranks": {
+        "wiki/concepts/versorgungsunterbrechung.md": 1
+      }
+    },
+    "id-03": {
+      "must_find_ranks": {
+        "wiki/concepts/steuerbare-verbrauchseinrichtung.md": 2
+      }
+    },
+    "id-04": {
+      "must_find_ranks": {
+        "wiki/concepts/netzentgelt.md": 1
+      }
+    },
+    "id-05": {
+      "must_find_ranks": {
+        "wiki/concepts/marktlokation.md": 1
+      }
+    },
+    "id-06": {
+      "must_find_ranks": {
+        "wiki/concepts/zaehlerstand.md": null
+      }
+    },
+    "id-07": {
+      "must_find_ranks": {
+        "wiki/entities/tarif-lindenstrom-klassik.md": 6
+      }
+    },
+    "id-08": {
+      "must_find_ranks": {
+        "wiki/topics/neukundenbonus.md": 3
+      }
+    },
+    "id-09": {
+      "must_find_ranks": {
+        "wiki/concepts/widerrufsrecht.md": 1
+      }
+    },
+    "id-10": {
+      "must_find_ranks": {
+        "wiki/topics/lieferantenwechsel.md": 2
+      }
+    },
+    "id-11": {
+      "must_find_ranks": {
+        "wiki/entities/stadtwerke-lindenau-vertrieb.md": 1
+      }
+    },
+    "ne-01": {
+      "must_find_ranks": {}
+    },
+    "ne-02": {
+      "must_find_ranks": {}
+    },
+    "ne-03": {
+      "must_find_ranks": {}
+    },
+    "ne-04": {
+      "must_find_ranks": {}
+    },
+    "ne-05": {
+      "must_find_ranks": {}
+    },
+    "ne-06": {
+      "must_find_ranks": {}
+    },
+    "ne-07": {
+      "must_find_ranks": {}
+    }
+  },
+  "accepted_regressions": []
+}

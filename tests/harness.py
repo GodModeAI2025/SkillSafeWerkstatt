@@ -66,7 +66,7 @@ def run(script: Path, *args: str, check: bool = True) -> subprocess.CompletedPro
     result = subprocess.run(
         argv,
         capture_output=True,
-        text=True,
+        encoding="utf-8",  # helpers print UTF-8 on every host
         cwd=str(script.parent),
     )
     if check and result.returncode != 0:

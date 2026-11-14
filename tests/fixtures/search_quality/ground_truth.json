@@ -1,0 +1,1838 @@
+[
+  {
+    "id": "ex-01",
+    "category": "exact",
+    "query": "Netzentgelt",
+    "expected_paths": [
+      "wiki/concepts/netzentgelt.md",
+      "wiki/concepts/steuerbare-verbrauchseinrichtung.md",
+      "wiki/entities/lindenau-netz.md"
+    ],
+    "must_find": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "rationale": "Seitentitel wörtlich; die beiden anderen Seiten behandeln reduzierte bzw. veröffentlichte Netzentgelte.",
+    "premise_literal_overlap": [
+      "netzentgelt"
+    ]
+  },
+  {
+    "id": "ex-02",
+    "category": "exact",
+    "query": "Sonderkündigungsrecht",
+    "expected_paths": [
+      "wiki/concepts/sonderkuendigungsrecht.md",
+      "wiki/concepts/preisanpassung.md",
+      "wiki/topics/umzug.md",
+      "wiki/entities/tarif-lindenstrom-klassik.md",
+      "wiki/topics/preisanpassung-april-2026.md"
+    ],
+    "must_find": [
+      "wiki/concepts/sonderkuendigungsrecht.md"
+    ],
+    "rationale": "Seitentitel wörtlich; weitere Seiten nennen die Auslöser.",
+    "premise_literal_overlap": [
+      "sonderkündigungsrecht"
+    ]
+  },
+  {
+    "id": "ex-03",
+    "category": "exact",
+    "query": "Ersatzversorgung",
+    "expected_paths": [
+      "wiki/concepts/ersatzversorgung.md",
+      "wiki/topics/lieferantenwechsel.md",
+      "wiki/topics/umzug.md"
+    ],
+    "must_find": [
+      "wiki/concepts/ersatzversorgung.md"
+    ],
+    "rationale": "Seitentitel wörtlich.",
+    "premise_literal_overlap": [
+      "ersatzversorgung"
+    ]
+  },
+  {
+    "id": "ex-04",
+    "category": "exact",
+    "query": "Jahresverbrauchsabrechnung",
+    "expected_paths": [
+      "wiki/topics/jahresverbrauchsabrechnung.md",
+      "wiki/concepts/abschlagszahlung.md",
+      "wiki/concepts/zaehlerstand.md"
+    ],
+    "must_find": [
+      "wiki/topics/jahresverbrauchsabrechnung.md"
+    ],
+    "rationale": "Seitentitel wörtlich.",
+    "premise_literal_overlap": [
+      "jahresverbrauchsabrechnung"
+    ]
+  },
+  {
+    "id": "ex-05",
+    "category": "exact",
+    "query": "LindenStrom Fix12",
+    "expected_paths": [
+      "wiki/entities/tarif-lindenstrom-fix12.md",
+      "wiki/comparisons/festpreistarif-und-dynamischer-tarif.md",
+      "wiki/concepts/preisgarantie.md",
+      "wiki/comparisons/grundversorgung-und-sondervertrag.md"
+    ],
+    "must_find": [
+      "wiki/entities/tarif-lindenstrom-fix12.md"
+    ],
+    "rationale": "Produktname wörtlich.",
+    "premise_literal_overlap": [
+      "fix12",
+      "lindenstrom"
+    ]
+  },
+  {
+    "id": "ex-06",
+    "category": "exact",
+    "query": "Schlichtungsstelle Energie",
+    "expected_paths": [
+      "wiki/entities/schlichtungsstelle-energie.md",
+      "wiki/topics/beschwerdemanagement.md"
+    ],
+    "must_find": [
+      "wiki/entities/schlichtungsstelle-energie.md"
+    ],
+    "rationale": "Name der Stelle wörtlich.",
+    "premise_literal_overlap": [
+      "energie",
+      "schlichtungsstelle"
+    ]
+  },
+  {
+    "id": "ex-07",
+    "category": "exact",
+    "query": "Steuerbare Verbrauchseinrichtung",
+    "expected_paths": [
+      "wiki/concepts/steuerbare-verbrauchseinrichtung.md",
+      "wiki/entities/tarif-lindenwaerme-wp.md",
+      "wiki/concepts/intelligentes-messsystem.md"
+    ],
+    "must_find": [
+      "wiki/concepts/steuerbare-verbrauchseinrichtung.md"
+    ],
+    "rationale": "Seitentitel wörtlich.",
+    "premise_literal_overlap": [
+      "steuerbare",
+      "verbrauchseinrichtung"
+    ]
+  },
+  {
+    "id": "in-01",
+    "category": "inflection",
+    "query": "Was gehört alles zu den Netzentgelten?",
+    "expected_paths": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "must_find": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "rationale": "Dativ Plural 'Netzentgelten'; die Seite schreibt Netzentgelt/Netzentgelte.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "in-02",
+    "category": "inflection",
+    "query": "gekündigten Vertrag bestätigen",
+    "expected_paths": [
+      "wiki/concepts/kuendigungsfrist.md"
+    ],
+    "must_find": [
+      "wiki/concepts/kuendigungsfrist.md"
+    ],
+    "rationale": "Seite: 'Kündigung', 'gekündigt', 'bestätigt' – Anfrage beugt anders.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "in-03",
+    "category": "inflection",
+    "query": "Zählerstände schätzen lassen",
+    "expected_paths": [
+      "wiki/concepts/zaehlerstand.md"
+    ],
+    "must_find": [
+      "wiki/concepts/zaehlerstand.md"
+    ],
+    "rationale": "Plural und Infinitiv; Seite: Zählerstand, geschätzt, Schätzung.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "in-04",
+    "category": "inflection",
+    "query": "Kunde widerruft am Telefon",
+    "expected_paths": [
+      "wiki/concepts/widerrufsrecht.md"
+    ],
+    "must_find": [
+      "wiki/concepts/widerrufsrecht.md"
+    ],
+    "rationale": "Verbform 'widerruft'; Seite: Widerruf, widerrufen, telefonisch.",
+    "premise_literal_overlap": [
+      "kunde"
+    ]
+  },
+  {
+    "id": "in-05",
+    "category": "inflection",
+    "query": "umgezogene Kunden – läuft der Vertrag weiter?",
+    "expected_paths": [
+      "wiki/topics/umzug.md"
+    ],
+    "must_find": [
+      "wiki/topics/umzug.md"
+    ],
+    "rationale": "Partizip 'umgezogene'; Seite: Umzug, 'wird fortgesetzt'.",
+    "premise_literal_overlap": [
+      "vertrag"
+    ]
+  },
+  {
+    "id": "in-06",
+    "category": "inflection",
+    "query": "Mahnungen Gebühren",
+    "expected_paths": [
+      "wiki/topics/zahlungsverzug-und-mahnwesen.md"
+    ],
+    "must_find": [
+      "wiki/topics/zahlungsverzug-und-mahnwesen.md"
+    ],
+    "rationale": "Plurale; Seite: Mahnung, Mahnpauschale, Bankgebühr.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "in-07",
+    "category": "inflection",
+    "query": "Preise angepasst – bis wann müssen wir das mitteilen?",
+    "expected_paths": [
+      "wiki/concepts/preisanpassung.md",
+      "wiki/comparisons/grundversorgung-und-sondervertrag.md"
+    ],
+    "must_find": [
+      "wiki/concepts/preisanpassung.md"
+    ],
+    "rationale": "Verbformen 'angepasst', 'mitteilen'; Seite: Preisanpassung, teilt mit, mitgeteilt.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "in-08",
+    "category": "inflection",
+    "query": "Lieferanten wechseln – wie lange dauert das?",
+    "expected_paths": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "must_find": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "rationale": "Verb 'wechseln' statt Substantiv 'Wechsel'/'Lieferantenwechsel'.",
+    "premise_literal_overlap": [
+      "lieferanten"
+    ]
+  },
+  {
+    "id": "um-01",
+    "category": "umlaut_spelling",
+    "query": "Kuendigungsfrist Sondervertrag",
+    "expected_paths": [
+      "wiki/concepts/kuendigungsfrist.md",
+      "wiki/comparisons/grundversorgung-und-sondervertrag.md"
+    ],
+    "must_find": [
+      "wiki/concepts/kuendigungsfrist.md"
+    ],
+    "rationale": "ue statt ü.",
+    "premise_literal_overlap": [
+      "sondervertrag"
+    ]
+  },
+  {
+    "id": "um-02",
+    "category": "umlaut_spelling",
+    "query": "Zaehlerstand melden",
+    "expected_paths": [
+      "wiki/concepts/zaehlerstand.md"
+    ],
+    "must_find": [
+      "wiki/concepts/zaehlerstand.md"
+    ],
+    "rationale": "ae statt ä.",
+    "premise_literal_overlap": [
+      "melden"
+    ]
+  },
+  {
+    "id": "um-03",
+    "category": "umlaut_spelling",
+    "query": "Bonitaetspruefung Ablehnung",
+    "expected_paths": [
+      "wiki/concepts/bonitaetspruefung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/bonitaetspruefung.md"
+    ],
+    "rationale": "ae und ue statt ä und ü.",
+    "premise_literal_overlap": [
+      "ablehnung"
+    ]
+  },
+  {
+    "id": "um-04",
+    "category": "umlaut_spelling",
+    "query": "Waermepumpe Tarif",
+    "expected_paths": [
+      "wiki/entities/tarif-lindenwaerme-wp.md",
+      "wiki/concepts/steuerbare-verbrauchseinrichtung.md"
+    ],
+    "must_find": [
+      "wiki/entities/tarif-lindenwaerme-wp.md"
+    ],
+    "rationale": "ae statt ä; Seite: Wärmepumpe(n).",
+    "premise_literal_overlap": [
+      "tarif"
+    ]
+  },
+  {
+    "id": "um-05",
+    "category": "umlaut_spelling",
+    "query": "Schlußrechnung nach Lieferantenwechsel",
+    "expected_paths": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "must_find": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "rationale": "Alte ß-Schreibung; Seite schreibt 'Schlussrechnung'.",
+    "premise_literal_overlap": [
+      "lieferantenwechsel"
+    ]
+  },
+  {
+    "id": "um-06",
+    "category": "umlaut_spelling",
+    "query": "Oekostrom",
+    "expected_paths": [
+      "wiki/entities/tarif-lindenstrom-oeko.md"
+    ],
+    "must_find": [
+      "wiki/entities/tarif-lindenstrom-oeko.md"
+    ],
+    "rationale": "oe statt ö; Seite: Ökostromtarif, LindenStrom Öko.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "um-07",
+    "category": "umlaut_spelling",
+    "query": "Haustuer Vertrieb Regeln",
+    "expected_paths": [
+      "wiki/topics/vertrieb-an-der-haustuer.md"
+    ],
+    "must_find": [
+      "wiki/topics/vertrieb-an-der-haustuer.md"
+    ],
+    "rationale": "ue statt ü; Zielseite ist ein Entwurf (status draft).",
+    "premise_literal_overlap": [
+      "regeln",
+      "vertrieb"
+    ]
+  },
+  {
+    "id": "co-01",
+    "category": "compound",
+    "query": "Frist für Kündigung",
+    "expected_paths": [
+      "wiki/concepts/kuendigungsfrist.md",
+      "wiki/comparisons/grundversorgung-und-sondervertrag.md",
+      "wiki/topics/kuendigungsfristen-alte-rechtslage.md"
+    ],
+    "must_find": [
+      "wiki/concepts/kuendigungsfrist.md"
+    ],
+    "rationale": "Kompositum 'Kündigungsfrist' in seine Teile zerlegt.",
+    "premise_literal_overlap": [
+      "frist",
+      "kündigung"
+    ]
+  },
+  {
+    "id": "co-02",
+    "category": "compound",
+    "query": "Messstelle Betreiber wechseln",
+    "expected_paths": [
+      "wiki/concepts/messstellenbetrieb.md",
+      "wiki/comparisons/netzbetreiber-lieferant-messstellenbetreiber.md"
+    ],
+    "must_find": [
+      "wiki/concepts/messstellenbetrieb.md"
+    ],
+    "rationale": "Teile von 'Messstellenbetreiber'; Seite nennt den wettbewerblichen Messstellenbetreiber.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "co-03",
+    "category": "compound",
+    "query": "Wärmepumpenstromtarif",
+    "expected_paths": [
+      "wiki/entities/tarif-lindenwaerme-wp.md"
+    ],
+    "must_find": [
+      "wiki/entities/tarif-lindenwaerme-wp.md"
+    ],
+    "rationale": "Neues Kompositum; Seite: 'Tarif für Wärmepumpen'.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "co-04",
+    "category": "compound",
+    "query": "Verbrauchsabrechnung Frist",
+    "expected_paths": [
+      "wiki/topics/jahresverbrauchsabrechnung.md"
+    ],
+    "must_find": [
+      "wiki/topics/jahresverbrauchsabrechnung.md"
+    ],
+    "rationale": "Teil des Kompositums 'Jahresverbrauchsabrechnung'.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "co-05",
+    "category": "compound",
+    "query": "Sofortbonusauszahlung",
+    "expected_paths": [
+      "wiki/topics/neukundenbonus.md"
+    ],
+    "must_find": [
+      "wiki/topics/neukundenbonus.md"
+    ],
+    "rationale": "Kompositum aus 'Sofortbonus' und 'Auszahlung'; Seite: 'wird überwiesen'.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "co-06",
+    "category": "compound",
+    "query": "Marktlokation Nummer herausfinden",
+    "expected_paths": [
+      "wiki/concepts/marktlokation.md"
+    ],
+    "must_find": [
+      "wiki/concepts/marktlokation.md"
+    ],
+    "rationale": "Seite: Marktlokations-ID, Marktlokations-Identifikationsnummer, MaLo-ID.",
+    "premise_literal_overlap": [
+      "marktlokation"
+    ]
+  },
+  {
+    "id": "co-07",
+    "category": "compound",
+    "query": "Unterbrechung der Versorgung Kosten",
+    "expected_paths": [
+      "wiki/concepts/versorgungsunterbrechung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/versorgungsunterbrechung.md"
+    ],
+    "rationale": "Kompositum 'Versorgungsunterbrechung' zerlegt.",
+    "premise_literal_overlap": [
+      "kosten",
+      "unterbrechung",
+      "versorgung"
+    ]
+  },
+  {
+    "id": "co-08",
+    "category": "compound",
+    "query": "Laufzeit Vertrag Verlängerung",
+    "expected_paths": [
+      "wiki/concepts/vertragslaufzeit.md",
+      "wiki/topics/kuendigungsfristen-alte-rechtslage.md"
+    ],
+    "must_find": [
+      "wiki/concepts/vertragslaufzeit.md"
+    ],
+    "rationale": "Kompositum 'Vertragslaufzeit' zerlegt.",
+    "premise_literal_overlap": [
+      "verlängerung",
+      "vertrag"
+    ]
+  },
+  {
+    "id": "su-01",
+    "category": "synonym_uncontrolled",
+    "query": "Preiserhöhung ankündigen Frist",
+    "expected_paths": [
+      "wiki/concepts/preisanpassung.md",
+      "wiki/topics/preisanpassung-april-2026.md",
+      "wiki/comparisons/grundversorgung-und-sondervertrag.md"
+    ],
+    "must_find": [
+      "wiki/concepts/preisanpassung.md"
+    ],
+    "rationale": "'Preiserhöhung' steht auf keiner Seite; das Wiki sagt 'Preisanpassung'.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "su-02",
+    "category": "synonym_uncontrolled",
+    "query": "Smart Meter Pflicht",
+    "expected_paths": [
+      "wiki/concepts/intelligentes-messsystem.md",
+      "wiki/comparisons/moderne-messeinrichtung-und-intelligentes-messsystem.md",
+      "wiki/topics/rollout-intelligenter-messsysteme.md"
+    ],
+    "must_find": [
+      "wiki/concepts/intelligentes-messsystem.md"
+    ],
+    "rationale": "'Smart Meter' steht auf keiner Seite; das Wiki sagt 'intelligentes Messsystem'.",
+    "premise_literal_overlap": [
+      "pflicht"
+    ]
+  },
+  {
+    "id": "su-03",
+    "category": "synonym_uncontrolled",
+    "query": "Wohnungswechsel Stromvertrag",
+    "expected_paths": [
+      "wiki/topics/umzug.md"
+    ],
+    "must_find": [
+      "wiki/topics/umzug.md"
+    ],
+    "rationale": "'Wohnungswechsel' steht auf keiner Seite; das Wiki sagt 'Umzug'.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "su-04",
+    "category": "synonym_uncontrolled",
+    "query": "Grünstrom",
+    "expected_paths": [
+      "wiki/entities/tarif-lindenstrom-oeko.md"
+    ],
+    "must_find": [
+      "wiki/entities/tarif-lindenstrom-oeko.md"
+    ],
+    "rationale": "'Grünstrom' steht auf keiner Seite; das Wiki sagt 'Ökostrom'.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "su-05",
+    "category": "synonym_uncontrolled",
+    "query": "Reklamation Bearbeitungszeit",
+    "expected_paths": [
+      "wiki/topics/beschwerdemanagement.md",
+      "wiki/entities/stadtwerke-lindenau-vertrieb.md"
+    ],
+    "must_find": [
+      "wiki/topics/beschwerdemanagement.md"
+    ],
+    "rationale": "'Reklamation' steht auf keiner Seite; das Wiki sagt 'Beschwerde' (Antwort binnen vier Wochen).",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "su-06",
+    "category": "synonym_uncontrolled",
+    "query": "Prämie für Neukunden",
+    "expected_paths": [
+      "wiki/topics/neukundenbonus.md"
+    ],
+    "must_find": [
+      "wiki/topics/neukundenbonus.md"
+    ],
+    "rationale": "'Prämie' steht auf keiner Seite; das Wiki sagt 'Bonus'.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "su-07",
+    "category": "synonym_uncontrolled",
+    "query": "Zahlungsrückstand – ab wann Strom abstellen?",
+    "expected_paths": [
+      "wiki/concepts/versorgungsunterbrechung.md",
+      "wiki/topics/zahlungsverzug-und-mahnwesen.md"
+    ],
+    "must_find": [
+      "wiki/concepts/versorgungsunterbrechung.md"
+    ],
+    "rationale": "'Zahlungsrückstand' und 'abstellen' stehen auf keiner Seite; das Wiki sagt 'Zahlungsverzug', 'unterbrechen'.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "su-08",
+    "category": "synonym_uncontrolled",
+    "query": "Zählerwert durchgeben",
+    "expected_paths": [
+      "wiki/concepts/zaehlerstand.md"
+    ],
+    "must_find": [
+      "wiki/concepts/zaehlerstand.md"
+    ],
+    "rationale": "'Zählerwert' steht auf keiner Seite; das Wiki sagt 'Zählerstand melden'.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "sc-01",
+    "category": "synonym_controlled",
+    "query": "Netznutzungsentgelt 2026",
+    "expected_paths": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "must_find": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "rationale": "Alias des Konzepts netzentgelt.",
+    "premise_literal_overlap": [
+      "2026"
+    ]
+  },
+  {
+    "id": "sc-02",
+    "category": "synonym_controlled",
+    "query": "Anbieterwechsel Dauer",
+    "expected_paths": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "must_find": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "rationale": "Alias des Konzepts lieferantenwechsel.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "sc-03",
+    "category": "synonym_controlled",
+    "query": "Stromsperre Voraussetzungen",
+    "expected_paths": [
+      "wiki/concepts/versorgungsunterbrechung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/versorgungsunterbrechung.md"
+    ],
+    "rationale": "Alias des Konzepts versorgungsunterbrechung.",
+    "premise_literal_overlap": [
+      "voraussetzungen"
+    ]
+  },
+  {
+    "id": "sc-04",
+    "category": "synonym_controlled",
+    "query": "Schufa-Abfrage bei Neuvertrag",
+    "expected_paths": [
+      "wiki/concepts/bonitaetspruefung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/bonitaetspruefung.md"
+    ],
+    "rationale": "Alias des Konzepts bonitaetspruefung.",
+    "premise_literal_overlap": [
+      "schufa"
+    ]
+  },
+  {
+    "id": "sc-05",
+    "category": "synonym_controlled",
+    "query": "Zählerbetrieb Kosten pro Jahr",
+    "expected_paths": [
+      "wiki/concepts/messstellenbetrieb.md",
+      "wiki/comparisons/moderne-messeinrichtung-und-intelligentes-messsystem.md"
+    ],
+    "must_find": [
+      "wiki/concepts/messstellenbetrieb.md"
+    ],
+    "rationale": "Alias des Konzepts messstellenbetrieb.",
+    "premise_literal_overlap": [
+      "jahr",
+      "pro"
+    ]
+  },
+  {
+    "id": "sc-06",
+    "category": "synonym_controlled",
+    "query": "Basisversorgung kündigen",
+    "expected_paths": [
+      "wiki/concepts/grundversorgung.md",
+      "wiki/entities/tarif-lindenstrom-basis.md",
+      "wiki/concepts/kuendigungsfrist.md"
+    ],
+    "must_find": [
+      "wiki/concepts/grundversorgung.md"
+    ],
+    "rationale": "Alias des Konzepts grundversorgung.",
+    "premise_literal_overlap": [
+      "kündigen"
+    ]
+  },
+  {
+    "id": "sc-07",
+    "category": "synonym_controlled",
+    "query": "Rücktrittsrecht nach Vertragsabschluss",
+    "expected_paths": [
+      "wiki/concepts/widerrufsrecht.md"
+    ],
+    "must_find": [
+      "wiki/concepts/widerrufsrecht.md"
+    ],
+    "rationale": "Alias des Konzepts widerrufsrecht.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "pa-01",
+    "category": "paraphrase",
+    "query": "Dürfen wir jemandem einfach den Saft abdrehen, der nicht bezahlt?",
+    "expected_paths": [
+      "wiki/concepts/versorgungsunterbrechung.md",
+      "wiki/topics/zahlungsverzug-und-mahnwesen.md"
+    ],
+    "must_find": [
+      "wiki/concepts/versorgungsunterbrechung.md"
+    ],
+    "rationale": "Umgangssprache für Versorgungsunterbrechung wegen Zahlungsverzugs.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "pa-02",
+    "category": "paraphrase",
+    "query": "Wie komme ich aus meinem Stromtarif wieder raus?",
+    "expected_paths": [
+      "wiki/concepts/kuendigungsfrist.md",
+      "wiki/concepts/sonderkuendigungsrecht.md",
+      "wiki/concepts/vertragslaufzeit.md"
+    ],
+    "must_find": [
+      "wiki/concepts/kuendigungsfrist.md"
+    ],
+    "rationale": "Gemeint ist die Kündigung; das Wort fällt nicht.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "pa-03",
+    "category": "paraphrase",
+    "query": "Jemand hat im Internet abgeschlossen und es sich anders überlegt – geht das noch zurück?",
+    "expected_paths": [
+      "wiki/concepts/widerrufsrecht.md",
+      "wiki/topics/vertragsschluss-im-fernabsatz.md"
+    ],
+    "must_find": [
+      "wiki/concepts/widerrufsrecht.md"
+    ],
+    "rationale": "Gemeint ist der Widerruf im Fernabsatz.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "pa-04",
+    "category": "paraphrase",
+    "query": "Wieso bucht ihr auf einmal mehr Geld ab als bisher?",
+    "expected_paths": [
+      "wiki/concepts/abschlagszahlung.md",
+      "wiki/concepts/preisanpassung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/abschlagszahlung.md"
+    ],
+    "rationale": "Gemeint ist der nach einer Preisänderung automatisch angepasste Abschlag.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "pa-05",
+    "category": "paraphrase",
+    "query": "Wer ist für das Gerät im Keller zuständig, das mitzählt?",
+    "expected_paths": [
+      "wiki/concepts/messstellenbetrieb.md",
+      "wiki/comparisons/netzbetreiber-lieferant-messstellenbetreiber.md",
+      "wiki/entities/lindenau-netz.md"
+    ],
+    "must_find": [
+      "wiki/concepts/messstellenbetrieb.md"
+    ],
+    "rationale": "Gemeint ist der Messstellenbetreiber des Stromzählers.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "pa-06",
+    "category": "paraphrase",
+    "query": "Müssen wir wirklich jeden beliefern, auch Leute mit Schulden?",
+    "expected_paths": [
+      "wiki/concepts/grundversorgung.md",
+      "wiki/concepts/bonitaetspruefung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/grundversorgung.md"
+    ],
+    "rationale": "Gemeint ist der Kontrahierungszwang in der Grundversorgung trotz schlechter Bonität.",
+    "premise_literal_overlap": [
+      "jeden"
+    ]
+  },
+  {
+    "id": "pa-07",
+    "category": "paraphrase",
+    "query": "Ich ziehe demnächst in eine andere Stadt, was wird aus meinem Strom?",
+    "expected_paths": [
+      "wiki/topics/umzug.md",
+      "wiki/concepts/sonderkuendigungsrecht.md"
+    ],
+    "must_find": [
+      "wiki/topics/umzug.md"
+    ],
+    "rationale": "Gemeint ist der Umzug außerhalb des Netzgebiets.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "pa-08",
+    "category": "paraphrase",
+    "query": "Kann man das Geld in mehreren Häppchen überweisen, wenn es gerade knapp ist?",
+    "expected_paths": [
+      "wiki/topics/ratenzahlung.md"
+    ],
+    "must_find": [
+      "wiki/topics/ratenzahlung.md"
+    ],
+    "rationale": "Gemeint ist die Ratenzahlung.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "cl-01",
+    "category": "cross_language",
+    "query": "notice period for cancelling an electricity contract",
+    "expected_paths": [
+      "wiki/concepts/kuendigungsfrist.md",
+      "wiki/comparisons/grundversorgung-und-sondervertrag.md"
+    ],
+    "must_find": [
+      "wiki/concepts/kuendigungsfrist.md"
+    ],
+    "rationale": "Englisch für Kündigungsfrist.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "cl-02",
+    "category": "cross_language",
+    "query": "what happens if a customer does not pay the bill",
+    "expected_paths": [
+      "wiki/topics/zahlungsverzug-und-mahnwesen.md",
+      "wiki/concepts/versorgungsunterbrechung.md"
+    ],
+    "must_find": [
+      "wiki/topics/zahlungsverzug-und-mahnwesen.md"
+    ],
+    "rationale": "Englisch für Zahlungsverzug.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "cl-03",
+    "category": "cross_language",
+    "query": "is smart meter installation mandatory",
+    "expected_paths": [
+      "wiki/concepts/intelligentes-messsystem.md"
+    ],
+    "must_find": [
+      "wiki/concepts/intelligentes-messsystem.md"
+    ],
+    "rationale": "Englisch für Pflichteinbau intelligenter Messsysteme.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "cl-04",
+    "category": "cross_language",
+    "query": "right of withdrawal for online contracts",
+    "expected_paths": [
+      "wiki/concepts/widerrufsrecht.md",
+      "wiki/topics/vertragsschluss-im-fernabsatz.md"
+    ],
+    "must_find": [
+      "wiki/concepts/widerrufsrecht.md"
+    ],
+    "rationale": "Englisch für Widerrufsrecht im Fernabsatz.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "cl-05",
+    "category": "cross_language",
+    "query": "how is the monthly advance payment calculated",
+    "expected_paths": [
+      "wiki/concepts/abschlagszahlung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/abschlagszahlung.md"
+    ],
+    "rationale": "Englisch für Abschlagsberechnung.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "cl-06",
+    "category": "cross_language",
+    "query": "grid fee for household customers",
+    "expected_paths": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "must_find": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "rationale": "Englisch; Sonderfall: 'grid fee' ist als Alias in CONCEPTS.md hinterlegt.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "cl-07",
+    "category": "cross_language",
+    "query": "customer moving house",
+    "expected_paths": [
+      "wiki/topics/umzug.md"
+    ],
+    "must_find": [
+      "wiki/topics/umzug.md"
+    ],
+    "rationale": "Englisch für Umzug.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "cl-08",
+    "category": "cross_language",
+    "query": "credit check failed, can we still supply the customer",
+    "expected_paths": [
+      "wiki/concepts/bonitaetspruefung.md",
+      "wiki/concepts/grundversorgung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/bonitaetspruefung.md"
+    ],
+    "rationale": "Englisch für abgelehnte Bonitätsprüfung.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "ty-01",
+    "category": "typo",
+    "query": "Netzentgeld",
+    "expected_paths": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "must_find": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "rationale": "d statt t – sehr häufiger Fehler.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "ty-02",
+    "category": "typo",
+    "query": "Kündigunsfrist",
+    "expected_paths": [
+      "wiki/concepts/kuendigungsfrist.md"
+    ],
+    "must_find": [
+      "wiki/concepts/kuendigungsfrist.md"
+    ],
+    "rationale": "Ein g fehlt.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "ty-03",
+    "category": "typo",
+    "query": "Wiederrufsrecht",
+    "expected_paths": [
+      "wiki/concepts/widerrufsrecht.md"
+    ],
+    "must_find": [
+      "wiki/concepts/widerrufsrecht.md"
+    ],
+    "rationale": "'wieder' statt 'wider' – häufigster Fehler bei diesem Wort.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "ty-04",
+    "category": "typo",
+    "query": "Lieferantenwechsl Dauer",
+    "expected_paths": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "must_find": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "rationale": "Ein e fehlt.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "ty-05",
+    "category": "typo",
+    "query": "Abschlagzahlung ändern",
+    "expected_paths": [
+      "wiki/concepts/abschlagszahlung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/abschlagszahlung.md"
+    ],
+    "rationale": "Fugen-s fehlt.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "ty-06",
+    "category": "typo",
+    "query": "Bonitätsprüfng",
+    "expected_paths": [
+      "wiki/concepts/bonitaetspruefung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/bonitaetspruefung.md"
+    ],
+    "rationale": "Ein u fehlt.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "ty-07",
+    "category": "typo",
+    "query": "Grundversorung Preis",
+    "expected_paths": [
+      "wiki/concepts/grundversorgung.md",
+      "wiki/entities/tarif-lindenstrom-basis.md"
+    ],
+    "must_find": [
+      "wiki/concepts/grundversorgung.md"
+    ],
+    "rationale": "Ein g fehlt.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "ty-08",
+    "category": "typo",
+    "query": "Zählerstnad melden",
+    "expected_paths": [
+      "wiki/concepts/zaehlerstand.md"
+    ],
+    "must_find": [
+      "wiki/concepts/zaehlerstand.md"
+    ],
+    "rationale": "Buchstabendreher.",
+    "premise_literal_overlap": [
+      "melden"
+    ]
+  },
+  {
+    "id": "br-01",
+    "category": "broad",
+    "query": "Vertrag",
+    "expected_paths": [
+      "wiki/concepts/grundversorgung.md",
+      "wiki/concepts/ersatzversorgung.md",
+      "wiki/concepts/kuendigungsfrist.md",
+      "wiki/concepts/sonderkuendigungsrecht.md",
+      "wiki/concepts/vertragslaufzeit.md",
+      "wiki/concepts/widerrufsrecht.md",
+      "wiki/concepts/bonitaetspruefung.md",
+      "wiki/entities/stadtwerke-lindenau-vertrieb.md",
+      "wiki/entities/tarif-lindenstrom-fix12.md",
+      "wiki/entities/tarif-lindenstrom-flex.md",
+      "wiki/entities/tarif-lindenstrom-klassik.md",
+      "wiki/entities/tarif-lindenstrom-basis.md",
+      "wiki/topics/lieferantenwechsel.md",
+      "wiki/topics/umzug.md",
+      "wiki/topics/vertragsschluss-im-fernabsatz.md",
+      "wiki/topics/neukundenbonus.md",
+      "wiki/topics/vertrieb-an-der-haustuer.md",
+      "wiki/topics/kuendigungsfristen-alte-rechtslage.md",
+      "wiki/comparisons/grundversorgung-und-sondervertrag.md",
+      "wiki/comparisons/festpreistarif-und-dynamischer-tarif.md",
+      "wiki/comparisons/netzbetreiber-lieferant-messstellenbetreiber.md",
+      "wiki/overview.md"
+    ],
+    "must_find": [
+      "wiki/concepts/vertragslaufzeit.md",
+      "wiki/concepts/kuendigungsfrist.md",
+      "wiki/topics/vertragsschluss-im-fernabsatz.md",
+      "wiki/comparisons/grundversorgung-und-sondervertrag.md",
+      "wiki/concepts/widerrufsrecht.md"
+    ],
+    "rationale": "22 Seiten behandeln Zustandekommen, Laufzeit, Beendigung oder Art des Liefervertrags; mehr als das Standardlimit von 12.",
+    "premise_literal_overlap": [
+      "vertrag"
+    ]
+  },
+  {
+    "id": "br-02",
+    "category": "broad",
+    "query": "Kündigung",
+    "expected_paths": [
+      "wiki/concepts/kuendigungsfrist.md",
+      "wiki/concepts/sonderkuendigungsrecht.md",
+      "wiki/concepts/grundversorgung.md",
+      "wiki/concepts/vertragslaufzeit.md",
+      "wiki/concepts/preisanpassung.md",
+      "wiki/entities/tarif-lindenstrom-fix12.md",
+      "wiki/entities/tarif-lindenstrom-flex.md",
+      "wiki/entities/tarif-lindenstrom-klassik.md",
+      "wiki/entities/tarif-lindenstrom-basis.md",
+      "wiki/topics/lieferantenwechsel.md",
+      "wiki/topics/umzug.md",
+      "wiki/topics/kuendigungsfristen-alte-rechtslage.md",
+      "wiki/comparisons/grundversorgung-und-sondervertrag.md"
+    ],
+    "must_find": [
+      "wiki/concepts/kuendigungsfrist.md",
+      "wiki/concepts/sonderkuendigungsrecht.md",
+      "wiki/concepts/grundversorgung.md"
+    ],
+    "rationale": "13 Seiten nennen Kündigungsfristen oder Kündigungsrechte.",
+    "premise_literal_overlap": [
+      "kündigung"
+    ]
+  },
+  {
+    "id": "br-03",
+    "category": "broad",
+    "query": "Fristen",
+    "expected_paths": [
+      "wiki/concepts/kuendigungsfrist.md",
+      "wiki/concepts/sonderkuendigungsrecht.md",
+      "wiki/concepts/grundversorgung.md",
+      "wiki/concepts/ersatzversorgung.md",
+      "wiki/concepts/preisanpassung.md",
+      "wiki/concepts/vertragslaufzeit.md",
+      "wiki/concepts/widerrufsrecht.md",
+      "wiki/concepts/bonitaetspruefung.md",
+      "wiki/concepts/intelligentes-messsystem.md",
+      "wiki/concepts/versorgungsunterbrechung.md",
+      "wiki/topics/lieferantenwechsel.md",
+      "wiki/topics/umzug.md",
+      "wiki/topics/jahresverbrauchsabrechnung.md",
+      "wiki/topics/zahlungsverzug-und-mahnwesen.md",
+      "wiki/topics/ratenzahlung.md",
+      "wiki/topics/vertragsschluss-im-fernabsatz.md",
+      "wiki/topics/beschwerdemanagement.md",
+      "wiki/topics/preisanpassung-april-2026.md",
+      "wiki/topics/rollout-intelligenter-messsysteme.md",
+      "wiki/topics/kuendigungsfristen-alte-rechtslage.md",
+      "wiki/topics/neukundenbonus.md",
+      "wiki/comparisons/grundversorgung-und-sondervertrag.md"
+    ],
+    "must_find": [
+      "wiki/concepts/kuendigungsfrist.md",
+      "wiki/concepts/widerrufsrecht.md",
+      "wiki/concepts/preisanpassung.md",
+      "wiki/concepts/versorgungsunterbrechung.md",
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "rationale": "22 Seiten nennen mindestens eine konkrete Frist (Kündigung, Widerruf, Ankündigung, Mahnlauf, Abrechnung, Einbau).",
+    "premise_literal_overlap": [
+      "fristen"
+    ]
+  },
+  {
+    "id": "br-04",
+    "category": "broad",
+    "query": "Preise",
+    "expected_paths": [
+      "wiki/concepts/netzentgelt.md",
+      "wiki/concepts/preisanpassung.md",
+      "wiki/concepts/preisgarantie.md",
+      "wiki/concepts/messstellenbetrieb.md",
+      "wiki/concepts/steuerbare-verbrauchseinrichtung.md",
+      "wiki/entities/tarif-lindenstrom-fix12.md",
+      "wiki/entities/tarif-lindenstrom-oeko.md",
+      "wiki/entities/tarif-lindenstrom-flex.md",
+      "wiki/entities/tarif-lindenstrom-klassik.md",
+      "wiki/entities/tarif-lindenwaerme-wp.md",
+      "wiki/entities/tarif-lindenstrom-basis.md",
+      "wiki/topics/preisanpassung-april-2026.md",
+      "wiki/topics/preisanpassung-januar-2025.md",
+      "wiki/comparisons/grundversorgung-und-sondervertrag.md",
+      "wiki/comparisons/festpreistarif-und-dynamischer-tarif.md",
+      "wiki/comparisons/moderne-messeinrichtung-und-intelligentes-messsystem.md"
+    ],
+    "must_find": [
+      "wiki/entities/tarif-lindenstrom-fix12.md",
+      "wiki/entities/tarif-lindenstrom-basis.md",
+      "wiki/entities/tarif-lindenstrom-flex.md",
+      "wiki/concepts/netzentgelt.md",
+      "wiki/concepts/preisanpassung.md"
+    ],
+    "rationale": "16 Seiten nennen konkrete Preise oder Regeln der Preisbildung.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "br-05",
+    "category": "broad",
+    "query": "Zähler",
+    "expected_paths": [
+      "wiki/concepts/zaehlerstand.md",
+      "wiki/concepts/messstellenbetrieb.md",
+      "wiki/concepts/intelligentes-messsystem.md",
+      "wiki/concepts/marktlokation.md",
+      "wiki/concepts/steuerbare-verbrauchseinrichtung.md",
+      "wiki/entities/lindenau-netz.md",
+      "wiki/entities/tarif-lindenwaerme-wp.md",
+      "wiki/topics/lieferantenwechsel.md",
+      "wiki/topics/umzug.md",
+      "wiki/topics/rollout-intelligenter-messsysteme.md",
+      "wiki/comparisons/moderne-messeinrichtung-und-intelligentes-messsystem.md",
+      "wiki/comparisons/netzbetreiber-lieferant-messstellenbetreiber.md",
+      "wiki/entities/tarif-lindenstrom-flex.md"
+    ],
+    "must_find": [
+      "wiki/concepts/zaehlerstand.md",
+      "wiki/concepts/messstellenbetrieb.md",
+      "wiki/concepts/intelligentes-messsystem.md",
+      "wiki/comparisons/moderne-messeinrichtung-und-intelligentes-messsystem.md"
+    ],
+    "rationale": "13 Seiten behandeln Zähler, Zählerstand oder Messeinrichtungen.",
+    "premise_literal_overlap": [
+      "zähler"
+    ]
+  },
+  {
+    "id": "ch-01",
+    "category": "claim_heavy",
+    "query": "Wie hoch ist die Konzessionsabgabe für Sondervertragskunden?",
+    "expected_paths": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "must_find": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "rationale": "Antwort in Claim 9 von 12.",
+    "answer_claim_ordinal": 9,
+    "answer_contains": "0,11 ct/kWh",
+    "claims_on_page": 12,
+    "premise_literal_overlap": [
+      "hoch",
+      "konzessionsabgabe",
+      "sondervertragskunden"
+    ]
+  },
+  {
+    "id": "ch-02",
+    "category": "claim_heavy",
+    "query": "Bis wann veröffentlicht der Netzbetreiber die Entgelte für das nächste Jahr?",
+    "expected_paths": [
+      "wiki/concepts/netzentgelt.md",
+      "wiki/entities/lindenau-netz.md"
+    ],
+    "must_find": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "rationale": "Antwort in Claim 11 von 12 (dieselbe Aussage steht auch als Claim 1 bei Lindenau Netz).",
+    "answer_claim_ordinal": 11,
+    "answer_contains": "15. Oktober",
+    "claims_on_page": 12,
+    "premise_literal_overlap": [
+      "entgelte",
+      "jahr",
+      "netzbetreiber",
+      "veröffentlicht"
+    ]
+  },
+  {
+    "id": "ch-03",
+    "category": "claim_heavy",
+    "query": "Welchen Anteil am Strompreis machen die Netzentgelte aus?",
+    "expected_paths": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "must_find": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "rationale": "Antwort in Claim 12 von 12.",
+    "answer_claim_ordinal": 12,
+    "answer_contains": "28 Prozent",
+    "claims_on_page": 12,
+    "premise_literal_overlap": [
+      "machen",
+      "netzentgelte"
+    ]
+  },
+  {
+    "id": "ch-04",
+    "category": "claim_heavy",
+    "query": "Welcher Jahresverbrauch wird bei vier Personen angesetzt?",
+    "expected_paths": [
+      "wiki/concepts/abschlagszahlung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/abschlagszahlung.md"
+    ],
+    "rationale": "Antwort in Claim 10 von 12.",
+    "answer_claim_ordinal": 10,
+    "answer_contains": "4.250 kWh",
+    "claims_on_page": 12,
+    "premise_literal_overlap": [
+      "angesetzt",
+      "personen",
+      "vier"
+    ]
+  },
+  {
+    "id": "ch-05",
+    "category": "claim_heavy",
+    "query": "Abschlag um mehr als 20 Prozent senken – was braucht der Kunde dafür?",
+    "expected_paths": [
+      "wiki/concepts/abschlagszahlung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/abschlagszahlung.md"
+    ],
+    "rationale": "Antwort in Claim 9 von 12.",
+    "answer_claim_ordinal": 9,
+    "answer_contains": "aktueller Zählerstand",
+    "claims_on_page": 12,
+    "premise_literal_overlap": [
+      "abschlag",
+      "kunde",
+      "prozent",
+      "senken"
+    ]
+  },
+  {
+    "id": "ch-06",
+    "category": "claim_heavy",
+    "query": "Zwei Lieferanten melden dieselbe Marktlokation an – wer bekommt den Kunden?",
+    "expected_paths": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "must_find": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "rationale": "Antwort in Claim 10 von 12.",
+    "answer_claim_ordinal": 10,
+    "answer_contains": "zuerst eingegangene",
+    "claims_on_page": 12,
+    "premise_literal_overlap": [
+      "dieselbe",
+      "kunden",
+      "lieferanten",
+      "marktlokation",
+      "melden",
+      "zwei"
+    ]
+  },
+  {
+    "id": "ch-07",
+    "category": "claim_heavy",
+    "query": "Wann muss der alte Lieferant die Schlussrechnung schicken?",
+    "expected_paths": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "must_find": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "rationale": "Antwort in Claim 11 von 12.",
+    "answer_claim_ordinal": 11,
+    "answer_contains": "sechs Wochen nach Lieferende",
+    "claims_on_page": 12,
+    "premise_literal_overlap": [
+      "lieferant",
+      "schlussrechnung"
+    ]
+  },
+  {
+    "id": "ch-08",
+    "category": "claim_heavy",
+    "query": "In welchem Zeitfenster muss der Zählerstand beim Lieferantenwechsel gemeldet werden?",
+    "expected_paths": [
+      "wiki/topics/lieferantenwechsel.md",
+      "wiki/concepts/zaehlerstand.md"
+    ],
+    "must_find": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "rationale": "Antwort in Claim 12 von 12.",
+    "answer_claim_ordinal": 12,
+    "answer_contains": "fünf Werktagen vor",
+    "claims_on_page": 12,
+    "premise_literal_overlap": [
+      "beim",
+      "lieferantenwechsel",
+      "zählerstand"
+    ]
+  },
+  {
+    "id": "so-01",
+    "category": "source_only",
+    "query": "Störungshotline bei Stromausfall",
+    "expected_paths": [
+      "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md"
+    ],
+    "must_find": [
+      "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md"
+    ],
+    "rationale": "Nur im Notfallhandbuch (Seite 1); keine Wiki-Seite.",
+    "requires_flags": [
+      "--include-sources"
+    ],
+    "premise_literal_overlap": [
+      "stromausfall",
+      "störungshotline"
+    ]
+  },
+  {
+    "id": "so-02",
+    "category": "source_only",
+    "query": "Mieterstromzuschlag Höhe",
+    "expected_paths": [
+      "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md"
+    ],
+    "must_find": [
+      "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md"
+    ],
+    "rationale": "Nur im Leitfaden Mieterstrom (Seite 1).",
+    "requires_flags": [
+      "--include-sources"
+    ],
+    "premise_literal_overlap": [
+      "mieterstromzuschlag"
+    ]
+  },
+  {
+    "id": "so-03",
+    "category": "source_only",
+    "query": "Verjährung von Forderungen aus Stromlieferung",
+    "expected_paths": [
+      "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md"
+    ],
+    "must_find": [
+      "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md"
+    ],
+    "rationale": "Nur in RL-FM-03 Abschnitt 5 (Seite 3); die Wiki-Seite Bonitätsprüfung deckt nur Seite 1 und 2 ab.",
+    "requires_flags": [
+      "--include-sources"
+    ],
+    "premise_literal_overlap": [
+      "forderungen",
+      "verjährung"
+    ]
+  },
+  {
+    "id": "so-04",
+    "category": "source_only",
+    "query": "Ab wann geht eine Forderung ans Inkasso?",
+    "expected_paths": [
+      "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md"
+    ],
+    "must_find": [
+      "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md"
+    ],
+    "rationale": "Nur in RL-FM-03 Abschnitt 4 (Seite 3).",
+    "requires_flags": [
+      "--include-sources"
+    ],
+    "premise_literal_overlap": [
+      "forderung",
+      "inkasso"
+    ]
+  },
+  {
+    "id": "so-05",
+    "category": "source_only",
+    "query": "Eichfrist elektronischer Zähler",
+    "expected_paths": [
+      "sources/src-1e047c0a282729b8-rollout-leitfaden-intelligente-messsysteme-lf-msb-2026.md"
+    ],
+    "must_find": [
+      "sources/src-1e047c0a282729b8-rollout-leitfaden-intelligente-messsysteme-lf-msb-2026.md"
+    ],
+    "rationale": "Nur im Rollout-Leitfaden Abschnitt 6 (Seite 3).",
+    "requires_flags": [
+      "--include-sources"
+    ],
+    "premise_literal_overlap": [
+      "eichfrist",
+      "zähler"
+    ]
+  },
+  {
+    "id": "so-06",
+    "category": "source_only",
+    "query": "Wer haftet für Geräteschäden durch Überspannung?",
+    "expected_paths": [
+      "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md"
+    ],
+    "must_find": [
+      "sources/src-5dd4f1cff2cd0c01-notfallhandbuch-versorgungsst-rung-und-krisenkommunikation.md"
+    ],
+    "rationale": "Nur im Notfallhandbuch Abschnitt 5 (Seite 2).",
+    "requires_flags": [
+      "--include-sources"
+    ],
+    "premise_literal_overlap": [
+      "durch",
+      "haftet",
+      "überspannung"
+    ]
+  },
+  {
+    "id": "so-07",
+    "category": "source_only",
+    "query": "gemeinschaftliche Gebäudeversorgung Voraussetzungen",
+    "expected_paths": [
+      "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md"
+    ],
+    "must_find": [
+      "sources/src-77e21b2e1eaf6c40-leitfaden-mieterstrom-und-gemeinschaftliche-geb-udeversorgung.md"
+    ],
+    "rationale": "Nur im Leitfaden Mieterstrom Abschnitt 3 (Seite 2).",
+    "requires_flags": [
+      "--include-sources"
+    ],
+    "premise_literal_overlap": [
+      "gebäudeversorgung",
+      "gemeinschaftliche"
+    ]
+  },
+  {
+    "id": "so-08",
+    "category": "source_only",
+    "query": "Kunde ist insolvent – was passiert mit den offenen Forderungen?",
+    "expected_paths": [
+      "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md"
+    ],
+    "must_find": [
+      "sources/src-942da1b37e9be15d-richtlinie-bonit-tspr-fung-und-forderungsmanagement-rl-fm-03.md"
+    ],
+    "rationale": "Nur in RL-FM-03 Abschnitt 6 (Seite 3).",
+    "requires_flags": [
+      "--include-sources"
+    ],
+    "premise_literal_overlap": [
+      "forderungen"
+    ]
+  },
+  {
+    "id": "sh-01",
+    "category": "superseded_history",
+    "query": "Wie lange war die Erstlaufzeit bei LindenStrom Klassik?",
+    "expected_paths": [
+      "wiki/entities/tarif-lindenstrom-klassik.md",
+      "wiki/concepts/vertragslaufzeit.md"
+    ],
+    "must_find": [
+      "wiki/entities/tarif-lindenstrom-klassik.md"
+    ],
+    "rationale": "Abgelöste Seite (status superseded), Claim mit status superseded: 24 Monate.",
+    "premise_literal_overlap": [
+      "erstlaufzeit",
+      "klassik",
+      "lindenstrom"
+    ]
+  },
+  {
+    "id": "sh-02",
+    "category": "superseded_history",
+    "query": "Arbeitspreis Grundversorgung im Jahr 2025",
+    "expected_paths": [
+      "wiki/topics/preisanpassung-januar-2025.md",
+      "wiki/entities/tarif-lindenstrom-basis.md",
+      "wiki/topics/preisanpassung-april-2026.md"
+    ],
+    "must_find": [
+      "wiki/topics/preisanpassung-januar-2025.md"
+    ],
+    "rationale": "37,10 ct/kWh steht auf der abgelösten Seite und als superseded-Claim bei LindenStrom Basis.",
+    "premise_literal_overlap": [
+      "2025",
+      "arbeitspreis",
+      "grundversorgung"
+    ]
+  },
+  {
+    "id": "sh-03",
+    "category": "superseded_history",
+    "query": "Kündigungsfrist drei Monate bei alten Verträgen",
+    "expected_paths": [
+      "wiki/topics/kuendigungsfristen-alte-rechtslage.md"
+    ],
+    "must_find": [
+      "wiki/topics/kuendigungsfristen-alte-rechtslage.md"
+    ],
+    "rationale": "Abgelöste Seite zur Rechtslage vor März 2022.",
+    "premise_literal_overlap": [
+      "alten",
+      "drei",
+      "kündigungsfrist",
+      "monate",
+      "verträgen"
+    ]
+  },
+  {
+    "id": "sh-04",
+    "category": "superseded_history",
+    "query": "Was ist mit den Kunden im Tarif Klassik passiert?",
+    "expected_paths": [
+      "wiki/entities/tarif-lindenstrom-klassik.md",
+      "wiki/entities/tarif-lindenstrom-fix12.md",
+      "wiki/concepts/sonderkuendigungsrecht.md"
+    ],
+    "must_find": [
+      "wiki/entities/tarif-lindenstrom-klassik.md"
+    ],
+    "rationale": "Überführung in Fix12 zum 1. Januar 2026.",
+    "premise_literal_overlap": [
+      "klassik",
+      "kunden",
+      "tarif"
+    ]
+  },
+  {
+    "id": "sh-05",
+    "category": "superseded_history",
+    "query": "Wie hoch war das Netzentgelt 2025?",
+    "expected_paths": [
+      "wiki/concepts/netzentgelt.md",
+      "wiki/topics/preisanpassung-april-2026.md"
+    ],
+    "must_find": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "rationale": "Aktive Seite, aber die Antwort (9,12 ct/kWh) steht in einem Claim mit status superseded.",
+    "premise_literal_overlap": [
+      "2025",
+      "hoch",
+      "netzentgelt"
+    ]
+  },
+  {
+    "id": "sh-06",
+    "category": "superseded_history",
+    "query": "Bis wann haben sich Verträge automatisch um ein Jahr verlängert?",
+    "expected_paths": [
+      "wiki/topics/kuendigungsfristen-alte-rechtslage.md",
+      "wiki/concepts/vertragslaufzeit.md"
+    ],
+    "must_find": [
+      "wiki/topics/kuendigungsfristen-alte-rechtslage.md"
+    ],
+    "rationale": "Abgelöste Seite; 'ein Jahr' steht dort als 'zwölf Monate'.",
+    "premise_literal_overlap": [
+      "jahr",
+      "verträge"
+    ]
+  },
+  {
+    "id": "id-01",
+    "category": "identifier",
+    "query": "§ 41 Abs. 5 EnWG",
+    "expected_paths": [
+      "wiki/concepts/sonderkuendigungsrecht.md"
+    ],
+    "must_find": [
+      "wiki/concepts/sonderkuendigungsrecht.md"
+    ],
+    "rationale": "Paragraf wörtlich im Claim.",
+    "premise_literal_overlap": [
+      "abs",
+      "enwg"
+    ]
+  },
+  {
+    "id": "id-02",
+    "category": "identifier",
+    "query": "§ 19 StromGVV",
+    "expected_paths": [
+      "wiki/concepts/versorgungsunterbrechung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/versorgungsunterbrechung.md"
+    ],
+    "rationale": "Seite zitiert '§ 19 Abs. 2 StromGVV'.",
+    "premise_literal_overlap": [
+      "stromgvv"
+    ]
+  },
+  {
+    "id": "id-03",
+    "category": "identifier",
+    "query": "§ 14a EnWG Modul 2",
+    "expected_paths": [
+      "wiki/concepts/steuerbare-verbrauchseinrichtung.md",
+      "wiki/entities/tarif-lindenwaerme-wp.md"
+    ],
+    "must_find": [
+      "wiki/concepts/steuerbare-verbrauchseinrichtung.md"
+    ],
+    "rationale": "Paragraf mit Buchstabe plus Modulnummer.",
+    "premise_literal_overlap": [
+      "14a",
+      "enwg",
+      "modul"
+    ]
+  },
+  {
+    "id": "id-04",
+    "category": "identifier",
+    "query": "9,84 ct/kWh",
+    "expected_paths": [
+      "wiki/concepts/netzentgelt.md",
+      "wiki/topics/preisanpassung-april-2026.md"
+    ],
+    "must_find": [
+      "wiki/concepts/netzentgelt.md"
+    ],
+    "rationale": "Betrag mit Dezimalkomma und Einheit.",
+    "premise_literal_overlap": [
+      "kwh"
+    ]
+  },
+  {
+    "id": "id-05",
+    "category": "identifier",
+    "query": "MaLo-ID",
+    "expected_paths": [
+      "wiki/concepts/marktlokation.md",
+      "wiki/topics/jahresverbrauchsabrechnung.md"
+    ],
+    "must_find": [
+      "wiki/concepts/marktlokation.md"
+    ],
+    "rationale": "Abkürzung mit Bindestrich; als Alias der Seite geführt.",
+    "premise_literal_overlap": [
+      "malo"
+    ]
+  },
+  {
+    "id": "id-06",
+    "category": "identifier",
+    "query": "OBIS 1.8.1",
+    "expected_paths": [
+      "wiki/concepts/zaehlerstand.md"
+    ],
+    "must_find": [
+      "wiki/concepts/zaehlerstand.md"
+    ],
+    "rationale": "Kennzahl mit Punkten.",
+    "premise_literal_overlap": [
+      "obis"
+    ]
+  },
+  {
+    "id": "id-07",
+    "category": "identifier",
+    "query": "31.12.2025",
+    "expected_paths": [
+      "wiki/entities/tarif-lindenstrom-klassik.md",
+      "wiki/topics/rollout-intelligenter-messsysteme.md"
+    ],
+    "must_find": [
+      "wiki/entities/tarif-lindenstrom-klassik.md"
+    ],
+    "rationale": "Datum numerisch; die Seiten schreiben '31. Dezember 2025'.",
+    "premise_literal_overlap": [
+      "2025"
+    ]
+  },
+  {
+    "id": "id-08",
+    "category": "identifier",
+    "query": "75 Euro Bonus",
+    "expected_paths": [
+      "wiki/topics/neukundenbonus.md",
+      "wiki/entities/tarif-lindenstrom-fix12.md"
+    ],
+    "must_find": [
+      "wiki/topics/neukundenbonus.md"
+    ],
+    "rationale": "Seite schreibt '75,00 EUR'.",
+    "premise_literal_overlap": []
+  },
+  {
+    "id": "id-09",
+    "category": "identifier",
+    "query": "§ 312g BGB",
+    "expected_paths": [
+      "wiki/concepts/widerrufsrecht.md"
+    ],
+    "must_find": [
+      "wiki/concepts/widerrufsrecht.md"
+    ],
+    "rationale": "Seite zitiert '§§ 312g, 355 BGB'.",
+    "premise_literal_overlap": [
+      "312g",
+      "bgb"
+    ]
+  },
+  {
+    "id": "id-10",
+    "category": "identifier",
+    "query": "LFW24",
+    "expected_paths": [
+      "wiki/topics/lieferantenwechsel.md",
+      "wiki/topics/umzug.md"
+    ],
+    "must_find": [
+      "wiki/topics/lieferantenwechsel.md"
+    ],
+    "rationale": "Verfahrenskürzel.",
+    "premise_literal_overlap": [
+      "lfw24"
+    ]
+  },
+  {
+    "id": "id-11",
+    "category": "identifier",
+    "query": "0800 5546330",
+    "expected_paths": [
+      "wiki/entities/stadtwerke-lindenau-vertrieb.md",
+      "wiki/concepts/zaehlerstand.md"
+    ],
+    "must_find": [
+      "wiki/entities/stadtwerke-lindenau-vertrieb.md"
+    ],
+    "rationale": "Telefonnummer des Kundenservice.",
+    "premise_literal_overlap": [
+      "0800",
+      "5546330"
+    ]
+  },
+  {
+    "id": "ne-01",
+    "category": "negative",
+    "query": "Fernwärme Anschlusskosten",
+    "expected_paths": [],
+    "must_find": [],
+    "rationale": "Nicht Gegenstand; der Überblick nennt Fernwärme nur als ausgeschlossen (Köder)."
+  },
+  {
+    "id": "ne-02",
+    "category": "negative",
+    "query": "Gastarif Kündigungsfrist",
+    "expected_paths": [],
+    "must_find": [],
+    "rationale": "Das Wiki behandelt nur Strom; 'Kündigungsfrist' ist ein Köder."
+  },
+  {
+    "id": "ne-03",
+    "category": "negative",
+    "query": "Balkonkraftwerk anmelden",
+    "expected_paths": [],
+    "must_find": [],
+    "rationale": "Weder im Wiki noch in den Quellen."
+  },
+  {
+    "id": "ne-04",
+    "category": "negative",
+    "query": "Ladesäule öffentliches Laden Preise",
+    "expected_paths": [],
+    "must_find": [],
+    "rationale": "Öffentliche Ladeinfrastruktur kommt nicht vor."
+  },
+  {
+    "id": "ne-05",
+    "category": "negative",
+    "query": "Trinkwasser Härtegrad",
+    "expected_paths": [],
+    "must_find": [],
+    "rationale": "Wasser ist nicht Gegenstand des Wikis."
+  },
+  {
+    "id": "ne-06",
+    "category": "negative",
+    "query": "Einspeisevergütung Photovoltaik Höhe",
+    "expected_paths": [],
+    "must_find": [],
+    "rationale": "Nicht behandelt; 'Photovoltaik' kommt nur im Ausbaufonds des Ökotarifs vor (Köder)."
+  },
+  {
+    "id": "ne-07",
+    "category": "negative",
+    "query": "Urlaubsantrag Betriebsvereinbarung",
+    "expected_paths": [],
+    "must_find": [],
+    "rationale": "Personalthemen kommen nicht vor."
+  }
+]

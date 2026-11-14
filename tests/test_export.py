@@ -62,7 +62,7 @@ def export(
     return subprocess.run(
         [python, "-B", str(exporter), "--target", str(target), "--output-dir", str(output_dir), "--skill-name", name],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         cwd=str(exporter.parent),
         env=env,
     )
@@ -152,6 +152,80 @@ class ExportedSkillRuns(unittest.TestCase):
                 self.assertEqual(info.date_time, expected)
                 self.assertEqual(info.external_attr, 0o100644 << 16)
 
+    def exported_search(self, *arguments: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, "-B", "-S", "-s", str(self.skill / "scripts" / "search_knowledge.py"), *arguments],
+            capture_output=True,
+            cwd=str(self.tmp),
+            env=clean_environment(),
+        )
+
+    def test_the_exported_search_ranks_like_the_query_skill(self) -> None:
+        """One shared core: same paths, order, scores, and coverage counts."""
+        for arguments in (("--query", "Wiki"), ("--query", "Testwiki Überblick", "--include-sources", "--limit", "100")):
+            with self.subTest(arguments=arguments):
+                exported = self.exported_search(*arguments)
+                self.assertEqual(exported.returncode, 0, exported.stderr.decode("utf-8", errors="replace"))
+                report = json.loads(exported.stdout.decode("utf-8"))
+                reader = subprocess.run(
+                    [sys.executable, "-B", str(REPO / "query-llm-wiki" / "scripts" / "search_wiki.py"),
+                     "--target", str(self.wiki.path), *arguments],
+                    capture_output=True, encoding="utf-8",
+                )
+                self.assertEqual(reader.returncode, 0, reader.stderr)
+                expected = json.loads(reader.stdout)
+                self.assertTrue(report["results"])
+                prefix = "references/knowledge/"
+                self.assertTrue(all(item["path"].startswith(prefix) for item in report["results"]))
+                self.assertEqual(
+                    [(item["path"][len(prefix):], item["score"]) for item in report["results"]],
+                    [(item["path"], item["score"]) for item in expected["results"]],
+                )
+                for key in ("matched", "returned", "truncated", "omitted_count", "query_terms", "unmatched_terms"):
+                    self.assertEqual(report["coverage"][key], expected["coverage"][key], key)
+
+    def test_the_exported_coverage_says_history_is_not_shipped(self) -> None:
+        exported = self.exported_search("--query", "Wiki", "--limit", "1")
+        self.assertEqual(exported.returncode, 0, exported.stderr.decode("utf-8", errors="replace"))
+        coverage = json.loads(exported.stdout.decode("utf-8"))["coverage"]
+        self.assertEqual(coverage["format"], "lmwiki-search-coverage/1")
+        self.assertEqual(
+            coverage["scopes"]["history"],
+            {"searched": False, "shipped": False, "files": None, "files_with_a_query_term": None},
+        )
+        self.assertEqual(coverage["returned"] + coverage["omitted_count"], coverage["matched"])
+        self.assertTrue(all(item["path"].startswith("references/knowledge/") for item in coverage["omitted_top"]))
+
+    def test_the_exported_search_refuses_a_different_snapshot(self) -> None:
+        verified = subprocess.run(
+            [sys.executable, "-B", "-S", "-s", str(self.skill / "scripts" / "verify_knowledge.py")],
+            capture_output=True, env=clean_environment(),
+        )
+        manifest_sha256 = json.loads(verified.stdout.decode("utf-8"))["manifest_sha256"]
+        stale = self.exported_search("--query", "Wiki", "--expect-manifest-sha256", "f" * 64)
+        self.assertEqual(stale.returncode, 4)
+        report = json.loads(stale.stdout.decode("utf-8"))
+        self.assertEqual(report["results"], [])
+        self.assertEqual(report["release"]["state"], "snapshot_changed")
+        self.assertEqual(report["release"]["manifest_sha256"], manifest_sha256)
+        matching = self.exported_search("--query", "Wiki", "--expect-manifest-sha256", manifest_sha256)
+        self.assertEqual(matching.returncode, 0, matching.stderr.decode("utf-8", errors="replace"))
+
+    def test_the_exported_skill_file_carries_resolution_and_coverage_rules(self) -> None:
+        text = (self.skill / "SKILL.md").read_text(encoding="utf-8")
+        block = text.split("---", 2)[1]
+        keys = {line.split(":", 1)[0] for line in block.splitlines() if line.strip()}
+        self.assertEqual(keys, {"name", "description"})
+        self.assertNotIn("mcp", text.lower())
+        self.assertNotIn("__SKILL_", text)
+        for phrase in (
+            "<skill-root>/scripts/search_knowledge.py", "${CLAUDE_SKILL_DIR}", "--expect-manifest-sha256",
+            "truncated", "claims_returned", "claims_total", "unmatched_terms",
+            "terms_only_in_unsearched.sources", "--include-sources", "coverage.boundary",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+
     def test_two_exports_of_one_release_are_byte_identical(self) -> None:
         second = export(EXPORTER, self.wiki.path, self.tmp / "out-again")
         self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
@@ -216,7 +290,7 @@ class ExportRefusesABrokenSkill(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self._dir, ignore_errors=True)
 
-    def add_template_line(self, line: str, anchor: str = "from wiki_filters import matches_selector, validate_selector\n") -> None:
+    def add_template_line(self, line: str, anchor: str = "from wiki_filters import validate_selector\n") -> None:
         text = self.template.read_text(encoding="utf-8")
         self.assertIn(anchor, text)
         self.template.write_text(text.replace(anchor, anchor + line + "\n", 1), encoding="utf-8")
@@ -348,6 +422,17 @@ class ExportRefusesABrokenSkill(unittest.TestCase):
         result = export(self.exporter, self.wiki.path, self.tmp / "out")
         self.assert_refused(result, "self-check")
 
+    @unittest.skipIf(sys.version_info < (3, 11), "PYTHONSAFEPATH exists from Python 3.11")
+    def test_a_template_that_relies_on_the_script_folder_fails_the_self_check(self) -> None:
+        """Hosts may run helpers with python -I; a template must put its own folder on sys.path."""
+        text = self.template.read_text(encoding="utf-8")
+        line = "    sys.path.insert(0, _SCRIPT_DIR)\n"
+        self.assertIn(line, text)
+        self.template.write_text(text.replace(line, "    pass\n", 1), encoding="utf-8")
+        result = export(self.exporter, self.wiki.path, self.tmp / "out")
+        self.assert_refused(result, "self-check")
+        self.assertIn("ModuleNotFoundError", result.stderr)
+
     # -- every other failure after writing began also leaves nothing --------
 
     def test_a_refused_export_leaves_no_output_behind(self) -> None:
@@ -361,6 +446,26 @@ class ExportRefusesABrokenSkill(unittest.TestCase):
         self.assertNotIn("Refusing to overwrite", again.stderr)
 
 
+class SkillTemplate(unittest.TestCase):
+    """The exported SKILL.md is a template file filled by plain replacement."""
+
+    TEMPLATES = REPO / "maintain-llm-wiki" / "assets" / "knowledge-skill"
+
+    def test_braces_and_placeholder_text_in_a_description_stay_literal(self) -> None:
+        description = 'Answers {"kind": "all"} questions about {topic}, even __SKILL_NAME__ and __SKILL_DESCRIPTION__.'
+        text = export_wiki_skill.skill_markdown("demo-wissen", description, self.TEMPLATES)
+        self.assertTrue(text.startswith('---\nname: "demo-wissen"\ndescription: '))
+        self.assertIn(export_wiki_skill.yaml_string(description), text)
+        self.assertEqual(text.count("__SKILL_NAME__"), 1, "only the description's own copy remains")
+
+    def test_a_template_without_its_placeholders_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            broken = Path(directory) / export_wiki_skill.SKILL_TEMPLATE
+            broken.write_text("---\nname: x\ndescription: y\n---\n", encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                export_wiki_skill.skill_markdown("demo-wissen", "Demo.", Path(directory))
+
+
 class SelfCheckEnvironment(unittest.TestCase):
     def test_pythonhome_survives_and_pythonpath_does_not(self) -> None:
         patched = {"PYTHONHOME": "/opt/relocated", "PYTHONPATH": "/elsewhere", "PYTHONSTARTUP": "/x.py"}
@@ -370,6 +475,8 @@ class SelfCheckEnvironment(unittest.TestCase):
         self.assertNotIn("PYTHONPATH", environment)
         self.assertNotIn("PYTHONSTARTUP", environment)
         self.assertEqual(environment["PYTHONDONTWRITEBYTECODE"], "1")
+        # On Python 3.11+ the script folder stays off sys.path, as under python -I.
+        self.assertEqual(environment["PYTHONSAFEPATH"], "1")
 
 
 if __name__ == "__main__":

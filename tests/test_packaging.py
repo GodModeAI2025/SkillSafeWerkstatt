@@ -243,11 +243,33 @@ class ExportableLibraries(unittest.TestCase):
         )
         self.assertEqual(sorted(path.name for path in closure), sorted(exporter.EXPORTABLE_LIBRARIES))
 
+    def test_no_standard_library_modules_beyond_what_exported_code_imports(self) -> None:
+        """Each reviewed stdlib entry must be needed; an unused one is a review nobody repeats."""
+        exporter = self.exporter()
+        local = {name[:-3] for name in exporter.TEMPLATE_ENTRYPOINTS + exporter.EXPORTABLE_LIBRARIES}
+        imported: set[str] = set()
+        for path in self.exported_files():
+            imported |= local_imports(path) - local
+        self.assertEqual(sorted(imported), sorted(exporter.EXPORTED_STDLIB))
+
+    def test_the_search_core_imports_no_verifier_and_no_writer(self) -> None:
+        """The shared core takes a release root and returns data; integrity checks stay in the wrappers."""
+        for skill in SKILLS:
+            with self.subTest(skill=skill):
+                core = REPO / skill / "scripts" / "search_core.py"
+                self.assertEqual(local_imports(core) & {"verify_release", "verify_knowledge", "portable_io", "navigation"}, set())
+                self.assertEqual(self.write_calls(core), [])
+
 
 class SharedModuleParity(unittest.TestCase):
     """Modules both skills carry must be byte-identical, or they will diverge."""
 
-    SHARED = ("sync_artifacts.py", "trust_contract.py", "freshness.py", "verify_release.py")
+    # search_core.py and bm25.py are the one search both skills and every
+    # exported knowledge skill run; a drifted copy would rank differently.
+    SHARED = (
+        "sync_artifacts.py", "trust_contract.py", "freshness.py", "verify_release.py",
+        "search_core.py", "bm25.py",
+    )
 
     def test_shared_modules_are_identical(self) -> None:
         for name in self.SHARED:
@@ -320,7 +342,7 @@ class ActionCatalog(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(REPO / skill / "scripts" / "describe_actions.py")],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return json.loads(result.stdout)

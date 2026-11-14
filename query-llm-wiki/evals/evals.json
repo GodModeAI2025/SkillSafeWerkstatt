@@ -151,6 +151,18 @@
         "Abgelaufene Treffer werden markiert statt stillschweigend unterdrückt.",
         "Der Skill unterscheidet Ablaufdatum, Vertrauensstufe und Qualitätsstatus voneinander."
       ]
+    },
+    {
+      "id": 14,
+      "prompt": "Darf der Abschlag um mehr als 20 Prozent gesenkt werden?",
+      "expected_output": "Eine belegte Antwort, die die Ausnahme findet, obwohl die Suche auf der passenden Seite Claims zurückgehalten und weitere Treffer abgeschnitten hat.",
+      "files": [],
+      "expectations": [
+        "Meldet ein Treffer claims_returned kleiner als claims_total, liest der Skill vor der Antwort alle Claim-Blöcke dieser Seite.",
+        "Meldet coverage truncated, erhöht der Skill --limit (höchstens 100) oder sagt ausdrücklich, dass es weitere Treffer gibt.",
+        "Wörter aus unmatched_terms führen zu einer zweiten Suche mit anderen Wörtern, nicht zu einer Fehlanzeige.",
+        "Die Zählwerte werden nicht als Beleg dafür ausgegeben, dass das Wiki zum Thema nichts enthält."
+      ]
     }
   ]
 }
