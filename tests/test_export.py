@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "maintain-llm-wi
 
 import export_wiki_skill  # noqa: E402
 import search_core  # noqa: E402
-from harness import MAINTAIN, REPO, build_wiki  # noqa: E402
+from harness import MAINTAIN, REPO, build_wiki, python_environment  # noqa: E402
 
 
 EXPORTER = MAINTAIN / "export_wiki_skill.py"
@@ -41,14 +41,7 @@ WRITERS = {path.name for path in MAINTAIN.glob("*.py")} - set(export_wiki_skill.
 
 def clean_environment() -> dict[str, str]:
     """No PYTHONPATH or user site: the export has to be self-contained."""
-    environment = {key: value for key, value in os.environ.items() if not key.upper().startswith("PYTHON")}
-    for key in ("PYTHONHOME", "PYTHONPLATLIBDIR"):
-        if key in os.environ:
-            environment[key] = os.environ[key]
-    environment["PYTHONDONTWRITEBYTECODE"] = "1"
-    environment["PYTHONIOENCODING"] = "utf-8"
-    environment["PYTHONNOUSERSITE"] = "1"
-    return environment
+    return python_environment(PYTHONIOENCODING="utf-8", PYTHONNOUSERSITE="1")
 
 
 def export(
@@ -372,7 +365,7 @@ class ExportRefusesABrokenSkill(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self._dir, ignore_errors=True)
 
-    def add_template_line(self, line: str, anchor: str = "from wiki_filters import validate_selector\n") -> None:
+    def add_template_line(self, line: str, anchor: str = "from verify_knowledge import knowledge_root, verify\n") -> None:
         text = self.template.read_text(encoding="utf-8")
         self.assertIn(anchor, text)
         self.template.write_text(text.replace(anchor, anchor + line + "\n", 1), encoding="utf-8")

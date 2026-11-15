@@ -26,28 +26,23 @@ on a released harness wiki.
 from __future__ import annotations
 
 import json
-import os
 import re
-import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE / "fixtures" / "search_quality"))
 sys.path.insert(0, str(HERE.parent / "query-llm-wiki" / "scripts"))
 
 import search_core  # noqa: E402
-from harness import QUERY, REPO, TempWiki  # noqa: E402
-from test_search_coverage import assert_absence_identities, build_coverage_wiki  # noqa: E402
+from quality import ABSENCE_INVARIANT_KEYS as INVARIANT_KEYS  # noqa: E402
+from harness import REPO, PageTree, page  # noqa: E402
+from test_search_coverage import CoverageWikiCase, assert_absence_identities  # noqa: E402
 from wiki_filters import validate_selector  # noqa: E402
 
-INVARIANT_KEYS = (
-    "results", "reformulation_results", "formulations", "dropped_formulations", "matched_concepts",
-    "expanded_terms", "facets", "coverage", "searched_files", "filtered_out",
-)
 PREFIX = "references/knowledge/"
 ABSENCE_RULE = (
     "State that the wiki contains nothing on a question, or on part of it, only when a search for this answer "
@@ -61,37 +56,13 @@ CONCEPTS = (
 )
 
 
-def page(title: str, body: str, kind: str = "concept", extra: tuple = ()) -> str:
-    return "\n".join(["---", f'title: "{title}"', 'status: "active"', f'type: "{kind}"', *extra, "---", "", body, ""])
-
-
 def claim(claim_id: str, text: str, status: str = "active") -> str:
     head = f"id: {claim_id}\n" if claim_id else ""
     return f"<!-- claim\n{head}kind: fact\nstatus: {status}\nsources: src-1@page=1\n-->\n{text}\n<!-- /claim -->"
 
 
-class Tree:
-    """A folder the search core can read: WIKI.md and an index unless given, plus the given files."""
-
-    def __init__(self, files: dict[str, str]) -> None:
-        self.files = files
-
-    def __enter__(self) -> Path:
-        self._directory = tempfile.TemporaryDirectory(prefix="lmwiki-absence-")
-        root = Path(self._directory.name)
-        files = {"WIKI.md": "# Wiki\n", "wiki/index.md": page("Index", "Startseite.", "index"), **self.files}
-        for relative, text in files.items():
-            path = root / relative
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(text.encode("utf-8"))
-        return root
-
-    def __exit__(self, *_exc: object) -> None:
-        self._directory.cleanup()
-
-
 def passages(text: str, relative: str = "wiki/page.md") -> list:
-    document = search_core.read_document(Path(relative), relative, text, forms=True)
+    document = search_core.read_document(Path(relative), relative, text)
     return search_core.scan_passages(relative, text, document)
 
 
@@ -269,7 +240,7 @@ class Segmentation(unittest.TestCase):
         holding = [item for item in found if "Gneis" in item.text]
         self.assertEqual(len(holding), 1)
         self.assertIn("Halde", holding[0].text)
-        with Tree({"sources/rundschreiben.md": page("Rundschreiben", body, "source")}) as root:
+        with PageTree({"sources/rundschreiben.md": page("Rundschreiben", body, "source")}) as root:
             report = exhaustive(root, "Gneis Halde", TWO)
         self.assertIn(("sources/rundschreiben.md", "paragraph", holding[0].line), hit_list(report))
         self.assertTrue(report["absence_check"]["complete"])
@@ -294,7 +265,7 @@ class Segmentation(unittest.TestCase):
         # The hyphen at the line end before the marker is joined.
         self.assertIn("basalthalde", found[1].tokens)
         self.assertNotIn("halde", found[1].tokens)
-        with Tree({"sources/agb.md": source}) as root:
+        with PageTree({"sources/agb.md": source}) as root:
             report = exhaustive(root, "Gneis Halde", TWO)
             joined = exhaustive(root, "Basalthalde", TWO)
         self.assertIn(("sources/agb.md", "paragraph", 8), hit_list(report))
@@ -339,7 +310,7 @@ class Segmentation(unittest.TestCase):
             ("heading", 7, ()), ("paragraph", 8, ("Gneis",)), ("heading", 10, ("Gneis",)),
             ("paragraph", 11, ("Gneis", "Basalt")), ("paragraph", 14, ("Gneis",)),
         ])
-        with Tree({"sources/anlage.md": page("Anlage", body, "source"), "wiki/d.md": details}) as root:
+        with PageTree({"sources/anlage.md": page("Anlage", body, "source"), "wiki/d.md": details}) as root:
             table = exhaustive(root, "Quarzit Halde", TWO)
             context = exhaustive(root, "Gneis Halde", ("Basalt Lager", "Granit"))
         self.assertIn(("sources/anlage.md", "paragraph", chunks[-1].line), hit_list(table))
@@ -445,7 +416,7 @@ class Segmentation(unittest.TestCase):
             "sources/grid.md": page("Blatt Zwei", "## Lager\n\n" + self.GRID + "\n", "source"),
             "sources/simple.md": page("Blatt Drei", "## Lager\n\n" + self.SIMPLE + "\n", "source"),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             report = exhaustive(root, "Welche Mindestlagerzeit gilt für Quarzit Ost?", TWO)
         self.assertEqual(sorted(hit_list(report)), [
             ("sources/grid.md", "paragraph", 10), ("sources/multi.md", "paragraph", 10), ("sources/simple.md", "paragraph", 9),
@@ -539,7 +510,7 @@ class Segmentation(unittest.TestCase):
         self.assertEqual((chunks[0].section, chunks[0].opens), (("Preise",), ("Preise", head)))
         self.assertEqual(chunks[0].opens_tokens, frozenset({"leistung", "quarzit", "basalt"}))
         self.assertTrue(all(item.section == ("Preise", head) and not item.opens for item in chunks[1:]))
-        with Tree({"wiki/t.md": page("Tabelle", "## Preise\n\n" + "\n".join(rows))}) as root:
+        with PageTree({"wiki/t.md": page("Tabelle", "## Preise\n\n" + "\n".join(rows))}) as root:
             report = exhaustive(root, "Quarzit Halde", TWO)
         self.assertIn(("wiki/t.md", "paragraph", chunks[-1].line), hit_list(report))
 
@@ -576,7 +547,7 @@ class Segmentation(unittest.TestCase):
             "wiki/a.md": page("Seite A", "Quarzit liegt hier."),
             "meta/questions.md": "# Offene Fragen\n\n- Wo liegt Quarzit genau?\n- Wann kommt Basalt?\n",
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             loaded = search_core.load(root, include_sources=True, exhaustive=True)
             report = exhaustive(root, "Quarzit", TWO)
         self.assertEqual(loaded.scan.counts["wiki"]["navigation_skipped"], 3)
@@ -600,7 +571,7 @@ class Segmentation(unittest.TestCase):
             "meta/history/snap-1/wiki/a.md": page("Seite A", "Quarzit lag früher hier."),
             "meta/history/snap-1/meta/questions.md": "# Fragen\n\n- Quarzit wohin?\n",
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             plain = exhaustive(root, "Quarzit", TWO)
             history = exhaustive(root, "Quarzit", TWO, include_history=True)
         self.assertEqual(
@@ -630,7 +601,7 @@ class Matching(unittest.TestCase):
             "wiki/b.md": page("Seite B", "## Basalt\n\n### Details\n\nGranit liegt daneben.\n\n## Anderes\n\nGranit allein."),
             "wiki/g.md": page("Gneis Glimmer", "Nichts davon hier.\n\nAuch hier nicht."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             self.assertEqual(hit_list(exhaustive(root, "Quarzit Härte")), [("wiki/q.md", "claim", 7)])
             self.assertEqual(hit_list(exhaustive(root, "Basalt Granit")), [("wiki/b.md", "paragraph", 11)])
             self.assertEqual(hit_list(exhaustive(root, "Gneis Glimmer")), [("wiki/g.md", "header", 1)])
@@ -638,7 +609,7 @@ class Matching(unittest.TestCase):
     def test_closed_class_and_scan_function_words_are_not_required(self) -> None:
         self.assertIn("ans", search_core.SCAN_FUNCTION_WORDS)
         self.assertTrue({"ab", "ans", "uber", "zwischen", "within"} <= search_core.SCAN_EXCLUDED)
-        with Tree({"wiki/a.md": page("Seite", "Quarzit im Lager.")}) as root:
+        with PageTree({"wiki/a.md": page("Seite", "Quarzit im Lager.")}) as root:
             report = exhaustive(root, "Quarzit ans Lager ab")
         self.assertEqual(report["absence_check"]["formulations"][0]["content_words"], ["quarzit", "lager"])
         self.assertEqual(hit_list(report), [("wiki/a.md", "paragraph", 7)])
@@ -653,7 +624,7 @@ class Matching(unittest.TestCase):
     }
 
     def test_word_forms_count_and_heuristics_are_marked(self) -> None:
-        with Tree(self.WORDS) as root:
+        with PageTree(self.WORDS) as root:
             stem = exhaustive(root, "Quarzits")
             compound = exhaustive(root, "Granit")
             typo = exhaustive(root, "Pegmatitadr")
@@ -672,7 +643,7 @@ class Matching(unittest.TestCase):
         self.assertEqual(typo["absence_check"]["counts"]["hits_heuristic"], 1)
 
     def test_the_scan_matches_the_rankings_members(self) -> None:
-        with Tree(self.WORDS) as root:
+        with PageTree(self.WORDS) as root:
             loaded = search_core.load(root, include_sources=True, exhaustive=True)
             for query in ("Granit", "Quarzits", "Pegmatitadr", "Granit Block Quarzit"):
                 with self.subTest(query=query):
@@ -696,13 +667,13 @@ class Matching(unittest.TestCase):
             "wiki/b.md": page("Seite B", "Quarzit im Granitlager."),
             "wiki/c.md": page("Seite C", "Ein Granit allein."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             definitions = search_core.controlled_concepts(root / "schema/CONCEPTS.md")
             report = exhaustive(root, "Quarzgestein Lager")
         for query in ("Quarzgestein Lager", "Fels aus Quarz", "Quarzit", "nichts", "Quarzgesteine", "Lager Quarzgestein Quarzit"):
             with self.subTest(query=query):
                 self.assertEqual(
-                    list(search_core.concept_runs(query, definitions)), search_core.expand_query(query, definitions, True)[1]
+                    list(search_core.concept_runs(query, definitions)), search_core.expand_query(query, definitions)[1]
                 )
         runs = search_core.concept_runs("Quarzgestein Lager", definitions)
         self.assertEqual(runs, {"gestein-quarz": ["quarzgestein"]})
@@ -724,7 +695,7 @@ class Matching(unittest.TestCase):
         self.assertEqual(report["absence_check"]["absent_terms"], ["quarzgestein"])
 
     def test_a_word_that_occurs_nowhere_is_absent_and_its_formulation_has_no_hits(self) -> None:
-        with Tree({"wiki/a.md": page("Seite A", "Quarzit liegt hier."), "wiki/b.md": page("Seite B", "Basalt liegt dort.")}) as root:
+        with PageTree({"wiki/a.md": page("Seite A", "Quarzit liegt hier."), "wiki/b.md": page("Seite B", "Basalt liegt dort.")}) as root:
             report = exhaustive(root, "Quarzit Zirkon", ("Basalt", "Granit Halde"))
         check = report["absence_check"]
         self.assertIn("zirkon", check["absent_terms"])
@@ -736,7 +707,7 @@ class Matching(unittest.TestCase):
 
     def test_hits_name_every_formulation_they_match(self) -> None:
         files = {"wiki/a.md": page("Seite A", "Quarzit und Basalt im Lager."), "wiki/b.md": page("Seite B", "Granit allein.")}
-        with Tree(files) as root:
+        with PageTree(files) as root:
             report = exhaustive(root, "Quarzit Lager", ("Basalt Lager", "Granit"))
         hits = {entry["path"]: entry["hits"][0]["formulations"] for entry in report["exhaustive_hits"]}
         self.assertEqual(hits, {"wiki/a.md": [0, 1], "wiki/b.md": [2]})
@@ -751,7 +722,7 @@ class Matching(unittest.TestCase):
             "wiki/d.md": page("Seite D", "Quarzit:\n- Lager voll"),
             "wiki/e.md": page("Seite E", "Quarzit allein.\n\nIm Lager."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             report = exhaustive(root, "Quarzit Lager", TWO)
         self.assertEqual(sorted(hit_list(report)), [
             ("wiki/a.md", "paragraph", 9),
@@ -772,7 +743,7 @@ class Matching(unittest.TestCase):
             "wiki/a.md": page("Seite A", "Die Gneis-Halde liegt am Hang."),
             "wiki/b.md": page("Seite B", "Der Basalt Bruch ist alt."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             apart = exhaustive(root, "Gneis Halde", TWO)
             joined = exhaustive(root, "Basalt-Bruch", TWO)
             plain = search_core.search(root, "Gneis Halde", also=list(TWO), include_sources=True)
@@ -806,7 +777,7 @@ class Matching(unittest.TestCase):
             ]),
             "sources/src-0123456789abcdef-quelle.md": page("Quelle", "Ein Text.", "source", ('source_id: "src-0123456789abcdef"',)),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             by_claim = exhaustive(root, "clm-00000000000000aa", ("Härte Quarzit", "Granit"))
             by_source = exhaustive(root, "src-0123456789abcdef", ("Quelle Quarzit", "Granit"))
             by_page = exhaustive(root, "concept-quarzit", TWO)
@@ -828,14 +799,14 @@ class Matching(unittest.TestCase):
 
     def test_light_verbs_of_a_question_are_not_required(self) -> None:
         self.assertTrue({"gibt", "geht", "gilt", "passiert", "steht"} <= search_core.SCAN_FUNCTION_WORDS)
-        with Tree({"wiki/a.md": page("Seite A", "Im Lager liegt Quarzit.")}) as root:
+        with PageTree({"wiki/a.md": page("Seite A", "Im Lager liegt Quarzit.")}) as root:
             report = exhaustive(root, "Gibt es Quarzit im Lager?", TWO)
         self.assertEqual(report["absence_check"]["formulations"][0]["content_words"], ["quarzit", "lager"])
         self.assertIn(("wiki/a.md", "paragraph", 7), hit_list(report))
 
     def test_a_heading_with_nothing_under_it_is_scanned_without_error(self) -> None:
         files = {"wiki/e.md": page("Seite E", "## Basalt\n\n## Granit\n\nText hier.\n\n## Gneis")}
-        with Tree(files) as root:
+        with PageTree(files) as root:
             loaded = search_core.load(root, include_sources=True, exhaustive=True)
             for query, line in (("Basalt", 7), ("Gneis", 13), ("Granit Text", 11)):
                 with self.subTest(query=query):
@@ -859,20 +830,18 @@ class Matching(unittest.TestCase):
         }
         for text in spellings.values():
             with self.subTest(text=text):
-                self.assertEqual(search_core.tokens(text, False, True)[:3], ["ab", "2500", "kwh"])
+                self.assertEqual(search_core.tokens(text, False)[:3], ["ab", "2500", "kwh"])
         for written, expected in (
             ("2.500,50 Euro", ["2500", "50", "euro"]), ("2,50 Euro", ["2", "50", "euro"]), ("31.12.2025", ["31", "12", "2025"]),
             ("1.234.567", ["1234567"]), ("§ 14a EnWG", ["14a", "enwg"]), ("§ 312g BGB", ["312g", "bgb"]), ("OBIS 1.8.1", ["obis", "1", "8", "1"]),
         ):
             with self.subTest(written=written):
-                self.assertEqual(search_core.tokens(written, False, True), expected)
+                self.assertEqual(search_core.tokens(written, False), expected)
         # A space between digit groups may separate two numbers: the scan keeps the groups as well.
         self.assertEqual(search_core.scan_words("100 200"), frozenset({"100200", "100", "200"}))
-        # The literal search is unchanged.
-        self.assertEqual(search_core.tokens("2.500 kWh", False, False), ["2", "500", "kwh"])
         files = {path: page(path.split("/")[1][:-3].title(), text) for path, text in spellings.items()}
         files["wiki/tabelle.md"] = page("Tabelle", "Quarzit-Tarif 100 200 kWh.")
-        with Tree(files) as root:
+        with PageTree(files) as root:
             plain = exhaustive(root, "Ab 2500 kWh Quarzit-Tarif", TWO)
             dotted = exhaustive(root, "2.500 kWh Quarzit-Tarif", TWO)
             part = exhaustive(root, "200 kWh Quarzit-Tarif", TWO)
@@ -894,12 +863,12 @@ class Matching(unittest.TestCase):
             "wiki/b.md": page("Seite B", "Nach sieben Tagen ist die Halde voll."),
             "wiki/c.md": page("Seite C", "Am ersten Tag ist das Lager leer."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             house = exhaustive(root, "Quarzithaus Hang", TWO)
             day = exhaustive(root, "Tag Halde", TWO)
             days = exhaustive(root, "Tage Lager", TWO)
             plain = search_core.search(root, "Quarzithaus Hang", also=list(TWO), include_sources=True)
-        self.assertFalse(search_core.wordforms.same_word("quarzithaus", "quarzithauser"))
+        self.assertFalse(search_core.wordforms.same_word("quarzithaus", "quarzithauser", search_core.CLOSED_CLASS))
         for report, path, term, token in (
             (house, "wiki/a.md", "quarzithaus", "quarzithauser"), (day, "wiki/b.md", "tag", "tagen"), (days, "wiki/c.md", "tage", "tag"),
         ):
@@ -923,7 +892,7 @@ class Matching(unittest.TestCase):
             "wiki/b.md": page("Seite B", "Die Gneis-Halde liegt am Hang."),
             "wiki/c.md": page("Seite C", "Siehe [[wiki/concepts/basalt-lager]] und das Basalt-Lager."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             loaded = search_core.load(root, include_sources=True, exhaustive=True)
             report = exhaustive(root, "Gneis Halde", TWO)
             both = exhaustive(root, "Basalt Lager", ("Gneis Halde", "Granit"))
@@ -958,7 +927,7 @@ class Matching(unittest.TestCase):
         }
         found = passages(files["wiki/s.md"])
         self.assertTrue({"mindestlagerzeit2", "mindestlagerzeit", "2"} <= found[-1].tokens)
-        with Tree(files) as root:
+        with PageTree(files) as root:
             marked = exhaustive(root, "Welche Mindestlagerzeit hat Basalt Nord?", TWO)
             superscript = exhaustive(root, "Mindestlagerzeit Granit", TWO)
             name = exhaustive(root, "Fix12 Lager", TWO)
@@ -973,7 +942,7 @@ class Matching(unittest.TestCase):
         # The joined token stays, so a name that ends in digits still matches itself, and "fix" is never split off.
         self.assertEqual(hit_list(name), [("wiki/f.md", "paragraph", 7)])
         self.assertEqual(name["exhaustive_hits"][0]["hits"][0]["strength"], "word_form")
-        with Tree(files) as root:
+        with PageTree(files) as root:
             loaded = search_core.load(root, include_sources=True, exhaustive=True)
         self.assertNotIn("fix", loaded.scan.footnote_marks())
 
@@ -985,7 +954,7 @@ class Matching(unittest.TestCase):
             "wiki/c.md": page("Seite C", "Die Aufsicht hat den Granit geprüft."),
             "wiki/d.md": page("Seite D", "Die Zahl der Pächter steigt."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             lowers = exhaustive(root, "Senkt der Steinbruch die Abgabe?", TWO)
             pays = exhaustive(root, "Wann muss der Pächter zahlen?", TWO)
             checks = exhaustive(root, "Prüft die Aufsicht den Granit?", TWO)
@@ -1001,7 +970,7 @@ class Matching(unittest.TestCase):
                 terms = {entry["term"]: entry for entry in report["absence_check"]["terms"]}
                 self.assertIn({"token": token, "rule": "verb_ending"}, terms[term]["forms"])
         # The word forms do not know these pairs, and the noun "Zahl" never meets the verb "zahlt".
-        self.assertFalse(search_core.wordforms.same_word("senkt", "senken"))
+        self.assertFalse(search_core.wordforms.same_word("senkt", "senken", search_core.CLOSED_CLASS))
         self.assertNotIn(("wiki/b.md", "paragraph", 7), hit_list(number))
         self.assertEqual(search_core.verb_variants("zahl"), set())
         self.assertIn("senken", search_core.verb_variants("senkt"))
@@ -1017,7 +986,7 @@ class Matching(unittest.TestCase):
         found = passages(files["wiki/b.md"])
         self.assertIn(search_core.SUSPENDED_MARK + "abbauende", found[-1].tokens)
         self.assertEqual(found[-1].text, "Abbaubeginn und -ende stehen im Plan.")
-        with Tree(files) as root:
+        with PageTree(files) as root:
             front = exhaustive(root, "Basaltblöcke Hang", TWO)
             back = exhaustive(root, "Abbauende Plan", TWO)
             chain = exhaustive(root, "Gneishalden Tal", TWO)
@@ -1061,16 +1030,16 @@ class MarkupAndWordClasses(unittest.TestCase):
 
     def test_a_subscript_or_superscript_in_markup_keeps_the_word_whole(self) -> None:
         """Regression: pandoc's "CO~2~-Preis" and "CO<sub>2</sub>-Preis" were "co", "2", "preis", so "CO2-Preis" was absent."""
-        self.assertEqual(search_core.tokens("CO~2~-Preis", forms=True), ["co2-preis"])
-        self.assertEqual(search_core.tokens("CO<sub>2</sub>-Preis", forms=True), ["co2-preis"])
-        self.assertEqual(search_core.tokens("CO₂-Preis", forms=True), ["co2-preis"])
+        self.assertEqual(search_core.tokens("CO~2~-Preis"), ["co2-preis"])
+        self.assertEqual(search_core.tokens("CO<sub>2</sub>-Preis"), ["co2-preis"])
+        self.assertEqual(search_core.tokens("CO₂-Preis"), ["co2-preis"])
         files = {
             "sources/d.md": page("Erdgas", "## Preise\n\nDer CO~2~-Preis beträgt 55 Euro je Tonne CO~2~.", "source"),
             "sources/g.md": page("Erdgas GFM", "## Preise\n\nDer CO<sub>2</sub>-Preis gilt für Erdgas.", "source"),
             "wiki/m.md": page("Fläche", "Der Basalt kostet 12 Euro je m^2^.\n\nDer Granit kostet 14 Euro je m<sup>2</sup>."),
             "wiki/k.md": page("Frist", "Die **Kündigungs**frist für Basalt beträgt einen Monat."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             price = exhaustive(root, "Wie hoch ist der CO2-Preis?", ("CO2-Abgabe", "CO2-Bepreisung"))
             area = exhaustive(root, "Basalt m²", TWO)
             bold = exhaustive(root, "Kündigungsfrist Basalt", TWO)
@@ -1095,7 +1064,7 @@ class MarkupAndWordClasses(unittest.TestCase):
                                  "<tr><td>Basalt S&uuml;d</td><td>Drei Monate</td></tr></table>", "source"),
             "wiki/s.md": page("Seite", "Die Kündigungs&shy;frist für Granit&nbsp;Nord beträgt zwei Wochen."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             report = exhaustive(root, "Welche Kündigungsfrist gilt für Basalt Süd?", TWO)
             shy = exhaustive(root, "Kündigungsfrist Granit Nord", TWO)
         for path in ("sources/p.md", "sources/h.md"):
@@ -1112,7 +1081,7 @@ class MarkupAndWordClasses(unittest.TestCase):
             "wiki/b.md": page("Seite B", "Ein Guthaben ist vom Pächter binnen zwei Wochen auszuzahlen."),
             "wiki/c.md": page("Seite C", "Der Pächter darf den Brecher im Winter abschalten."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             infinitive = exhaustive(root, "Darf der Pächter im Winter den Brecher abschalten?", TWO)
             participle = exhaustive(root, "Brecher abgeschaltet Winter", TWO)
             zu = exhaustive(root, "Muss der Pächter ein Guthaben auszahlen?", TWO)
@@ -1131,7 +1100,7 @@ class MarkupAndWordClasses(unittest.TestCase):
                 self.assertTrue(search_core.same_scan_word(left, right))
                 self.assertTrue(search_core.same_scan_word(right, left))
         # The word forms do not know these pairs, and a reformulation in another form of the verb does not count.
-        self.assertFalse(search_core.wordforms.same_word("abschalten", "abgeschaltet"))
+        self.assertFalse(search_core.wordforms.same_word("abschalten", "abgeschaltet", search_core.CLOSED_CLASS))
         three = [{"origin": "query"}, {"origin": "also"}, {"origin": "also"}]
         self.assertEqual(search_core.counted_reformulations(three, [["brecher", "abschalten"], ["brecher", "abgeschaltet"], ["quarzit"]]),
                          [False, False, True])
@@ -1145,7 +1114,7 @@ class MarkupAndWordClasses(unittest.TestCase):
             "wiki/d.md": page("Seite D", "Alle Ergebnisse der Kundinnen liegen am Gneis."),
             "wiki/e.md": page("Seite E", "Ein intelligentes Messgerät. Ein fester Zins. Ein Auto. Ein Ergebnis. Eine Kundin."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             adjective = exhaustive(root, "Wie hoch ist der Abschlag bei einem intelligenten Messgerät?", TWO)
             fixed = exhaustive(root, "festen Zins Basalt", TWO)
             cars = exhaustive(root, "Auto Granit", TWO)
@@ -1160,7 +1129,7 @@ class MarkupAndWordClasses(unittest.TestCase):
                 self.assertEqual(hit["strength"], "heuristic")
                 self.assertIn({"term": term, "token": token, "rule": "ending", "in": "text"}, hit["matched"])
         self.assertTrue(search_core.same_scan_word("intelligentes", "intelligenter"))
-        self.assertFalse(search_core.wordforms.same_word("intelligenten", "intelligentem"))
+        self.assertFalse(search_core.wordforms.same_word("intelligenten", "intelligentem", search_core.CLOSED_CLASS))
         self.assertEqual(search_core.ending_bases("intelligenten"), {"intelligenten", "intelligente", "intelligent"})
         self.assertEqual(search_core.ending_bases("ab"), set())
 
@@ -1172,7 +1141,7 @@ class MarkupAndWordClasses(unittest.TestCase):
             "wiki/c.md": page("Seite C", "Die Stadtwerke liefern Strom an Kunden. Ein Gastgeber liefert Essen."),
             "wiki/d.md": page("Seite D", "Siehe [[wiki/concepts/erdgas]]. Die Stadtwerke liefern hier."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             report = exhaustive(root, "Liefern die Stadtwerke auch Gas?", ("Gastarif", "Erdgas Lieferung"))
         check = report["absence_check"]
         self.assertEqual(check["formulations"][0]["content_words"], ["liefern", "stadtwerke", "gas"])
@@ -1189,7 +1158,7 @@ class MarkupAndWordClasses(unittest.TestCase):
         terms = {entry["term"]: entry for entry in check["terms"] if entry["origin"] == "query"}
         self.assertIn({"token": "gaskunden", "rule": "short_part"}, terms["gas"]["forms"])
         # The rule is for two and three letters only; longer words are the compound rules' business.
-        with Tree(files) as root:
+        with PageTree(files) as root:
             loaded = search_core.load(root, include_sources=True, exhaustive=True)
         self.assertEqual(loaded.scan.short_parts("kunden"), frozenset())
         self.assertEqual(loaded.scan.short_parts("an"), frozenset())
@@ -1206,7 +1175,7 @@ class MarkupAndWordClasses(unittest.TestCase):
             "wiki/c.md": page("Seite C", "Für den E-Auto-Tarif am Gneis gilt ein fester Preis."),
             "wiki/d.md": page("Seite D", "Die Mobilität am Quarzit wächst."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             apart = exhaustive(root, "E-Mail-Adresse Basalt", TWO)
             inside = exhaustive(root, "E-Mail Granit", TWO)
             joined = exhaustive(root, "E-Auto Tarif Gneis", TWO)
@@ -1234,7 +1203,7 @@ class MarkupAndWordClasses(unittest.TestCase):
             "wiki/a.md": page("Seite A", "Die SMS-Rechnung zum Basalt kommt jeden Monat."),
             "wiki/b.md": page("Seite B", "Der Grundpreis für Granit beträgt 9,90 Euro."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             sms = exhaustive(root, "Rechnung per SMS Basalt", TWO)
             price = exhaustive(root, "Wie hoch ist der Grundpreis pro Monat für Granit eigentlich?", TWO)
         self.assertEqual(sms["absence_check"]["formulations"][0]["content_words"], ["rechnung", "sms", "basalt"])
@@ -1255,7 +1224,7 @@ class OrderBudgetDedupe(unittest.TestCase):
             "sources/qq.md": page("Quelle Q", "Quarzit.", "source"),
             "meta/history/s1/wiki/zz.md": page("Seite Z", "Quarzit und Basalt."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             report = exhaustive(root, "Quarzit", ("Basalt",), include_history=True)
         self.assertEqual(
             [entry["path"] for entry in report["exhaustive_hits"]],
@@ -1269,7 +1238,7 @@ class OrderBudgetDedupe(unittest.TestCase):
             f"wiki/p{number:02d}.md": page(f"Seite {number}", "Quarzit eins.\n\nQuarzit zwei.\n\nQuarzit drei.")
             for number in range(25)
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             loaded = search_core.load(root, include_sources=True, exhaustive=True)
             full = search_core.search_loaded(loaded, "Quarzit", also=TWO, exhaustive=True, exhaustive_budget=10**9)
             walk = [(entry["path"], hit) for entry in full["exhaustive_hits"] for hit in entry["hits"]]
@@ -1334,7 +1303,7 @@ class OrderBudgetDedupe(unittest.TestCase):
         self.assertEqual(len(hard), 400)
         self.assertEqual(search_core.excerpt("kurz", wanted), ("kurz", False))
         body = " ".join(["Vorwort"] * 80) + " Quarzit Lager " + " ".join(["Nachwort"] * 80)
-        with Tree({"wiki/a.md": page("Seite A", body)}) as root:
+        with PageTree({"wiki/a.md": page("Seite A", body)}) as root:
             report = exhaustive(root, "Quarzit Lager")
         [hit] = report["exhaustive_hits"][0]["hits"]
         self.assertTrue(hit["excerpt"])
@@ -1348,7 +1317,7 @@ class OrderBudgetDedupe(unittest.TestCase):
             "wiki/b.md": page("Seite B", claim("clm-b1", "Basalt liegt im Lager.")),
             "wiki/c.md": page("Seite C", "\n\n".join(claim("", f"Gneis Nummer {number} im Fach.") for number in range(10))),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             for prefix in ("", PREFIX):
                 with self.subTest(prefix=prefix):
                     report = exhaustive(root, "Quarzit Halde", ("Basalt Lager", "Gneis Fach"), path_prefix=prefix)
@@ -1374,7 +1343,7 @@ class OrderBudgetDedupe(unittest.TestCase):
     def test_the_scan_ignores_the_selector_and_marks_selected_pages(self) -> None:
         files = {"wiki/a.md": page("Seite A", "Quarzit hier."), "wiki/b.md": page("Seite B", "Quarzit dort.")}
         selector = validate_selector({"kind": "paths", "paths": ["wiki/a.md"]})
-        with Tree(files) as root:
+        with PageTree(files) as root:
             narrowed = exhaustive(root, "Quarzit", TWO, selector=selector)
             plain = exhaustive(root, "Quarzit", TWO)
         self.assertEqual([item["path"] for item in narrowed["results"]], ["wiki/a.md"])
@@ -1396,7 +1365,7 @@ class AbsenceCheck(unittest.TestCase):
     RELEASE = {"version": "1.2.3", "release_id": "rel-1", "manifest_sha256": "abcdef0123456789" * 4}
 
     def test_every_report_carries_absence_check_and_search_record(self) -> None:
-        with Tree(self.FILES) as root:
+        with PageTree(self.FILES) as root:
             report = search_core.search(root, "Quarzit", also=list(TWO))
         self.assertIsNone(report["exhaustive_hits"])
         self.assertEqual(report["absence_check"], {
@@ -1425,7 +1394,7 @@ class AbsenceCheck(unittest.TestCase):
             ("Quarzit", ["Quarzit Lager", "Basalt Halde"], None, ["too_few_reformulations"], 1),
             ("Quarzit Lager", ["Lager", "Basalt"], None, [], 2),
         )
-        with Tree(self.FILES) as root:
+        with PageTree(self.FILES) as root:
             loaded = search_core.load(root, include_sources=True, exhaustive=True)
             for query, also, budget, reasons, counted in cases:
                 with self.subTest(query=query, also=also, budget=budget):
@@ -1487,7 +1456,7 @@ class AbsenceCheck(unittest.TestCase):
         self.assertFalse(search_core.same_scan_word("zahl", "zahlt"))
         self.assertFalse(search_core.same_scan_word("lage", "lagerung"))
         files = {**self.FILES, "schema/CONCEPTS.md": CONCEPTS}
-        with Tree(files) as root:
+        with PageTree(files) as root:
             loaded = search_core.load(root, include_sources=True, exhaustive=True)
             alias = search_core.search_loaded(loaded, "Quarzgestein Lager", also=["Quarzit Lager", "Fels aus Quarz Lager"], exhaustive=True)
             own = search_core.search_loaded(loaded, "Quarzgestein Lager", also=["Quarzit Halde", "Basalt Granit"], exhaustive=True)
@@ -1505,7 +1474,7 @@ class AbsenceCheck(unittest.TestCase):
         self.assertEqual(search_core.counted_reformulations(three + [{"origin": "also"}], [
             ["quarzit"], ["basalt", "halde"], ["granit"], ["halden", "basalt"],
         ]), [False, True, True, False])
-        with Tree(self.FILES) as root:
+        with PageTree(self.FILES) as root:
             loaded = search_core.load(root, include_sources=True, exhaustive=True)
             for also in (["Basalt Halde Granit", "Basalt"], ["Basalt", "Basalt Halde Granit"]):
                 with self.subTest(also=also):
@@ -1520,7 +1489,7 @@ class AbsenceCheck(unittest.TestCase):
             "read_withheld_claims", "read_results_without_claims", "read_reformulation_results", "read_exhaustive_hits",
             "add_reformulations", "narrow_formulations",
         ))
-        with Tree(self.FILES) as root:
+        with PageTree(self.FILES) as root:
             loaded = search_core.load(root, include_sources=True, exhaustive=True)
             for query, also, budget in (
                 ("Quarzit", ["Basalt Lager", "Granit Halde"], 10), ("die", [], 10), ("Quarzit Lager", ["Basalt"], 300),
@@ -1560,7 +1529,7 @@ class AbsenceCheck(unittest.TestCase):
             ),
             "wiki/light.md": page("Seite L", claim("clm-l1", "Basalt im Fach.")),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             report = exhaustive(root, "Quarzit", ("Basalt Fach", "Granit"))
             single = exhaustive(root, "Quarzit", ("Basalt Fach",))
             hopeless = exhaustive(root, "Quarzit", ("Basalt Fach", "Granit"), exhaustive_budget=10)
@@ -1613,7 +1582,7 @@ class AbsenceCheck(unittest.TestCase):
             "sources/quelle.md": page("Quelle", "<!-- page: 1 -->\nQuarzit in der Quelle.\n\nBasalt im Lager.", "source"),
             "schema/CONCEPTS.md": CONCEPTS,
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             for query, also, limit in (("Quarzit", TWO, 12), ("Quarzgestein Lager", ("Basalt",), 1), ("Granit", (), 100)):
                 with self.subTest(query=query):
                     scanned = exhaustive(root, query, also, limit=limit)
@@ -1629,15 +1598,13 @@ class AbsenceCheck(unittest.TestCase):
                 search_core.search(root, "Quarzit", also=list(TWO), include_sources=True)["coverage"],
             )
             with self.assertRaises(ValueError):
-                exhaustive(root, "Quarzit", word_forms=False)
-            with self.assertRaises(ValueError):
                 search_core.load(root, exhaustive=True)
             with self.assertRaises(ValueError):
                 search_core.search_loaded(search_core.load(root, include_sources=True), "Quarzit", exhaustive=True)
 
     def test_the_export_ships_no_history_and_its_check_can_be_complete(self) -> None:
         files = {**self.FILES, "meta/history/s1/wiki/a.md": page("Seite A", "Quarzit früher.")}
-        with Tree(files) as root:
+        with PageTree(files) as root:
             report = exhaustive(root, "Quarzit", TWO, history_shipped=False, path_prefix=PREFIX)
             with self.assertRaises(ValueError):
                 exhaustive(root, "Quarzit", TWO, history_shipped=False, include_history=True)
@@ -1673,7 +1640,7 @@ class AbsenceCheck(unittest.TestCase):
                     depth[0] -= 1
             return read
 
-        with Tree(files) as root:
+        with PageTree(files) as root:
             with mock.patch.object(Path, "read_text", counted(original_text)), mock.patch.object(Path, "read_bytes", counted(original_bytes)):
                 report = exhaustive(root, "Quarzit", TWO, include_history=True)
         self.assertTrue(report["exhaustive_hits"])
@@ -1682,7 +1649,7 @@ class AbsenceCheck(unittest.TestCase):
 
     def test_parser_errors_skip_the_scan(self) -> None:
         files = {**self.FILES, "wiki/kaputt.md": "---\ntitle: offen\n"}
-        with Tree(files) as root:
+        with PageTree(files) as root:
             with mock.patch.object(search_core, "scan_passages", wraps=search_core.scan_passages) as scanner:
                 loaded = search_core.load(root, include_sources=True, exhaustive=True)
                 report = exhaustive(root, "Quarzit", TWO)
@@ -1694,30 +1661,10 @@ class AbsenceCheck(unittest.TestCase):
         self.assertEqual(report["absence_check"]["reasons"], ["not_exhaustive"])
 
 
-class CommandLine(unittest.TestCase):
+class CommandLine(CoverageWikiCase):
     """The query skill's wrapper on a released wiki."""
 
     ALSO = ("--also", "Messpunkt", "--also", "Zählerstand")
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls._context = TempWiki()
-        cls.wiki = cls._context.__enter__()
-        build_coverage_wiki(cls.wiki)
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        cls._context.__exit__(None, None, None)
-
-    def cli(self, *arguments: str, stdin: bytes = b"", **environment: str) -> subprocess.CompletedProcess:
-        env = {key: value for key, value in os.environ.items() if not key.upper().startswith("PYTHON")}
-        env.update({"PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8", **environment})
-        return subprocess.run(
-            [sys.executable, "-B", str(QUERY / "search_wiki.py"), "--target", str(self.wiki.path), *arguments],
-            input=stdin,
-            capture_output=True,
-            env=env,
-        )
 
     def report(self, *arguments: str, stdin: bytes = b"", **environment: str) -> tuple[dict, str]:
         result = self.cli(*arguments, stdin=stdin, **environment)

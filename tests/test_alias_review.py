@@ -13,10 +13,8 @@ A single string `aliases: Foo` is read by the shared search core as one alias
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -27,41 +25,23 @@ sys.path.insert(0, str(MAINTAIN_SCRIPTS))
 
 import lint_wiki  # noqa: E402
 import search_core  # noqa: E402
-from harness import TempWiki  # noqa: E402
+from harness import PageTree, TempWiki, python_environment  # noqa: E402
+from harness import page as harness_page  # noqa: E402
 
 
 def page(title: str, body: str, aliases: object = None, kind: str = "concept") -> str:
-    lines = ["---", f'title: "{title}"', 'status: "active"', f'type: "{kind}"']
-    if isinstance(aliases, list):
-        lines.append("aliases:")
-        lines += [f'  - "{alias}"' for alias in aliases]
-    elif aliases is not None:
-        lines.append(f"aliases: {json.dumps(aliases, ensure_ascii=False)}")
-    return "\n".join(lines + ["---", "", f"# {title}", "", body, ""])
-
-
-class Tree:
-    """A folder with WIKI.md, a root index and the given files."""
-
-    def __init__(self, files: dict[str, str]) -> None:
-        self.files = files
-
-    def __enter__(self) -> Path:
-        self._directory = tempfile.TemporaryDirectory(prefix="lmwiki-aliases-")
-        root = Path(self._directory.name)
-        for relative, text in {"WIKI.md": "# Wiki\n", "wiki/index.md": page("Index", "Start.", kind="index"), **self.files}.items():
-            path = root / relative
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding="utf-8")
-        return root
-
-    def __exit__(self, *_exc: object) -> None:
-        self._directory.cleanup()
+    """A page with its title as H1; `aliases` is written as a list or as one scalar."""
+    return harness_page(title, body, kind, aliases=aliases, heading=True)
 
 
 def review(root: Path, concepts: dict[str, dict[str, str]] | None = None) -> dict:
+    """The alias review as lint's main() runs it, on the pages it parsed; reading them again must agree."""
     files = sorted((root / "wiki").rglob("*.md"))
-    return lint_wiki.alias_review(root, files, concepts or {})
+    parsed = {path: lint_wiki.parse_frontmatter(path, []) for path in files}
+    found = lint_wiki.alias_review(root, files, concepts or {}, parsed)
+    if found != lint_wiki.alias_review(root, files, concepts or {}):
+        raise AssertionError("the alias review differs between parsed and re-read pages")
+    return found
 
 
 def concept(concept_id: str, aliases: str, status: str = "active") -> dict[str, dict[str, str]]:
@@ -82,9 +62,9 @@ class ScalarAliases(unittest.TestCase):
 
     def test_a_scalar_alias_scores_like_a_one_item_list(self) -> None:
         body = "Strom aus erneuerbaren Quellen."
-        with Tree({"wiki/a.md": page("Tarif", body, "Ökostrom")}) as root:
+        with PageTree({"wiki/a.md": page("Tarif", body, "Ökostrom")}) as root:
             scalar = search_core.search(root, "Ökostrom", limit=5)
-        with Tree({"wiki/a.md": page("Tarif", body, ["Ökostrom"])}) as root:
+        with PageTree({"wiki/a.md": page("Tarif", body, ["Ökostrom"])}) as root:
             listed = search_core.search(root, "Ökostrom", limit=5)
         self.assertTrue(scalar["results"])
         self.assertEqual(
@@ -94,9 +74,9 @@ class ScalarAliases(unittest.TestCase):
 
     def test_a_non_string_alias_value_is_ignored(self) -> None:
         body = "Ökostrom aus erneuerbaren Quellen."
-        with Tree({"wiki/a.md": page("Tarif", body, 5), "wiki/b.md": page("Liste", body, "")}) as root:
+        with PageTree({"wiki/a.md": page("Tarif", body, 5), "wiki/b.md": page("Liste", body, "")}) as root:
             ignored = search_core.search(root, "Ökostrom 5", limit=5)
-        with Tree({"wiki/a.md": page("Tarif", body), "wiki/b.md": page("Liste", body)}) as root:
+        with PageTree({"wiki/a.md": page("Tarif", body), "wiki/b.md": page("Liste", body)}) as root:
             without = search_core.search(root, "Ökostrom 5", limit=5)
         self.assertEqual(
             [(item["path"], item["score"]) for item in ignored["results"]],
@@ -138,7 +118,7 @@ class AliasReview(unittest.TestCase):
             "wiki/a.md": page("Festpreis", "Preisgarantie.", ["Tarif mit Garantie", "Preisbremse"]),
             "wiki/b.md": page("Bremse", "Preisbremse gilt."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             found = review(root)
         self.assertEqual((found["format"], found["content_pages"], found["common_threshold_pages"]), ("lmwiki-alias-review/1", 6, 3))
         self.assertEqual(
@@ -161,7 +141,7 @@ class AliasReview(unittest.TestCase):
             **concept("abschlagszahlung", "Abschlag | monatlicher Abschlag"),
             **concept("rabatt", "Abschlag", status="draft"),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             found = review(root, concepts)
         self.assertEqual(
             [(entry["word"], entry["alias"], entry["source"], entry["where"], entry["pages_with_word"]) for entry in found["common_alias_words"]],
@@ -176,14 +156,14 @@ class AliasReview(unittest.TestCase):
             "wiki/d.md": page("D", "Ein Stromtarif."),
             "wiki/e.md": page("E", "Ohne Bezug.", ["Tarif"]),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             found = review(root)
         self.assertEqual(
             [(entry["word"], entry["pages_with_word"]) for entry in found["common_alias_words"]], [],
             "only a and b hold a form of tarif; compounds are no forms",
         )
         files["wiki/f.md"] = page("F", "Ein Tarif.")
-        with Tree(files) as root:
+        with PageTree(files) as root:
             found = review(root)
         self.assertEqual([(entry["word"], entry["pages_with_word"]) for entry in found["common_alias_words"]], [("tarif", 3)])
 
@@ -196,7 +176,7 @@ class AliasReview(unittest.TestCase):
             "wiki/c.md": page("C", "Nichts.", ["Netz"]),
             "wiki/d.md": page("D", "Netz dort."),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             found = review(root)
         self.assertEqual(found["content_pages"], 4)
         self.assertEqual(found["common_alias_words"], [], "only a and d use the word themselves")
@@ -208,7 +188,7 @@ class AliasReview(unittest.TestCase):
             "wiki/c.md": page("C", "Text.", ["Ökostrom-Tarif"]),
             "wiki/index.md": page("Index", "Start.", ["Grünstrom"], kind="index"),
         }
-        with Tree(files) as root:
+        with PageTree(files) as root:
             found = review(root)
         self.assertEqual(
             found["shared_aliases"],
@@ -254,14 +234,14 @@ class AliasReview(unittest.TestCase):
             "concepts = {'abschlag': {'id': 'abschlag', 'status': 'active', 'preferred': 'Abschlag', 'aliases': 'Abschlag | Teilzahlung'}}\n"
             "print(json.dumps(lint_wiki.alias_review(root, sorted((root / 'wiki').rglob('*.md')), concepts)))\n"
         )
-        with Tree(files) as root:
+        with PageTree(files) as root:
             outputs = set()
             for seed in ("0", "1", "77"):
                 result = subprocess.run(
                     [sys.executable, "-B", "-c", script, str(root)],
                     capture_output=True,
                     encoding="utf-8",
-                    env={**os.environ, "PYTHONHASHSEED": seed, "PYTHONDONTWRITEBYTECODE": "1"},
+                    env=python_environment(PYTHONHASHSEED=seed),
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 outputs.add(result.stdout)

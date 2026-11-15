@@ -3,9 +3,11 @@
 
 Shared by the gate test (tests/test_search_quality.py) and by
 record_expectations.py, so the test checks exactly what the recorder records.
-Queries run in-process through the query skill's `search_core.search`, the same
-function `search_wiki.py` calls after verifying the release; the gate test adds
-a few real command-line calls as smoke tests.
+Queries run in-process through the query skill's search core, as
+`search_wiki.py` runs them after verifying the release: the release is loaded
+once per set of options with `search_core.load` and every query is ranked over
+it with `search_core.search_loaded`, which is what `search_core.search` does
+for one call. The gate test adds a few real command-line calls as smoke tests.
 
 Counting rules:
 
@@ -34,7 +36,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional, Sequence
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
@@ -90,8 +92,27 @@ def load_core() -> Any:
     return search_core
 
 
-def ranks(paths: list[str], wanted: list[str]) -> dict[str, Optional[int]]:
-    return {path: (paths.index(path) + 1 if path in paths else None) for path in wanted}
+def searcher(wiki: Path, core: Any) -> Callable[..., dict[str, Any]]:
+    """A search over `wiki` that loads the release once per set of flags, as one command-line call loads it once."""
+    loaded: dict[tuple[str, ...], Any] = {}
+
+    def search(query: str, flags: Sequence[str] = (), *, also: Sequence[str] = (), limit: int) -> dict[str, Any]:
+        key = tuple(sorted(flags))
+        if key not in loaded:
+            loaded[key] = core.load(wiki, **{FLAG_OPTIONS[flag]: True for flag in key})
+        return core.search_loaded(loaded[key], query, also=list(also), limit=limit)
+
+    return search
+
+
+def paths_of(items: list[dict[str, Any]]) -> list[str]:
+    return [item["path"] for item in items]
+
+
+def positions(items: list[dict[str, Any]], wanted: list[str]) -> dict[str, Optional[int]]:
+    """The 1-based position of each wanted page among report entries (results or a block); None when absent."""
+    found = paths_of(items)
+    return {path: (found.index(path) + 1 if path in found else None) for path in wanted}
 
 
 def all_within(found: dict[str, Optional[int]], bound: int) -> bool:
@@ -99,25 +120,20 @@ def all_within(found: dict[str, Optional[int]], bound: int) -> bool:
 
 
 def measure(wiki: Path, ground_truth: list[dict[str, Any]], core: Any = None) -> dict[str, Any]:
-    core = core or load_core()
+    search = searcher(wiki, core or load_core())
     queries: dict[str, dict[str, Any]] = {}
     for item in ground_truth:
-        results = core.search(wiki, item["query"], limit=RANK_LIMIT)["results"]
-        paths = [result["path"] for result in results]
+        results = search(item["query"], limit=RANK_LIMIT)["results"]
         entry: dict[str, Any] = {
             "category": item["category"],
-            "must_find_ranks": ranks(paths, item["must_find"]),
-            "results_within_default_limit": len(paths[:DEFAULT_LIMIT]),
+            "must_find_ranks": positions(results, item["must_find"]),
+            "results_within_default_limit": len(results[:DEFAULT_LIMIT]),
             "navigation_in_top_3": sum(1 for result in results[:TOP] if result["navigation"]),
         }
         flags = list(item.get("requires_flags") or [])
         if flags:
-            options = {FLAG_OPTIONS[flag]: True for flag in flags}
-            flagged = core.search(wiki, item["query"], limit=RANK_LIMIT, **options)["results"]
-            entry["with_required_flags"] = {
-                "flags": flags,
-                "must_find_ranks": ranks([result["path"] for result in flagged], item["must_find"]),
-            }
+            flagged = search(item["query"], flags, limit=RANK_LIMIT)["results"]
+            entry["with_required_flags"] = {"flags": flags, "must_find_ranks": positions(flagged, item["must_find"])}
         queries[item["id"]] = entry
     return {"queries": queries, "aggregates": aggregates(queries)}
 
@@ -144,15 +160,19 @@ FLOOR_KEYS = (
 CAP_KEYS = ("negative_results_within_12", "navigation_in_top_3")
 
 
+def recorded_queries(queries: dict[str, dict[str, Any]], key: str) -> dict[str, dict[str, Any]]:
+    """What an expectations file keeps of each measured question: its `key` ranks and the run with its flags."""
+    recorded: dict[str, dict[str, Any]] = {}
+    for query_id, entry in queries.items():
+        recorded[query_id] = {key: entry[key]}
+        if "with_required_flags" in entry:
+            recorded[query_id]["with_required_flags"] = entry["with_required_flags"]
+    return recorded
+
+
 def expectations(measurement: dict[str, Any]) -> dict[str, Any]:
     """The expectations document for one measurement; accepted_regressions starts empty."""
     totals = measurement["aggregates"]
-    queries: dict[str, dict[str, Any]] = {}
-    for query_id, entry in measurement["queries"].items():
-        recorded: dict[str, Any] = {"must_find_ranks": entry["must_find_ranks"]}
-        if "with_required_flags" in entry:
-            recorded["with_required_flags"] = entry["with_required_flags"]
-        queries[query_id] = recorded
     return {
         "format": EXPECTATIONS_FORMAT,
         "about": ABOUT,
@@ -160,17 +180,46 @@ def expectations(measurement: dict[str, Any]) -> dict[str, Any]:
         "default_limit": DEFAULT_LIMIT,
         "floors": {key: totals[key] for key in FLOOR_KEYS},
         "caps": {key: totals[key] for key in CAP_KEYS},
-        "queries": queries,
+        "queries": recorded_queries(measurement["queries"], "must_find_ranks"),
         "accepted_regressions": [],
     }
 
 
-def rank_maps(entry: dict[str, Any]) -> list[tuple[str, dict[str, Optional[int]]]]:
-    maps = [("without flags", entry["must_find_ranks"])]
+def labelled_maps(entry: dict[str, Any], key: str) -> list[tuple[str, dict[str, Any]]]:
+    """A question's `key` map without flags and, for a question with required flags, the one with them, labelled."""
+    maps = [("without flags", entry[key])]
     if "with_required_flags" in entry:
         flagged = entry["with_required_flags"]
-        maps.append((" ".join(flagged["flags"]), flagged["must_find_ranks"]))
+        maps.append((" ".join(flagged["flags"]), flagged[key]))
     return maps
+
+
+def rank_maps(entry: dict[str, Any]) -> list[tuple[str, dict[str, Optional[int]]]]:
+    return labelled_maps(entry, "must_find_ranks")
+
+
+def placed(now: Optional[int]) -> str:
+    return f"rank {now}" if now is not None else f"not in the first {RANK_LIMIT}"
+
+
+def band_loss(rank: Optional[int], now: Optional[int], acceptance: Optional[dict[str, Any]]) -> Optional[tuple[int, int]]:
+    """The band (top 3 or top 12) a required page left, with the rank it is held to; None when it kept them.
+
+    `rank` is the recorded rank. An accepted page without `accepted_rank` is
+    exempt; with it, the page is held to the place it was accepted at, never to
+    a better one.
+    """
+    if acceptance is not None:
+        if "accepted_rank" not in acceptance:
+            return None
+        held = acceptance["accepted_rank"]
+        rank = None if held is None or rank is None else max(rank, held)
+    if rank is None:
+        return None
+    for bound in (TOP, DEFAULT_LIMIT):
+        if rank <= bound and (now is None or now > bound):
+            return bound, rank
+    return None
 
 
 def rank_regressions(expected: dict[str, Any], measured: dict[str, Any]) -> list[str]:
@@ -188,27 +237,16 @@ def rank_regressions(expected: dict[str, Any], measured: dict[str, Any]) -> list
             ranks_now = current.get(label, {})
             first = [path for path, rank in recorded.items() if rank == 1 and (query_id, path) not in accepted]
             if first and 1 not in ranks_now.values():
-                now = ranks_now.get(first[0])
-                where = f"rank {now}" if now is not None else f"not in the first {RANK_LIMIT}"
                 problems.append(
-                    f"{query_id} ({label}): {first[0]} lost rank 1 and no required page took it: rank 1 -> {where}"
+                    f"{query_id} ({label}): {first[0]} lost rank 1 and no required page took it: "
+                    f"rank 1 -> {placed(ranks_now.get(first[0]))}"
                 )
             for path, rank in recorded.items():
-                acceptance = accepted.get((query_id, path))
-                if acceptance is not None:
-                    if "accepted_rank" not in acceptance:
-                        continue
-                    # Held to the place it was accepted at, never to a better one.
-                    held = acceptance["accepted_rank"]
-                    rank = None if held is None or rank is None else max(rank, held)
-                if rank is None:
-                    continue
                 now = ranks_now.get(path)
-                for bound in (TOP, DEFAULT_LIMIT):
-                    if rank <= bound and (now is None or now > bound):
-                        where = f"rank {now}" if now is not None else f"not in the first {RANK_LIMIT}"
-                        problems.append(f"{query_id} ({label}): {path} left the top {bound}: rank {rank} -> {where}")
-                        break
+                loss = band_loss(rank, now, accepted.get((query_id, path)))
+                if loss:
+                    bound, held = loss
+                    problems.append(f"{query_id} ({label}): {path} left the top {bound}: rank {held} -> {placed(now)}")
     return problems
 
 
@@ -248,7 +286,8 @@ REFORMULATION_ABOUT = (
     "and the commit explains why. Changing this file is a deliberate act: state the change and its reason in "
     "the commit message."
 )
-#: Keys a reformulation adds to a report; without them a report must equal the single-query one.
+#: Keys a reformulation adds to a report and to its coverage; without them a report must equal the
+#: single-query one. tests/test_search_formulations.py imports both.
 NEW_REPORT_KEYS = ("formulations", "dropped_formulations", "reformulation_results")
 NEW_COVERAGE_KEYS = ("formulations", "reformulation_results")
 REFORMULATION_FLOOR_KEYS = ("merged_within_3", "merged_within_12", "merged_within_100")
@@ -263,11 +302,6 @@ def single_query_view(report: dict[str, Any]) -> tuple[list[tuple[str, float]], 
     """What must not change: the question's (path, score) list and its coverage without the new keys."""
     coverage = {key: value for key, value in report["coverage"].items() if key not in NEW_COVERAGE_KEYS}
     return [(item["path"], item["score"]) for item in report["results"]], coverage
-
-
-def positions(items: list[dict[str, Any]], wanted: list[str]) -> dict[str, Optional[int]]:
-    found = [item["path"] for item in items]
-    return {path: (found.index(path) + 1 if path in found else None) for path in wanted}
 
 
 def merged_rank(entry: dict[str, Optional[int]], suffix: str = "") -> Optional[int]:
@@ -294,14 +328,13 @@ def measure_reformulations(
     `requires_flags` run a second time with those flags, recorded under
     `with_required_flags`; aggregates use the runs without flags.
     """
-    core = core or load_core()
+    search = searcher(wiki, core or load_core())
     baseline: dict[tuple[str, tuple[str, ...]], Any] = {}
 
     def single(item: dict[str, Any], flags: tuple[str, ...]) -> Any:
         key = (item["id"], flags)
         if key not in baseline:
-            options = {FLAG_OPTIONS[flag]: True for flag in flags}
-            baseline[key] = single_query_view(core.search(wiki, item["query"], limit=DEFAULT_LIMIT, **options))
+            baseline[key] = single_query_view(search(item["query"], flags, limit=DEFAULT_LIMIT))
         return baseline[key]
 
     measured: dict[str, Any] = {}
@@ -313,9 +346,8 @@ def measure_reformulations(
             flag_sets = [()] + ([tuple(item["requires_flags"])] if item.get("requires_flags") else [])
             identical = True
             for flags in flag_sets:
-                options = {FLAG_OPTIONS[flag]: True for flag in flags}
-                narrow = core.search(wiki, item["query"], also=also, limit=DEFAULT_LIMIT, **options)
-                wide = core.search(wiki, item["query"], also=also, limit=RANK_LIMIT, **options)
+                narrow = search(item["query"], flags, also=also, limit=DEFAULT_LIMIT)
+                wide = search(item["query"], flags, also=also, limit=RANK_LIMIT)
                 identical = identical and single_query_view(narrow) == single(item, flags)
                 runs[flags] = {"narrow": narrow, "wide": wide}
             narrow, wide = runs[()]["narrow"], runs[()]["wide"]
@@ -330,7 +362,7 @@ def measure_reformulations(
                 "results_within_default_limit": len(narrow["results"]),
                 "navigation_in_top_3": sum(1 for result in narrow["results"][:TOP] if result["navigation"]),
                 "block_within_default_limit": len(block),
-                "block_paths": [result["path"] for result in block],
+                "block_paths": paths_of(block),
                 "block_expected": sum(1 for result in block if result["path"] in expected),
                 "navigation_in_block": sum(
                     1 for result in block + wide["reformulation_results"] if result["navigation"]
@@ -384,16 +416,10 @@ def reformulation_expectations(measurement: dict[str, Any]) -> dict[str, Any]:
     sets: dict[str, Any] = {}
     for name, measured in measurement["sets"].items():
         totals = measured["aggregates"]
-        queries: dict[str, Any] = {}
-        for query_id, entry in measured["queries"].items():
-            recorded: dict[str, Any] = {"merged_ranks": entry["merged_ranks"]}
-            if "with_required_flags" in entry:
-                recorded["with_required_flags"] = entry["with_required_flags"]
-            queries[query_id] = recorded
         sets[name] = {
             "floors": {key: totals[key] for key in REFORMULATION_FLOOR_KEYS},
             "caps": {**{key: totals[key] for key in REFORMULATION_CAP_KEYS}, "navigation_in_block": 0},
-            "queries": queries,
+            "queries": recorded_queries(measured["queries"], "merged_ranks"),
         }
     return {
         "format": REFORMULATION_FORMAT,
@@ -406,11 +432,10 @@ def reformulation_expectations(measurement: dict[str, Any]) -> dict[str, Any]:
 
 
 def merged_maps(entry: dict[str, Any]) -> list[tuple[str, dict[str, Optional[int]]]]:
-    maps = [("without flags", {path: merged_rank(page) for path, page in entry["merged_ranks"].items()})]
-    if "with_required_flags" in entry:
-        flagged = entry["with_required_flags"]
-        maps.append((" ".join(flagged["flags"]), {path: merged_rank(page) for path, page in flagged["merged_ranks"].items()}))
-    return maps
+    return [
+        (label, {path: merged_rank(page) for path, page in merged.items()})
+        for label, merged in labelled_maps(entry, "merged_ranks")
+    ]
 
 
 def reformulation_regressions(expected: dict[str, Any], measured: dict[str, Any]) -> list[str]:
@@ -432,23 +457,15 @@ def reformulation_regressions(expected: dict[str, Any], measured: dict[str, Any]
             for label, recorded in merged_maps(entry):
                 now_map = current.get(label, {})
                 for path, rank in recorded.items():
-                    acceptance = accepted.get((name, query_id, path))
-                    if acceptance is not None:
-                        if "accepted_rank" not in acceptance:
-                            continue
-                        held = acceptance["accepted_rank"]
-                        rank = None if held is None or rank is None else max(rank, held)
-                    if rank is None:
-                        continue
                     now = now_map.get(path)
-                    for bound in (TOP, DEFAULT_LIMIT):
-                        if rank <= bound and (now is None or now > bound):
-                            where = f"merged rank {now}" if now is not None else f"not in the merged top {DEFAULT_LIMIT}"
-                            problems.append(
-                                f"set {name}, {query_id} ({label}): {path} left the merged top {bound}: "
-                                f"merged rank {rank} -> {where}"
-                            )
-                            break
+                    loss = band_loss(rank, now, accepted.get((name, query_id, path)))
+                    if loss:
+                        bound, held = loss
+                        where = f"merged rank {now}" if now is not None else f"not in the merged top {DEFAULT_LIMIT}"
+                        problems.append(
+                            f"set {name}, {query_id} ({label}): {path} left the merged top {bound}: "
+                            f"merged rank {held} -> {where}"
+                        )
     return problems
 
 
@@ -476,7 +493,8 @@ ABSENCE_ABOUT = (
     "to make the gate pass. Changing this file is a deliberate act: state the change and its reason in the commit "
     "message."
 )
-#: What the exhaustive scan may add to a report; everything else must equal the call with include_sources.
+#: What the exhaustive scan may not change in a report: these keys must equal the call with include_sources.
+#: tests/test_absence_check.py imports them.
 ABSENCE_INVARIANT_KEYS = (
     "results", "reformulation_results", "formulations", "dropped_formulations", "matched_concepts",
     "expanded_terms", "facets", "coverage", "searched_files", "filtered_out",
@@ -518,7 +536,7 @@ def measure_absence(
             check = report["absence_check"]
             hits = report["exhaustive_hits"]
             printed = report["results"] + report["reformulation_results"]
-            visible = {entry["path"] for entry in printed} | {entry["path"] for entry in hits}
+            visible = set(paths_of(printed)) | set(paths_of(hits))
             entry: dict[str, Any] = {
                 "category": item["category"],
                 "query": item["query"],

@@ -25,58 +25,32 @@ from __future__ import annotations
 
 import io
 import json
-import os
 import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE / "fixtures" / "search_quality"))
 sys.path.insert(0, str(HERE.parent / "query-llm-wiki" / "scripts"))
 
 import search_core  # noqa: E402
-from harness import QUERY, REPO, TempWiki  # noqa: E402
-from test_search_coverage import assert_reformulation_identities, build_coverage_wiki  # noqa: E402
+from quality import NEW_COVERAGE_KEYS, NEW_REPORT_KEYS  # noqa: E402
+from harness import QUERY, REPO, PageTree, page  # noqa: E402
+from test_search_coverage import CoverageWikiCase, assert_reformulation_identities  # noqa: E402
 from wiki_filters import validate_selector  # noqa: E402
 
 INVALID = "request is invalid: "
 NOT_UTF8 = INVALID + "not UTF-8 text; send UTF-8, or escape every non-ASCII character as \\uXXXX"
 SURROGATE = "holds a lone surrogate escape; write a character outside U+FFFF as a surrogate pair, or as UTF-8"
-NEW_COVERAGE_KEYS = ("formulations", "reformulation_results")
-NEW_TOP_KEYS = ("formulations", "dropped_formulations", "reformulation_results")
-
-
-def page(title: str, body: str, kind: str = "concept") -> str:
-    return "\n".join(["---", f'title: "{title}"', 'status: "active"', f'type: "{kind}"', "---", "", body, ""])
 
 
 def filler(count: int) -> str:
     """Words that match none of the rock names, to lengthen a body."""
     words = ("Feldspat", "Glimmer", "Kalkstein", "Dolomit", "Schiefer", "Mergel")
     return " ".join(words[number % len(words)] for number in range(count))
-
-
-class Tree:
-    """A folder the search core can read: WIKI.md, an index, and the given pages."""
-
-    def __init__(self, pages: dict[str, str]) -> None:
-        self.pages = pages
-
-    def __enter__(self) -> Path:
-        self._directory = tempfile.TemporaryDirectory(prefix="lmwiki-formulations-")
-        root = Path(self._directory.name)
-        files = {"WIKI.md": "# Wiki\n", "wiki/index.md": page("Index", "Startseite.", "index"), **self.pages}
-        for relative, text in files.items():
-            path = root / relative
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding="utf-8")
-        return root
-
-    def __exit__(self, *_exc: object) -> None:
-        self._directory.cleanup()
 
 
 #: Section 2.4 of the spec: F1 "quarzit" ranks a, b, c; F2 "basalt" ranks d, a, e; "zirkon" matches nothing.
@@ -94,7 +68,7 @@ def paths(items: list[dict]) -> list[str]:
 
 
 def without_new_keys(report: dict) -> dict:
-    report = {key: value for key, value in report.items() if key not in NEW_TOP_KEYS}
+    report = {key: value for key, value in report.items() if key not in NEW_REPORT_KEYS}
     report["coverage"] = {key: value for key, value in report["coverage"].items() if key not in NEW_COVERAGE_KEYS}
     report["results"] = [{key: value for key, value in item.items() if key != "found_by"} for item in report["results"]]
     return report
@@ -279,7 +253,7 @@ class Fusion(unittest.TestCase):
 
     def test_results_are_identical_with_and_without_reformulations(self) -> None:
         pages = {**WORKED_EXAMPLE, "wiki/f.md": page("Zirkon", "Zirkon und Quarzit.")}
-        with Tree(pages) as root:
+        with PageTree(pages) as root:
             for limit in (1, 2, 12):
                 with self.subTest(limit=limit):
                     plain = search_core.search(root, "Zirkon Quarzit", limit=limit)
@@ -290,7 +264,7 @@ class Fusion(unittest.TestCase):
                     self.assertEqual(fused["expanded_terms"], plain["expanded_terms"])
 
     def test_found_by_names_every_search_and_its_rank(self) -> None:
-        with Tree(WORKED_EXAMPLE) as root:
+        with PageTree(WORKED_EXAMPLE) as root:
             report = search_core.search(root, "Quarzit", also=["Basalt", "Quarzit Basalt"], limit=12)
             basalt = search_core.search(root, "Basalt", limit=12)
             both = search_core.search(root, "Quarzit Basalt", limit=12)
@@ -306,7 +280,7 @@ class Fusion(unittest.TestCase):
         self.assertEqual(paths(report["reformulation_results"]), ["wiki/d.md", "wiki/e.md"])
 
     def test_reformulation_results_interleave_by_rank_round_robin(self) -> None:
-        with Tree(WORKED_EXAMPLE) as root:
+        with PageTree(WORKED_EXAMPLE) as root:
             self.assertEqual(paths(search_core.search(root, "Quarzit")["results"]), ["wiki/a.md", "wiki/b.md", "wiki/c.md"])
             self.assertEqual(paths(search_core.search(root, "Basalt")["results"]), ["wiki/d.md", "wiki/a.md", "wiki/e.md"])
             report = search_core.search(root, "Zirkon", also=["Quarzit", "Basalt"], limit=5)
@@ -330,7 +304,7 @@ class Fusion(unittest.TestCase):
             "wiki/index.md": page("Index", "Quarzit Quarzit Quarzit Basalt Basalt Basalt", "index"),
             "wiki/b.md": page("Lager", "Quarzit Glimmer " + filler(4)),
         }
-        with Tree(pages) as root:
+        with PageTree(pages) as root:
             report = search_core.search(root, "Glimmer Lager", also=["Quarzit", "Basalt"], limit=3)
             quarzit = search_core.search(root, "Quarzit", limit=3)
         self.assertIn("wiki/index.md", paths(quarzit["results"]))
@@ -347,7 +321,7 @@ class Fusion(unittest.TestCase):
             **{f"wiki/g{number}.md": page(f"Glimmer {number}", "Glimmer " * (5 - number)) for number in range(1, 5)},
             "wiki/a.md": page("Quarzit", "Quarzit. Glimmer " + filler(60)),
         }
-        with Tree(pages) as root:
+        with PageTree(pages) as root:
             question = search_core.search(root, "Glimmer", limit=12)
             report = search_core.search(root, "Glimmer", also=["Quarzit"], limit=2)
         below = paths(question["results"]).index("wiki/a.md") + 1
@@ -365,7 +339,7 @@ class Fusion(unittest.TestCase):
             for rock in rocks
             for number in range(1, 10)
         }
-        with Tree(pages) as root:
+        with PageTree(pages) as root:
             report = search_core.search(root, "Zirkon", also=[rock.capitalize() for rock in rocks], limit=8)
         coverage = report["coverage"]["reformulation_results"]
         self.assertEqual(coverage["candidates"], 32, "every reformulation feeds only its own top 8")
@@ -381,7 +355,7 @@ class Fusion(unittest.TestCase):
         assert_reformulation_identities(self, report, limit=8)
 
     def test_coverage_per_formulation_and_its_identities(self) -> None:
-        with Tree(WORKED_EXAMPLE) as root:
+        with PageTree(WORKED_EXAMPLE) as root:
             report = search_core.search(root, "Quarzit", also=["Basalt", "Obsidian"], limit=2)
             basalt = search_core.search(root, "Basalt", limit=2)
         formulations = report["coverage"]["formulations"]
@@ -413,7 +387,7 @@ class Fusion(unittest.TestCase):
         assert_reformulation_identities(self, report, limit=2)
 
     def test_a_call_without_reformulations_has_the_uniform_shape(self) -> None:
-        with Tree(WORKED_EXAMPLE) as root:
+        with PageTree(WORKED_EXAMPLE) as root:
             report = search_core.search(root, "Quarzit", also=["quarzit!"], limit=12)
         self.assertEqual(report["coverage"]["format"], "lmwiki-search-coverage/3")
         self.assertEqual(search_core.COVERAGE_FORMAT, "lmwiki-search-coverage/3")
@@ -445,7 +419,7 @@ class Fusion(unittest.TestCase):
     def test_every_file_is_read_once_whatever_the_number_of_formulations(self) -> None:
         pages = {**WORKED_EXAMPLE, "sources/quelle.md": page("Quelle", "Basalt und Gneis", "source")}
         counts = []
-        with Tree(pages) as root:
+        with PageTree(pages) as root:
             for also in ([], ["Basalt", "Granit", "Gneis", "Quarzit Basalt"]):
                 with mock.patch.object(search_core, "read_document", wraps=search_core.read_document) as reader:
                     search_core.search(root, "Quarzit", also=also, limit=12)
@@ -456,7 +430,7 @@ class Fusion(unittest.TestCase):
     def test_selector_and_scopes_apply_to_every_formulation(self) -> None:
         pages = {**WORKED_EXAMPLE, "sources/quelle.md": page("Quelle", "Basalt Basalt Basalt", "source")}
         selector = validate_selector({"kind": "paths", "paths": ["wiki/a.md", "wiki/b.md", "wiki/d.md", "sources/quelle.md"]})
-        with Tree(pages) as root:
+        with PageTree(pages) as root:
             narrowed = search_core.search(root, "Zirkon", also=["Quarzit", "Basalt"], limit=12, selector=selector)
             plain = search_core.search(root, "Zirkon", also=["Basalt"], limit=12)
             with_sources = search_core.search(root, "Zirkon", also=["Basalt"], limit=12, include_sources=True)
@@ -468,7 +442,7 @@ class Fusion(unittest.TestCase):
         self.assertEqual(plain["coverage"]["formulations"][1]["terms_only_in_unsearched"], {"sources": []})
 
     def test_also_errors_raise_request_error_from_the_core(self) -> None:
-        with Tree(WORKED_EXAMPLE) as root:
+        with PageTree(WORKED_EXAMPLE) as root:
             with self.assertRaises(search_core.RequestError):
                 search_core.search(root, "Quarzit", also=["a"] * 5)
             with self.assertRaises(search_core.RequestError):
@@ -478,28 +452,8 @@ class Fusion(unittest.TestCase):
         self.assertTrue(issubclass(search_core.RequestError, ValueError))
 
 
-class CommandLine(unittest.TestCase):
+class CommandLine(CoverageWikiCase):
     """The query skill's wrapper on a released wiki."""
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls._context = TempWiki()
-        cls.wiki = cls._context.__enter__()
-        build_coverage_wiki(cls.wiki)
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        cls._context.__exit__(None, None, None)
-
-    def cli(self, *arguments: str, stdin: bytes = b"", **environment: str) -> subprocess.CompletedProcess:
-        env = {key: value for key, value in os.environ.items() if not key.upper().startswith("PYTHON")}
-        env.update({"PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8", **environment})
-        return subprocess.run(
-            [sys.executable, "-B", str(QUERY / "search_wiki.py"), "--target", str(self.wiki.path), *arguments],
-            input=stdin,
-            capture_output=True,
-            env=env,
-        )
 
     def report(self, *arguments: str, stdin: bytes = b"", **environment: str) -> dict:
         result = self.cli(*arguments, stdin=stdin, **environment)

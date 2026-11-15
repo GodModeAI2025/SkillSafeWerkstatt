@@ -23,10 +23,8 @@ length of a token the compound rules consider.
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -38,6 +36,8 @@ sys.path.insert(0, str(SCRIPTS))
 import bm25  # noqa: E402
 import search_core  # noqa: E402
 import wordforms  # noqa: E402
+from harness import PageTree, TempWiki, python_environment  # noqa: E402
+from harness import page as harness_page  # noqa: E402
 
 
 def resolver(*words: str) -> wordforms.Resolver:
@@ -49,30 +49,9 @@ def rules(members: list) -> dict[str, str]:
     return {token: rule for token, rule, _weight in members}
 
 
-def page(title: str, body: str, **frontmatter: str) -> str:
-    lines = ["---", f'title: "{title}"', 'status: "active"']
-    lines += [f'{key}: "{value}"' for key, value in frontmatter.items()]
-    return "\n".join(lines + ["---", "", f"# {title}", "", body, ""])
-
-
-class TempPages:
-    """A folder the search core can read: wiki pages, no release, nothing else."""
-
-    def __init__(self, pages: dict[str, str]) -> None:
-        self.pages = pages
-
-    def __enter__(self) -> Path:
-        self._directory = tempfile.TemporaryDirectory(prefix="lmwiki-wordforms-")
-        root = Path(self._directory.name)
-        (root / "WIKI.md").write_text("# Wiki\n", encoding="utf-8")
-        for relative, text in self.pages.items():
-            path = root / relative
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding="utf-8")
-        return root
-
-    def __exit__(self, *_exc: object) -> None:
-        self._directory.cleanup()
+def page(title: str, body: str) -> str:
+    """A page without a type, with its title as H1."""
+    return harness_page(title, body, None, heading=True)
 
 
 class StepA_Normalisation(unittest.TestCase):
@@ -85,7 +64,7 @@ class StepA_Normalisation(unittest.TestCase):
             with self.subTest(word=word):
                 self.assertEqual(wordforms.fold_umlaut(word), word)
         # ß and ss already meet through case folding.
-        self.assertEqual(search_core.tokens("Schlußrechnung", forms=True), ["schlussrechnung"])
+        self.assertEqual(search_core.tokens("Schlußrechnung"), ["schlussrechnung"])
 
     def test_a_hyphenated_word_meets_its_joined_spelling(self) -> None:
         self.assertEqual(rules(resolver("e-mail").resolve("email")), {"e-mail": "fold"})
@@ -109,33 +88,29 @@ class StepA_Normalisation(unittest.TestCase):
         # A subscript is joined, in pandoc's Markdown, in HTML and as the Unicode character.
         for text in ("CO~2~-Preis", "CO<sub>2</sub>-Preis", "CO₂-Preis", "CO2-Preis"):
             with self.subTest(text=text):
-                self.assertEqual(search_core.tokens(text, forms=True), ["co2-preis"])
+                self.assertEqual(search_core.tokens(text), ["co2-preis"])
         # A superscript is read apart from the word and joined to it, so the footnote mark stays apart too.
         self.assertEqual(wordforms.repair_text("m<sup>2</sup>"), "m^2^")
-        self.assertEqual(search_core.tokens("je m^2^", False, True), ["je", "m", "2", "m2"])
-        self.assertEqual(search_core.tokens("Kündigungsfrist<sup>1</sup>", False, True), ["kundigungsfrist", "1", "kundigungsfrist1"])
+        self.assertEqual(search_core.tokens("je m^2^", False), ["je", "m", "2", "m2"])
+        self.assertEqual(search_core.tokens("Kündigungsfrist<sup>1</sup>", False), ["kundigungsfrist", "1", "kundigungsfrist1"])
         # Emphasis inside a word is removed; emphasis around a word, a gender star and strikethrough stay.
-        self.assertEqual(search_core.tokens("**Kündigungs**frist", forms=True), ["kundigungsfrist"])
-        self.assertEqual(search_core.tokens("Strom*preis*erhöhung", forms=True), ["strompreiserhohung"])
+        self.assertEqual(search_core.tokens("**Kündigungs**frist"), ["kundigungsfrist"])
+        self.assertEqual(search_core.tokens("Strom*preis*erhöhung"), ["strompreiserhohung"])
         for text in ("**Hinweis:** Text", "Kund*innen und Kolleg*innen", "Bürger*innen/Kund*innen", "~~alt~~ neu", "Kosten 2~3"):
             with self.subTest(text=text):
                 self.assertEqual(wordforms.repair_text(text), text)
         # Character references with their semicolon are decoded, as CommonMark does in text.
-        self.assertEqual(search_core.tokens("K&uuml;ndigungsfrist LindenW&auml;rme K&#252;ndigung K&#xFC;ndigung", forms=True),
+        self.assertEqual(search_core.tokens("K&uuml;ndigungsfrist LindenW&auml;rme K&#252;ndigung K&#xFC;ndigung"),
                          ["kundigungsfrist", "lindenwarme", "kundigung", "kundigung"])
-        self.assertEqual(search_core.tokens("Kündigungs&shy;frist", forms=True), ["kundigungsfrist"])
-        self.assertEqual(search_core.tokens("12&nbsp;Monate", forms=True), ["12", "monate"])
+        self.assertEqual(search_core.tokens("Kündigungs&shy;frist"), ["kundigungsfrist"])
+        self.assertEqual(search_core.tokens("12&nbsp;Monate"), ["12", "monate"])
         for text in ("AT&T", "Strom & Gas", "a=1&para=2", "&uuml ohne Semikolon"):
             with self.subTest(text=text):
                 self.assertEqual(wordforms.repair_text(text), text)
-        # The literal search keeps its old tokens.
-        self.assertEqual(search_core.tokens("K&uuml;ndigung"), ["uuml", "ndigung"])
 
     def test_the_stopword_list_is_compared_in_its_normalised_form(self) -> None:
-        self.assertEqual(search_core.tokens("Frist für Kündigung", forms=True), ["frist", "kundigung"])
-        # The literal search keeps its old behaviour, where "für" never matched.
-        self.assertEqual(search_core.tokens("Frist für Kündigung"), ["frist", "fur", "kundigung"])
-        terms, dropped = search_core.query_terms("Frist für Kündigung", [], forms=True)
+        self.assertEqual(search_core.tokens("Frist für Kündigung"), ["frist", "kundigung"])
+        terms, dropped = search_core.query_terms("Frist für Kündigung", [])
         self.assertEqual([item["term"] for item in terms], ["frist", "kundigung"])
         self.assertEqual(dropped, [{"term": "fur", "reason": "stopword"}])
 
@@ -180,6 +155,21 @@ class StepB_Inflection(unittest.TestCase):
         self.assertTrue(1.0 == weights["exact"] > weights["fold"] > weights["stem"] > weights["verb"])
         self.assertTrue(all(weight < 1.0 for rule, weight in weights.items() if rule != "exact"))
 
+    def test_the_rule_table_holds_the_scan_rules_of_the_search_core(self) -> None:
+        """The scan names its rules in search_core and weighs them from wordforms.RULES.
+
+        A scan rule is reached only by queries that need it, so a renamed key
+        would fail at runtime on such a query alone; this test fails first.
+        """
+        scan_rules = {
+            search_core.HYPHEN_PART_RULE, search_core.ENDING_RULE, search_core.VERB_ENDING_RULE,
+            search_core.FOOTNOTE_RULE, search_core.SUSPENDED_RULE, search_core.SHORT_PART_RULE,
+        }
+        self.assertEqual(scan_rules, {rule for rule, (_weight, kind) in wordforms.RULES.items() if kind == "scan"})
+        self.assertEqual({kind for _weight, kind in wordforms.RULES.values()}, {"word_form", "heuristic", "scan"})
+        self.assertLessEqual(search_core.NAVIGATION_RULES, wordforms.WORD_FORM_RULES)
+        # A scan rule only orders the forms a report lists; it weighs as much as a compound modifier.
+        self.assertEqual({wordforms.WEIGHTS[rule] for rule in scan_rules}, {wordforms.WEIGHTS["compound_modifier"]})
 
     def test_et_is_a_verb_ending_only_where_german_writes_the_e(self) -> None:
         for word in ("meldet", "arbeitet", "rechnet", "zeichnet", "offnet"):
@@ -249,7 +239,7 @@ class StepC_Compounds(unittest.TestCase):
             "wiki/concepts/tarif.md": page("Tarif", "Der Tarif gilt. " + "Stromtarif" * 600),
             "sources/lang.md": page("Lang", "Stromtarif" * 600),
         }
-        with TempPages(pages) as root:
+        with PageTree(pages, index=None) as root:
             for query in ("Tarif", "Strom" * 1100):
                 for include_sources in (False, True):
                     with self.subTest(query=query[:12], include_sources=include_sources):
@@ -338,7 +328,7 @@ class ConstructionRules(unittest.TestCase):
 
     def test_an_unsearched_layer_counts_only_the_word_and_its_word_forms(self) -> None:
         layer = [{"vertrage", "vertragslaufzeit", "laufzeit"}, {"netzentgelt"}]
-        found = search_core.layer_members(["vertrag", "netzentgeld"], layer, True)
+        found = search_core.layer_members(["vertrag", "netzentgeld"], layer)
         self.assertEqual(found["vertrag"], frozenset({"vertrage"}), "no compound part")
         self.assertEqual(found["netzentgeld"], frozenset(), "no typo correction")
 
@@ -361,12 +351,10 @@ class ConstructionRules(unittest.TestCase):
         self.assertGreater(more, alone)
 
     def test_r3_the_phrase_signal_needs_literal_words_on_token_boundaries(self) -> None:
-        self.assertTrue(search_core.has_phrase("frist kundigung", "die frist kundigung gilt", forms=True))
-        self.assertFalse(search_core.has_phrase("tarif", "der festpreistarif gilt", forms=True))
-        self.assertFalse(search_core.has_phrase("tarif", "die tarife gelten", forms=True))
-        self.assertFalse(search_core.has_phrase("frist kundigung", "die fristen kundigung", forms=True))
-        # The literal search keeps its substring comparison.
-        self.assertTrue(search_core.has_phrase("tarif", "der festpreistarif gilt"))
+        self.assertTrue(search_core.has_phrase("frist kundigung", "die frist kundigung gilt"))
+        self.assertFalse(search_core.has_phrase("tarif", "der festpreistarif gilt"))
+        self.assertFalse(search_core.has_phrase("tarif", "die tarife gelten"))
+        self.assertFalse(search_core.has_phrase("frist kundigung", "die fristen kundigung"))
 
     def test_r4_link_targets_and_slugs_are_never_split_into_matching_parts(self) -> None:
         self.assertEqual(resolver("tarif-lindenstrom-fix12").resolve("tarif"), [])
@@ -374,7 +362,7 @@ class ConstructionRules(unittest.TestCase):
             "wiki/concepts/basis.md": page("Grundlagen", "Siehe [[wiki/entities/tarif-lindenstrom|LindenStrom]] und [[wiki/entities/tarif-fix]]."),
             "wiki/entities/tarif.md": page("Tarif", "Der Tarif gilt ein Jahr."),
         }
-        with TempPages(pages) as root:
+        with PageTree(pages, index=None) as root:
             found = search_core.search(root, "Tarif", limit=10)
         self.assertEqual([item["path"] for item in found["results"]], ["wiki/entities/tarif.md"])
 
@@ -382,31 +370,8 @@ class ConstructionRules(unittest.TestCase):
         corpus = bm25.Corpus([{"body": ["tarif"]}, {"body": ["anderes"]}])
         group = [bm25.TermGroup("tarif", {"tarif": 1.0, "tarife": 0.6}, 1)]
         self.assertEqual(
-            bm25.score(corpus, {"body": ["anderes"]}, [], groups=group, phrase_match=True, concept_overlap=3), 0.0
+            bm25.score(corpus, {"body": ["anderes"]}, group, phrase_match=True, concept_overlap=3), 0.0
         )
-
-    def test_a_literal_only_group_scores_exactly_like_the_literal_search(self) -> None:
-        documents = [
-            {"title": ["netzentgelt"], "body": ["netzentgelt", "preis", "netzentgelt"]},
-            {"title": ["preis"], "body": ["preis", "arbeitspreis"]},
-            {"body": ["netzentgelt"]},
-        ]
-        corpus = bm25.Corpus(documents)
-        for fields in documents:
-            with self.subTest(fields=fields):
-                literal = bm25.score(corpus, fields, ["netzentgelt", "preis"], status="active", phrase_match=True)
-                grouped = bm25.score(
-                    corpus,
-                    fields,
-                    [],
-                    status="active",
-                    phrase_match=True,
-                    groups=[
-                        bm25.TermGroup("netzentgelt", {"netzentgelt": 1.0}, corpus.document_frequency.get("netzentgelt", 0)),
-                        bm25.TermGroup("preis", {"preis": 1.0}, corpus.document_frequency.get("preis", 0)),
-                    ],
-                )
-                self.assertAlmostEqual(literal, grouped, places=12)
 
 
 class ConceptTerms(unittest.TestCase):
@@ -416,7 +381,7 @@ class ConceptTerms(unittest.TestCase):
     }
 
     def matched(self, query: str) -> list[str]:
-        return search_core.expand_query(query, self.DEFINITIONS, forms=True)[1]
+        return search_core.expand_query(query, self.DEFINITIONS)[1]
 
     def test_concept_terms_match_through_spelling_and_inflection(self) -> None:
         self.assertEqual(self.matched("Basisversorgung kündigen"), ["grundversorgung"])
@@ -430,13 +395,23 @@ class ConceptTerms(unittest.TestCase):
         self.assertEqual(self.matched("Grundversorgungstarif"), [])
         self.assertEqual(self.matched("Arbeitspreis oder Grundpreis"), [], "a closed-class word matches literally")
 
+    def test_a_blank_term_is_no_term(self) -> None:
+        """An empty Preferred line or alias slot neither triggers a concept nor lands in its expanded terms."""
+        definitions = {"netzentgelt": {"id": "netzentgelt", "status": "active", "terms": ["", "Netzentgelt", "  ", "Netzgebühr"]}}
+        _tokens, matched, expanded = search_core.expand_query("Netzentgelt", definitions)
+        self.assertEqual((matched, expanded), (["netzentgelt"], ["Netzentgelt", "Netzgebühr"]))
+        runs = search_core.concept_runs("Netzentgelt", definitions)
+        self.assertEqual(search_core.alternatives(["netzentgelt"], runs, definitions)["netzentgelt"][1:], [
+            ("netzentgelt", ("netzgebuhr",)),
+        ])
+
     def test_verb_forms_do_not_trigger_a_concept(self) -> None:
         """Only the word itself, its spelling (fold) and its inflection ending (stem) trigger a concept."""
         definitions = {
             "widerrufsrecht": {"id": "widerrufsrecht", "status": "active", "terms": ["Widerrufsrecht", "Widerruf"]},
         }
-        self.assertEqual(search_core.expand_query("Widerrufe", definitions, forms=True)[1], ["widerrufsrecht"])
-        self.assertEqual(search_core.expand_query("Wie widerruft man", definitions, forms=True)[1], [])
+        self.assertEqual(search_core.expand_query("Widerrufe", definitions)[1], ["widerrufsrecht"])
+        self.assertEqual(search_core.expand_query("Wie widerruft man", definitions)[1], [])
         self.assertFalse(wordforms.same_word("kundigt", "kundigen", search_core.CLOSED_CLASS))
 
 
@@ -451,11 +426,9 @@ class SearchBehaviour(unittest.TestCase):
         "wiki/topics/preisblatt-b.md": page("Preisblatt B", "Die Tarif gelten ab Januar."),
     }
 
-    def test_word_forms_find_a_page_the_literal_search_misses_and_say_how(self) -> None:
-        with TempPages(self.PAGES) as root:
-            literal = search_core.search(root, "Tarife", limit=10, word_forms=False)
+    def test_word_forms_find_a_page_that_holds_another_form_and_say_how(self) -> None:
+        with PageTree(self.PAGES, index=None) as root:
             found = search_core.search(root, "Tarife", limit=10)
-        self.assertNotIn("wiki/concepts/tarif.md", [item["path"] for item in literal["results"]])
         by_path = {item["path"]: item for item in found["results"]}
         self.assertIn("wiki/concepts/tarif.md", by_path)
         self.assertEqual(
@@ -468,7 +441,7 @@ class SearchBehaviour(unittest.TestCase):
         self.assertGreater(scores["wiki/topics/preisblatt-a.md"], scores["wiki/topics/preisblatt-b.md"])
 
     def test_navigation_pages_count_only_the_literal_token(self) -> None:
-        with TempPages(self.PAGES) as root:
+        with PageTree(self.PAGES, index=None) as root:
             found = search_core.search(root, "Tarifen", limit=10)
             literal_hit = search_core.search(root, "Tarife", limit=10)
         self.assertNotIn("wiki/concepts/index.md", [item["path"] for item in found["results"]])
@@ -486,7 +459,7 @@ class SearchBehaviour(unittest.TestCase):
             "wiki/concepts/index.md": page("Konzepte", "Der Tarif im Überblick."),
             "wiki/concepts/tarif.md": page("Tarif", "Ein Tarif legt den Preis fest."),
         }
-        with TempPages(pages) as root:
+        with PageTree(pages, index=None) as root:
             report = search_core.search(root, "Tarifen", limit=10)
         self.assertEqual(report["matched_concepts"], ["tarif"])
         index = {item["path"]: item for item in report["results"]}["wiki/concepts/index.md"]
@@ -496,7 +469,7 @@ class SearchBehaviour(unittest.TestCase):
         self.assertEqual(content["matched_terms"], ["tarifen", "tarif"])
 
     def test_the_coverage_block_lists_forms_and_terms_carried_only_by_forms(self) -> None:
-        with TempPages(self.PAGES) as root:
+        with PageTree(self.PAGES, index=None) as root:
             report = search_core.search(root, "Netzentgeld Tarif Ladesäule", limit=10)
         coverage = report["coverage"]
         self.assertEqual(coverage["format"], search_core.COVERAGE_FORMAT)
@@ -520,7 +493,7 @@ class SearchBehaviour(unittest.TestCase):
             "wiki/concepts/forderung.md": page("Forderung", "Offene Forderungen werden gemahnt."),
             "sources/recht.md": page("Recht", "Forderungen verjähren nach drei Jahren. Die Dauer: drei Jahre."),
         }
-        with TempPages(pages) as root:
+        with PageTree(pages, index=None) as root:
             report = search_core.search(root, "Wann verjähren Forderungen Dauer", limit=10)
             with_sources = search_core.search(root, "Wann verjähren Forderungen Dauer", limit=10, include_sources=True)
         coverage = report["coverage"]
@@ -540,7 +513,7 @@ class SearchBehaviour(unittest.TestCase):
             "wiki/concepts/index.md": page("Konzepte", "Alle Tarife im Überblick."),
             "wiki/concepts/netz.md": page("Netz", "Das Netzentgelt zahlt der Lieferant."),
         }
-        with TempPages(pages) as root:
+        with PageTree(pages, index=None) as root:
             report = search_core.search(root, "Tarif", limit=10)
         self.assertEqual(report["results"], [])
         self.assertEqual(report["coverage"]["unmatched_terms"], ["tarif"])
@@ -555,7 +528,7 @@ class SearchBehaviour(unittest.TestCase):
             "wiki/concepts/a.md": page("A", "Die Tarife gelten."),
             "wiki/concepts/b.md": page("B", "Der Tarif gilt."),
         }
-        with TempPages(pages) as root:
+        with PageTree(pages, index=None) as root:
             report = search_core.search(root, "Tarif", limit=10)
         term = report["coverage"]["query_terms"][0]
         self.assertEqual(term["forms"], [
@@ -568,7 +541,7 @@ class SearchBehaviour(unittest.TestCase):
         words = " ".join(f"Tarif{suffix}" for suffix in ("e", "en", "es", "s"))
         compounds = " ".join(f"{prefix}tarif" for prefix in ("Strom", "Gas", "Wasser", "Fest", "Grund", "Spar", "Nacht", "Haus"))
         pages = {"wiki/a.md": page("A", f"{words} {compounds} Strom Wasser Fest Grund Spar Nacht Haus Tarif")}
-        with TempPages(pages) as root:
+        with PageTree(pages, index=None) as root:
             report = search_core.search(root, "Tarif", limit=10)
         term = report["coverage"]["query_terms"][0]
         self.assertEqual(len(term["forms"]), search_core.FORMS_LISTED)
@@ -576,7 +549,7 @@ class SearchBehaviour(unittest.TestCase):
 
     def test_a_selector_does_not_change_what_a_word_matches(self) -> None:
         selector = {"kind": "paths", "paths": ["wiki/concepts/netz.md"]}
-        with TempPages(self.PAGES) as root:
+        with PageTree(self.PAGES, index=None) as root:
             narrowed = search_core.search(root, "Netzentgeld Tarif", limit=10, selector=selector)
             everything = search_core.search(root, "Netzentgeld Tarif", limit=10)
         self.assertEqual(narrowed["coverage"]["query_terms"], everything["coverage"]["query_terms"])
@@ -591,14 +564,14 @@ class SearchBehaviour(unittest.TestCase):
             "report = search_core.search(Path(sys.argv[1]), sys.argv[2], limit=20)\n"
             "print(json.dumps(report, sort_keys=True))\n"
         )
-        with TempPages(self.PAGES) as root:
+        with PageTree(self.PAGES, index=None) as root:
             outputs = set()
             for seed in ("0", "1", "4242"):
                 result = subprocess.run(
                     [sys.executable, "-B", "-c", script, str(root), "Tarife Netzentgeld Wärmepumpe Zählers"],
                     capture_output=True,
                     encoding="utf-8",
-                    env={**os.environ, "PYTHONHASHSEED": seed},
+                    env=python_environment(PYTHONHASHSEED=seed),
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 outputs.add(result.stdout)
@@ -621,8 +594,6 @@ class ExpansionRuleNotice(unittest.TestCase):
         return [message for message in report["warnings"] if "expansion rule" in message]
 
     def test_a_new_wiki_states_the_new_rule_and_an_old_one_gets_a_notice_only(self) -> None:
-        from harness import TempWiki
-
         with TempWiki() as wiki:
             concepts = wiki.read("schema/CONCEPTS.md")
             self.assertIn(self.NEW, " ".join(concepts.split()))

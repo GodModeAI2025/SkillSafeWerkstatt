@@ -18,6 +18,7 @@ report (tests/test_absence_check.py pins the scan itself).
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -27,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "query-llm-wiki" / "scripts"))
 
 import search_core  # noqa: E402
-from harness import QUERY, TempWiki, Wiki, run, run_json  # noqa: E402
+from harness import QUERY, TempWiki, Wiki, python_environment, run, run_json  # noqa: E402
 from test_lifecycle import SOURCE_MARKDOWN, add_cluster_and_concept  # noqa: E402
 
 #: Enough matching pages that a limit of 1 omits more than OMITTED_TOP_LIMIT.
@@ -67,17 +68,7 @@ tags:
 
 def build_coverage_wiki(wiki: Wiki) -> None:
     """Many pages sharing one word, a claim-heavy page, and a source-only word."""
-    extract = wiki.root / "quelle.md"
-    extract.write_text(SOURCE_MARKDOWN, encoding="utf-8")
-    record = json.loads(
-        wiki.locked(
-            "register_source.py",
-            "--markdown-file", str(extract),
-            "--title", "Netzentgelte 2026",
-            "--original-ref", "intern/netzentgelte-2026.pdf",
-            "--content-language", "de",
-        ).stdout
-    )["source"]
+    record = wiki.register_source(SOURCE_MARKDOWN, "Netzentgelte 2026", "intern/netzentgelte-2026.pdf")
     source_id, source_stem = record["source_id"], Path(record["path"]).stem
     add_cluster_and_concept(wiki)
     needed = MANY + 10 + 3
@@ -106,29 +97,11 @@ def build_coverage_wiki(wiki: Wiki) -> None:
         source_id, source_stem,
     )
 
-    staging = wiki.root / "staging"
-    for relative, text in pages.items():
-        staged = staging / relative
-        staged.parent.mkdir(parents=True, exist_ok=True)
-        staged.write_text(text, encoding="utf-8")
     index = wiki.read("wiki/index.md").rstrip()
     for relative in pages:
         index += f"\n- [[{relative[:-3]}]]"
     wiki.write("wiki/index.md", index + "\n")
-    plan_file = wiki.root / "batch.json"
-    wiki.locked(
-        "page_batch.py", "plan",
-        "--staging-dir", str(staging),
-        "--paths-json", json.dumps(sorted(pages)),
-        "--output", str(plan_file),
-    )
-    plan = json.loads(plan_file.read_text(encoding="utf-8"))
-    wiki.locked(
-        "page_batch.py", "apply",
-        "--staging-dir", str(staging),
-        "--plan-file", str(plan_file),
-        "--expect-plan-sha256", plan["plan_sha256"],
-    )
+    wiki.apply_pages(pages)
     wiki.rebuild()
     wiki.release("coverage-1")
 
@@ -250,7 +223,9 @@ def assert_absence_identities(test: unittest.TestCase, report: dict) -> None:
     )
 
 
-class CoverageOnAReleasedWiki(unittest.TestCase):
+class CoverageWikiCase(unittest.TestCase):
+    """Test cases that share one released wiki from build_coverage_wiki, and run the search on it."""
+
     @classmethod
     def setUpClass(cls) -> None:
         cls._context = TempWiki()
@@ -261,6 +236,17 @@ class CoverageOnAReleasedWiki(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls._context.__exit__(None, None, None)
 
+    def cli(self, *arguments: str, stdin: bytes = b"", **environment: str) -> subprocess.CompletedProcess:
+        """search_wiki.py on the shared wiki in a clean Python environment, with bytes in and out."""
+        return subprocess.run(
+            [sys.executable, "-B", str(QUERY / "search_wiki.py"), "--target", str(self.wiki.path), *arguments],
+            input=stdin,
+            capture_output=True,
+            env=python_environment(**{"PYTHONIOENCODING": "utf-8", **environment}),
+        )
+
+
+class CoverageOnAReleasedWiki(CoverageWikiCase):
     def search(self, query: str, *extra: str, check: bool = True) -> dict:
         return self.wiki.query_json("search_wiki.py", "--target", str(self.wiki.path), "--query", query, *extra, check=check)
 
@@ -512,17 +498,13 @@ class CoreQueryTerms(unittest.TestCase):
     }
 
     def test_the_term_list_equals_the_ranked_token_set(self) -> None:
-        for query, forms in (
-            (query, forms)
-            for query in (
-                "Netznutzungsentgelt", "Kündigung für die Wohnung", "die und der", "a", "Arbeitspreis und Grundpreis",
-                "Vertragsende Netzentgelt Netzentgelt", "x y Kündigung", "für", "Kündigungen und Netzentgelten",
-            )
-            for forms in (False, True)
+        for query in (
+            "Netznutzungsentgelt", "Kündigung für die Wohnung", "die und der", "a", "Arbeitspreis und Grundpreis",
+            "Vertragsende Netzentgelt Netzentgelt", "x y Kündigung", "für", "Kündigungen und Netzentgelten",
         ):
-            with self.subTest(query=query, forms=forms):
-                ranked, _, expanded = search_core.expand_query(query, self.DEFINITIONS, forms)
-                terms, dropped = search_core.query_terms(query, expanded, forms)
+            with self.subTest(query=query):
+                ranked, _, expanded = search_core.expand_query(query, self.DEFINITIONS)
+                terms, dropped = search_core.query_terms(query, expanded)
                 names = [item["term"] for item in terms]
                 self.assertEqual(set(names), ranked)
                 self.assertEqual(len(names), len(set(names)))

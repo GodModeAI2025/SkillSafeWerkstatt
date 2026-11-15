@@ -615,9 +615,10 @@ von Wörtern, die dort wirklich vorkommen. Jedes Mitglied trägt seine Regel:
 Zu Schritt a gehören außerdem die Reparatur weicher Trennzeichen, unsichtbarer Zeichen und
 Trennstriche am Zeilenende, die normalisierte Stoppwortliste („für" fällt wieder weg) und
 Funktionswörter, die nur wörtlich treffen. `bm25.py` wertet eine Gruppe als einen Begriff;
-ohne Gruppen rechnet es wie vorher. `search_core.search(..., word_forms=False)` liefert für
-Messung und Tests die alte wörtliche Rangliste; auf dem Test-Wiki war sie in 114 von 114 Fragen
-identisch mit dem Stand vor Stufe 2.
+eine Gruppe nur aus dem wörtlichen Token rechnet wie vorher. Für Messung und Tests gab es bis
+zur Aufräumrunde nach Stufe 4 einen wörtlichen Modus (`word_forms=False`); auf dem Test-Wiki war
+seine Rangliste in 114 von 114 Fragen identisch mit dem Stand vor Stufe 2. Kein Helfer nutzte
+ihn, deshalb ist er entfernt.
 
 *Nachtrag aus Stufe 4 (zweite Suche nach falschen Fehlanzeigen).* Zu Schritt a gehört seither
 auch eine einheitliche Schreibweise für Zahlen, in Frage und Seite gleich: Tausendertrennzeichen

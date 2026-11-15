@@ -26,13 +26,23 @@ def fields(title: str = "", body: str = "", **rest: str) -> dict[str, list[str]]
     return document
 
 
+def frequency(documents: list[dict[str, list[str]]], term: str) -> int:
+    """How many documents hold `term` in any field."""
+    return sum(1 for document in documents if any(term in tokens for tokens in document.values()))
+
+
+def literal(documents: list[dict[str, list[str]]], *terms: str) -> list[bm25.TermGroup]:
+    """Each term as a group of its literal token alone, counted over `documents`."""
+    return [bm25.TermGroup(term, {term: 1.0}, frequency(documents, term)) for term in terms]
+
+
 class LengthNormalisation(unittest.TestCase):
     def test_a_longer_page_does_not_win_on_length_alone(self) -> None:
         short = fields(body="netzentgelt " + "fuellwort " * 10)
         long = fields(body="netzentgelt netzentgelt " + "fuellwort " * 200)
         corpus = bm25.Corpus([short, long])
-        short_score = bm25.score(corpus, short, ["netzentgelt"])
-        long_score = bm25.score(corpus, long, ["netzentgelt"])
+        short_score = bm25.score(corpus, short, literal([short, long], "netzentgelt"))
+        long_score = bm25.score(corpus, long, literal([short, long], "netzentgelt"))
         self.assertGreater(
             short_score,
             long_score,
@@ -44,8 +54,8 @@ class LengthNormalisation(unittest.TestCase):
         diluted = fields(body="netzentgelt " + "unrelated " * 500)
         corpus = bm25.Corpus([dense, diluted])
         self.assertGreater(
-            bm25.score(corpus, dense, ["netzentgelt"]),
-            bm25.score(corpus, diluted, ["netzentgelt"]),
+            bm25.score(corpus, dense, literal([dense, diluted], "netzentgelt")),
+            bm25.score(corpus, diluted, literal([dense, diluted], "netzentgelt")),
         )
 
 
@@ -56,8 +66,8 @@ class InverseDocumentFrequency(unittest.TestCase):
         ]
         corpus = bm25.Corpus(documents)
         self.assertGreater(
-            corpus.inverse_document_frequency("selten"),
-            corpus.inverse_document_frequency("gemeinsam"),
+            corpus.inverse_document_frequency_of(frequency(documents, "selten")),
+            corpus.inverse_document_frequency_of(frequency(documents, "gemeinsam")),
             "a term on one page in twenty must outweigh one on every page",
         )
 
@@ -65,7 +75,7 @@ class InverseDocumentFrequency(unittest.TestCase):
         documents = [fields(body="ueberall") for _ in range(50)]
         corpus = bm25.Corpus(documents)
         self.assertGreater(
-            corpus.inverse_document_frequency("ueberall"),
+            corpus.inverse_document_frequency_of(frequency(documents, "ueberall")),
             0.0,
             "a term on every page must still be findable",
         )
@@ -73,7 +83,7 @@ class InverseDocumentFrequency(unittest.TestCase):
     def test_an_unseen_term_scores_nothing(self) -> None:
         document = fields(body="etwas")
         corpus = bm25.Corpus([document])
-        self.assertEqual(bm25.score(corpus, document, ["fehlt"]), 0.0)
+        self.assertEqual(bm25.score(corpus, document, literal([document], "fehlt")), 0.0)
 
 
 class FieldWeighting(unittest.TestCase):
@@ -82,8 +92,8 @@ class FieldWeighting(unittest.TestCase):
         in_body = fields(title="anderes", body="netzentgelt steht hier")
         corpus = bm25.Corpus([in_title, in_body])
         self.assertGreater(
-            bm25.score(corpus, in_title, ["netzentgelt"]),
-            bm25.score(corpus, in_body, ["netzentgelt"]),
+            bm25.score(corpus, in_title, literal([in_title, in_body], "netzentgelt")),
+            bm25.score(corpus, in_body, literal([in_title, in_body], "netzentgelt")),
         )
 
 
@@ -95,7 +105,7 @@ class CuratedSignals(unittest.TestCase):
         corpus = bm25.Corpus([document])
         self.assertEqual(
             bm25.score(
-                corpus, document, ["netzentgelt"],
+                corpus, document, literal([document], "netzentgelt"),
                 phrase_match=True, concept_overlap=5, status="active",
             ),
             0.0,
@@ -104,31 +114,33 @@ class CuratedSignals(unittest.TestCase):
     def test_a_superseded_page_ranks_below_an_identical_active_one(self) -> None:
         document = fields(body="netzentgelt")
         corpus = bm25.Corpus([document, document])
-        active = bm25.score(corpus, document, ["netzentgelt"], status="active")
-        superseded = bm25.score(corpus, document, ["netzentgelt"], status="superseded")
+        groups = literal([document, document], "netzentgelt")
+        active = bm25.score(corpus, document, groups, status="active")
+        superseded = bm25.score(corpus, document, groups, status="superseded")
         self.assertGreater(active, superseded)
         self.assertGreater(superseded, 0.0, "history stays findable")
 
     def test_a_concept_match_lifts_a_comparable_page(self) -> None:
         document = fields(body="netzentgelt")
         corpus = bm25.Corpus([document, document])
-        plain = bm25.score(corpus, document, ["netzentgelt"])
-        curated = bm25.score(corpus, document, ["netzentgelt"], concept_overlap=1)
+        groups = literal([document, document], "netzentgelt")
+        plain = bm25.score(corpus, document, groups)
+        curated = bm25.score(corpus, document, groups, concept_overlap=1)
         self.assertGreater(curated, plain)
 
     def test_an_exact_phrase_lifts_a_comparable_page(self) -> None:
         document = fields(body="netzentgelt arbeitspreis")
         corpus = bm25.Corpus([document, document])
         self.assertGreater(
-            bm25.score(corpus, document, ["netzentgelt"], phrase_match=True),
-            bm25.score(corpus, document, ["netzentgelt"]),
+            bm25.score(corpus, document, literal([document, document], "netzentgelt"), phrase_match=True),
+            bm25.score(corpus, document, literal([document, document], "netzentgelt")),
         )
 
     def test_the_breakdown_is_available_for_inspection(self) -> None:
         document = fields(body="netzentgelt")
         corpus = bm25.Corpus([document])
         explain: dict[str, float] = {}
-        bm25.score(corpus, document, ["netzentgelt"], status="active", explain=explain)
+        bm25.score(corpus, document, literal([document], "netzentgelt"), status="active", explain=explain)
         self.assertEqual(sorted(explain), ["bm25", "concepts", "phrase", "status"])
         self.assertGreater(explain["bm25"], 0.0)
 
@@ -137,7 +149,7 @@ class EmptyCorpus(unittest.TestCase):
     def test_an_empty_corpus_does_not_divide_by_zero(self) -> None:
         corpus = bm25.Corpus([])
         self.assertEqual(corpus.average_length("body"), 0.0)
-        self.assertEqual(bm25.score(corpus, fields(body="x"), ["x"]), 0.0)
+        self.assertEqual(bm25.score(corpus, fields(body="x"), literal([], "x")), 0.0)
 
 
 class EndToEnd(unittest.TestCase):

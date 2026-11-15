@@ -9,8 +9,11 @@ one ranking: an improvement reaches both places, and the exported copy cannot
 drift away from the reader again.
 
 This module only reads. It imports no release verifier and no writer. It takes a
-release root plus options and returns plain report data; printing, exit codes
-and integrity checks stay with the wrappers.
+release root plus options and returns plain report data. It also holds what
+both wrappers share of their command line and report: the options, the request
+intake, the selector, the report body and the printed form (`report_json`) in
+which the evidence budget is counted. Printing, exit codes and integrity checks
+stay with the wrappers.
 
 Besides the ranked results, every report carries a `coverage` block that counts
 what the search did not show: matches cut off by the limit, claims withheld per
@@ -22,8 +25,7 @@ By default every query term also matches the forms of the same word that occur
 in the searched files, and query words additionally match through two
 disclosed heuristics, compound parts and one-edit typo corrections (see
 wordforms.py). Each result names the rule that matched in `match_rules`, and
-the coverage block lists the forms per term. `word_forms=False` runs the
-literal search exactly as it was before the word-form layer existed.
+the coverage block lists the forms per term.
 
 A search may carry up to four reformulations of the query, written by the
 agent (synonyms, the wiki's own terms, a translation). One call reads the
@@ -53,14 +55,14 @@ import re
 import unicodedata
 from html import unescape as html_unescape
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable, NamedTuple, Optional
+from typing import Any, Iterable, Iterator, NamedTuple, Optional
 
 import bm25
 import freshness
 import trust_contract
 import wordforms
 from frontmatter_contract import FrontmatterError, parse_document
-from wiki_filters import matches_selector
+from wiki_filters import matches_selector, validate_selector
 
 
 H1 = re.compile(r"^#\s+(.+)$", re.MULTILINE)
@@ -86,13 +88,6 @@ NUMBER_UNITS = (
 NUMBER_UNIT = re.compile(r"(?<![\w-])(\d+)(" + "|".join(NUMBER_UNITS) + r")(?![^\W_])")
 #: Where `number_spelling` can change anything: a separator before a group of three digits, or a unit after a digit.
 NUMBER_SHAPE = re.compile(r"\d(?:[. '’]\d{3}(?!\d)|(?:" + "|".join(NUMBER_UNITS) + r")(?![^\W_]))")
-STOPWORDS = {
-    "aber", "als", "am", "an", "auch", "auf", "aus", "bei", "das", "der", "die",
-    "ein", "eine", "einer", "eines", "für", "hat", "im", "in", "ist", "mit", "oder",
-    "sich", "sind", "und", "von", "was", "wie", "zu", "zum", "zur",
-    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "in", "is",
-    "of", "on", "or", "that", "the", "to", "what", "with",
-}
 CONCEPT_HEADING = re.compile(r"^##\s+([a-z0-9]+(?:-[a-z0-9]+)*)\s*$")
 CONCEPT_FIELD = re.compile(r"^-\s+([A-Za-z]+):\s*(.*)$")
 CLAIM_BLOCK = re.compile(
@@ -160,33 +155,39 @@ class RequestError(ValueError):
     """A request or its reformulations cannot be searched; the message is ready for the user."""
 
 
+#: A character outside ASCII; every combining mark is one.
+NON_ASCII = re.compile(r"[^\x00-\x7f]")
+
+
 def normalized(value: str) -> str:
     """Casefold, decompose and drop combining marks, so "Zählerstand" matches "Zahlerstand".
 
-    Each distinct character is looked up once, and every mark found is removed
-    with one `str.replace`. Checking every character of a long source text one
-    by one made this the most expensive step of a search.
+    Each distinct non-ASCII character is looked up once, and every mark found
+    is removed with one `str.replace`. Checking every character of a long
+    source text one by one made this the most expensive step of a search.
     """
     decomposed = unicodedata.normalize("NFKD", value.casefold())
     if decomposed.isascii():
         return decomposed
-    for mark in [character for character in set(decomposed) if unicodedata.combining(character)]:
+    for mark in [character for character in set(NON_ASCII.findall(decomposed)) if unicodedata.combining(character)]:
         decomposed = decomposed.replace(mark, "")
     return decomposed
 
 
-#: The stopword list normalised like every token, so "für" is dropped as "fur".
-FORM_STOPWORDS = frozenset(normalized(word) for word in STOPWORDS)
+#: The function-word tiers of wordforms.py, normalised like every token, so "für" is dropped as "fur".
+FUNCTION_WORDS = wordforms.function_words(normalized)
+#: The stopwords: left out of a query's terms unless nothing else is left, never a compound part.
+FORM_STOPWORDS = FUNCTION_WORDS["stopword"]
 #: Words that match only literally: the stopwords and the closed word classes.
-CLOSED_CLASS = FORM_STOPWORDS | wordforms.closed_class(normalized)
+CLOSED_CLASS = FUNCTION_WORDS["closed"]
 
 
 # -- constants of the exhaustive scan and the absence check (Stufe 4) ----------
 
 #: The most printed characters `exhaustive_hits` may take (owner decision E2),
-#: counted exactly as the wrappers print the value, with REPORT_INDENT.
+#: counted exactly as `report_json` prints the value.
 EXHAUSTIVE_BUDGET_CHARS = 100_000
-#: The indent both wrappers print a report with; the budget is counted in it.
+#: The indent `report_json` prints a report with; the budget is counted in it.
 REPORT_INDENT = 2
 #: A hit prints at most this many characters of its passage, cut around the first match.
 EXCERPT_CHARS = 400
@@ -206,29 +207,11 @@ MIN_EXHAUSTIVE_REFORMULATIONS = 2
 SEARCH_RECORD_QUERY_CHARS = 200
 #: The kinds of passage the scan cuts a file into; hits on one line sort in this order.
 PASSAGE_KINDS = ("header", "heading", "claim", "paragraph", "open_question")
-#: Prepositions, contractions, conjunctions, question words and particles the
-#: closed class lacks ("per", "pro", "je", "laut", "gemäß", "wofür",
-#: "wieviel", "bzw", "noch", "eigentlich", "nur"), the degree words of a
-#: question with "wie" ("Wie hoch ...?", "Wie viel ...?", "Wie lange ...?",
-#: "Wie oft ...?"), and the light verbs of a question ("Gibt es ...?", "Wie
-#: geht ...?", "Was gilt ...?", "Was passiert ...?"), which name no topic. A
-#: passage need not hold them; the scan only. The ranking and the precision
-#: gate never use them.
-SCAN_FUNCTION_WORDS = frozenset(normalized(word) for word in (
-    "ab ans aufs außer binnen durchs fürs gegenüber hinter hinters innerhalb außerhalb neben samt statt "
-    "trotz übers ums unters vors während wegen zwischen "
-    "per pro je laut lt gemäß gem bezüglich bzgl hinsichtlich mittels anhand zwecks infolge aufgrund seitens "
-    "dank entlang anstatt nebst mitsamt oberhalb unterhalb jenseits "
-    "bzw beziehungsweise sowie sowohl weder "
-    "wofür womit worauf wozu woran worin worüber wovon wodurch wonach wogegen woraus wobei wovor "
-    "wieviel wieviele viel viele vielen weswegen inwiefern hoch lange oft häufig teuer schnell "
-    "noch schon bereits eigentlich überhaupt etwa eben mal ja bitte wohl nur sogar erst "
-    "about after before between into over under via within without per regarding concerning versus vs "
-    "gibt gibts geben gab gegeben geht gehen ging gegangen gilt gelten galt gegolten passiert passieren "
-    "funktioniert funktionieren steht stehen "
-    "get gets got happen happens happened exist exists existed").split())
-#: Words a passage never has to hold for a formulation to hit it.
-SCAN_EXCLUDED = CLOSED_CLASS | SCAN_FUNCTION_WORDS
+#: The scan's own function words, normalised (see wordforms.SCAN_FUNCTION_WORDS):
+#: a passage need not hold them; the ranking and the precision gate never use them.
+SCAN_FUNCTION_WORDS = frozenset(normalized(word) for word in wordforms.SCAN_FUNCTION_WORDS.split())
+#: Words a passage never has to hold for a formulation to hit it: the closed class and the scan's function words.
+SCAN_EXCLUDED = FUNCTION_WORDS["scan"]
 #: A page or slide marker of an extracted source, the grammar of validate_extraction.py.
 PAGE_MARKER = re.compile(r"<!--\s*(page|slide)\s*:\s*([^>]+?)\s*-->", re.IGNORECASE)
 #: Why an absence check is not complete, in the order they are listed.
@@ -239,6 +222,10 @@ ABSENCE_STEPS = (
     "add_reformulations", "narrow_formulations",
 )
 ABSENCE_CHECK_FORMAT = "lmwiki-absence-check/1"
+#: The fields of absence_check that the exhaustive scan fills, in their printed order; null without the scan.
+SCAN_FIELDS = (
+    "reformulations_counted", "budget", "counts", "omitted_pages", "absent_terms", "formulations", "scopes", "terms",
+)
 SEARCH_RECORD_FORMAT = "lmwiki-search-record/1"
 #: The fixed sentence every absence check carries: what a complete check shows, and what it does not.
 ABSENCE_BOUNDARY = (
@@ -253,7 +240,7 @@ ABSENCE_BOUNDARY = (
     "paragraphs, without its header row."
 )
 #: Order of the layers among pages with otherwise equal hits.
-SCOPE_RANK = {"wiki": 0, "sources": 1, "history": 2}
+SCOPE_RANK = {scope: position for position, scope in enumerate(SCOPES)}
 #: A code fence: inside it no line is a heading or a marker.
 FENCE = re.compile(r"^ {0,3}(```|~~~)")
 #: A heading at column 0, as the ranking's HEADING counts it.
@@ -284,8 +271,6 @@ LABEL_LEVEL = 7
 #: The scan's rule for a token that holds the word as one of its hyphen-separated parts
 #: ("SMS" in "SMS-Warndienst"), and for the parts of a hyphenated search word written apart.
 HYPHEN_PART_RULE = "hyphen_part"
-#: Its weight, as low as a compound modifier; it only orders the listed forms and `matched`.
-HYPHEN_PART_WEIGHT = 0.35
 #: The scan's rule for a token that shares its base with the term where the
 #: stem rule cannot see it: the base is the word itself or the word without one
 #: of INFLECTION_ENDINGS. That covers plurals in -er, with or without umlaut
@@ -296,8 +281,6 @@ HYPHEN_PART_WEIGHT = 0.35
 #: "fester" and "festen"). It is a heuristic: "Zahl" also meets "Zähler", so a
 #: hit through it is checked in the text.
 ENDING_RULE = "ending"
-#: Its weight, as low as a hyphen part.
-ENDING_WEIGHT = 0.35
 #: The endings the rule removes from a term and from a scanned token to find their base.
 INFLECTION_ENDINGS = ("e", "en", "n", "er", "ern", "es", "em", "s", "se", "sen", "nen")
 #: The shortest stem the rule may leave or extend.
@@ -309,8 +292,6 @@ ENDING_MIN_STEM = 3
 #: is put into a participle (ge-...-t). It is a heuristic: "Markt" also meets
 #: "Marken", so a hit through it is checked in the text.
 VERB_ENDING_RULE = "verb_ending"
-#: Its weight, as low as an ending.
-VERB_ENDING_WEIGHT = 0.35
 #: The verb endings the rule removes from a term and adds to its stem.
 VERB_ENDINGS = ("e", "en", "n", "t", "et", "te", "ten", "ete", "eten", "st", "est")
 #: The shortest stem the verb rule may leave or extend.
@@ -339,8 +320,6 @@ SEPARABLE_MIN_STEM = 3
 #: SHORT_PART_LEAD letters ("Gas" in "Erdgas", "Tag" in "Feiertagen"). It is a
 #: heuristic: "Eis" also meets "Beweis", so a hit through it is checked in the text.
 SHORT_PART_RULE = "short_part"
-#: Its weight, as low as a compound modifier.
-SHORT_PART_WEIGHT = 0.35
 #: The shortest and the longest word the rule applies to.
 SHORT_PART_MIN = 2
 SHORT_PART_MAX = 3
@@ -352,8 +331,6 @@ SHORT_PART_LEAD = 3
 #: the other word and matches a term against those joined forms only; it is a
 #: heuristic, so a hit through it is checked in the text.
 SUSPENDED_RULE = "suspended_compound"
-#: Its weight, as low as a hyphen part.
-SUSPENDED_WEIGHT = 0.35
 #: The mark that keeps a joined form of a suspended compound apart from every
 #: written token; TOKEN never matches it, and the report prints the form without it.
 SUSPENDED_MARK = "~"
@@ -371,8 +348,6 @@ SUSPENDED_MIN_PART = 3
 #: plain digits, as MarkItDown writes <sup>2</sup> ("Kündigungsfrist2"). The
 #: joined token is kept as well, so a name like "Fix12" still matches itself.
 FOOTNOTE_RULE = "footnote_mark"
-#: Its weight, as low as a hyphen part.
-FOOTNOTE_WEIGHT = 0.35
 #: A token of at least four letters with one or two digits glued to its end.
 FOOTNOTE_TOKEN = re.compile(r"([^\W\d_]{4,})\d{1,2}")
 #: Superscript digits (¹ ² ³ ⁰ ⁴-⁹), which normalisation turns into plain digits glued to the word.
@@ -453,26 +428,21 @@ def superscript_tokens(repaired: str, written: Iterable[str]) -> list[str]:
     return extra
 
 
-def tokens(value: str, drop_stopwords: bool = True, forms: bool = False) -> list[str]:
-    """The normalised whole words of a text.
+def tokens(value: str, drop_stopwords: bool = True) -> list[str]:
+    """The normalised whole words of a text, as the word-form layer reads it.
 
-    With `forms` (the word-form layer), layout and markup artefacts that split
-    a word are repaired first (`wordforms.repair_text`), numbers are brought
-    into one spelling (`number_spelling`), a word with a superscript
-    ("m^2^") also gives its joined token ("m2") after the split ones, and the
-    stopword list is compared in its normalised form. Without it, tokens are
-    exactly those of the literal search.
+    Layout and markup artefacts that split a word are repaired first
+    (`wordforms.repair_text`), numbers are brought into one spelling
+    (`number_spelling`), and a word with a superscript ("m^2^") also gives
+    its joined token ("m2") after the split ones. With `drop_stopwords`,
+    stopwords and single characters are left out.
     """
-    if forms:
-        repaired = wordforms.repair_text(value)
-        values = TOKEN.findall(number_spelling(normalized(repaired)))
-        if "^" in repaired:
-            values.extend(superscript_tokens(repaired, values))
-    else:
-        values = TOKEN.findall(normalized(value))
+    repaired = wordforms.repair_text(value)
+    values = TOKEN.findall(number_spelling(normalized(repaired)))
+    if "^" in repaired:
+        values.extend(superscript_tokens(repaired, values))
     if drop_stopwords:
-        stopwords = FORM_STOPWORDS if forms else STOPWORDS
-        values = [value for value in values if value not in stopwords and len(value) > 1]
+        values = [value for value in values if value not in FORM_STOPWORDS and len(value) > 1]
     return values
 
 
@@ -555,60 +525,61 @@ def controlled_concepts(path: Path) -> dict[str, dict[str, Any]]:
     }
 
 
-def term_in_query(term_tokens: list[str], query_tokens: list[str]) -> bool:
-    """A concept term matches a run of whole query words, each the same word by spelling or inflection.
+def matching_run(term_words: list[str], query_words: list[str]) -> Optional[int]:
+    """Where a concept term first matches a run of query words, each the same word by spelling or inflection (pure).
 
-    Compound parts and typo corrections never trigger a concept: a confirmed
-    concept must not be pulled in by a guess.
+    Returns the start of the run, or None. Compound parts and typo
+    corrections never trigger a concept: a confirmed concept must not be
+    pulled in by a guess.
     """
-    width = len(term_tokens)
-    for start in range(len(query_tokens) - width + 1):
+    width = len(term_words)
+    for start in range(len(query_words) - width + 1):
         if all(
-            wordforms.same_word(query_tokens[start + offset], term_tokens[offset], CLOSED_CLASS)
+            wordforms.same_word(query_words[start + offset], term_words[offset], CLOSED_CLASS)
             for offset in range(width)
         ):
-            return True
-    return False
+            return start
+    return None
 
 
-def expand_query(
-    query: str, definitions: dict[str, dict[str, Any]], forms: bool = False
-) -> tuple[set[str], list[str], list[str]]:
-    original_tokens = set(tokens(query, forms=forms)) or set(tokens(query, drop_stopwords=False, forms=forms))
-    query_words = tokens(query, drop_stopwords=False, forms=forms)
-    normalized_query = " ".join(query_words)
+def triggered_concepts(
+    query_words: list[str], definitions: dict[str, dict[str, Any]]
+) -> Iterator[tuple[str, list[str], list[str]]]:
+    """Every concept the query words trigger, by id: its id, its terms and the query words of its matching run (pure).
+
+    A concept is triggered by the first of its terms, in definition order,
+    that matches a run of the query words (`matching_run`); the run is the
+    first one that term matches. A blank term, such as an empty Preferred
+    line, is no term: it never triggers and is not returned.
+    """
+    for concept_id, definition in sorted(definitions.items()):
+        terms = [term for term in definition.get("terms", []) if term.strip()]
+        for term in terms:
+            term_words = tokens(term, drop_stopwords=False)
+            if not term_words:
+                continue
+            start = matching_run(term_words, query_words)
+            if start is not None:
+                yield concept_id, terms, query_words[start:start + len(term_words)]
+                break
+
+
+def expand_query(query: str, definitions: dict[str, dict[str, Any]]) -> tuple[set[str], list[str], list[str]]:
+    """The tokens the ranking matches, the concepts the query triggers, and the terms of those concepts."""
+    query_words = tokens(query, drop_stopwords=False)
+    expanded_tokens = set(tokens(query)) or set(query_words)
     matched: list[str] = []
     expanded_terms: list[str] = []
-    expanded_tokens = set(original_tokens)
-    for concept_id, definition in sorted(definitions.items()):
-        terms = [str(term) for term in definition.get("terms", []) if str(term).strip()]
-        term_matches = False
-        for term in terms:
-            term_words = tokens(term, drop_stopwords=False, forms=forms)
-            normalized_term = " ".join(term_words)
-            if not normalized_term:
-                continue
-            if forms:
-                term_matches = term_in_query(term_words, query_words)
-            elif " " in normalized_term:
-                term_matches = normalized_term in normalized_query
-            else:
-                term_matches = normalized_term in set(query_words)
-            if term_matches:
-                break
-        if not term_matches:
-            continue
+    for concept_id, terms, _run in triggered_concepts(query_words, definitions):
         matched.append(concept_id)
         for term in terms:
             if term not in expanded_terms:
                 expanded_terms.append(term)
-            expanded_tokens.update(tokens(term, drop_stopwords=False, forms=forms))
+            expanded_tokens.update(tokens(term, drop_stopwords=False))
     return expanded_tokens, matched, expanded_terms
 
 
-def query_terms(
-    query: str, expanded_terms: list[str], forms: bool = False
-) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+def query_terms(query: str, expanded_terms: list[str]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """The terms the ranking matches, in a stable order and with their origin, plus dropped words.
 
     The term set equals the token set `expand_query` returns for the same query:
@@ -619,9 +590,8 @@ def query_terms(
     brings back, such as "und" in "Arbeitspreis und Grundpreis", is ranked and
     therefore listed as a term of origin `concept-expansion`, not as dropped.
     """
-    words = tokens(query, drop_stopwords=False, forms=forms)
-    stopwords = FORM_STOPWORDS if forms else STOPWORDS
-    kept = [word for word in words if word not in stopwords and len(word) > 1]
+    words = tokens(query, drop_stopwords=False)
+    kept = [word for word in words if word not in FORM_STOPWORDS and len(word) > 1]
     terms: list[dict[str, str]] = []
     seen: set[str] = set()
     for word in kept or words:
@@ -629,7 +599,7 @@ def query_terms(
             seen.add(word)
             terms.append({"term": word, "origin": "query"})
     for expanded in expanded_terms:
-        for word in tokens(expanded, drop_stopwords=False, forms=forms):
+        for word in tokens(expanded, drop_stopwords=False):
             if word not in seen:
                 seen.add(word)
                 terms.append({"term": word, "origin": "concept-expansion"})
@@ -639,7 +609,7 @@ def query_terms(
             if word in seen:
                 continue
             seen.add(word)
-            dropped.append({"term": word, "reason": "stopword" if word in stopwords else "single-character"})
+            dropped.append({"term": word, "reason": "stopword" if word in FORM_STOPWORDS else "single-character"})
     return terms, dropped
 
 
@@ -668,44 +638,66 @@ def claims_in(body: str) -> list[dict[str, Any]]:
 
 #: A wiki link with a label, and a Markdown link: the label is what a reader sees.
 LABELLED_WIKILINK = re.compile(r"\[\[[^\[\]|]*\|([^\[\]]*)\]\]")
-MARKDOWN_LINK = re.compile(r"(?<!!)\[([^\[\]]*)\]\([^()\s]*\)")
+#: A Markdown link; after a "!" it is an image, which `link_labels` leaves as written.
+MARKDOWN_LINK = re.compile(r"\[([^\[\]]*)\]\([^()\s]*\)")
 
 
-def visible_body(body: str, forms: bool = False) -> str:
-    """The body without claim metadata; with `forms`, also without the targets of labelled links.
+def link_labels(text: str) -> str:
+    """A text with every labelled wiki link and Markdown link replaced by its label (pure).
+
+    An image ("![text](target)") is no link and stays. MARKDOWN_LINK has no
+    lookbehind for the "!", which would keep the regular expression engine
+    from scanning fast for the "["; a match after a "!" is skipped instead,
+    and the search goes on right after its "[", where a lookbehind would.
+    """
+    if "[" not in text:
+        return text
+    text = LABELLED_WIKILINK.sub(lambda match: match.group(1), text)
+    pieces: list[str] = []
+    done = 0
+    match = MARKDOWN_LINK.search(text)
+    while match is not None:
+        start = match.start()
+        if start and text[start - 1] == "!":
+            match = MARKDOWN_LINK.search(text, start + 1)
+            continue
+        pieces.append(text[done:start])
+        pieces.append(match.group(1))
+        done = match.end()
+        match = MARKDOWN_LINK.search(text, done)
+    if not pieces:
+        return text
+    pieces.append(text[done:])
+    return "".join(pieces)
+
+
+def visible_body(body: str) -> str:
+    """The body without claim metadata and without the targets of labelled links.
 
     A link target is an address, not text. The word-form layer must not let
     "[[wiki/concepts/kuendigungsfrist|Kündigungsfrist]]" count the word twice,
     once as the folded slug and once as the label.
     """
-    text = CLAIM_BLOCK.sub(lambda match: match.group("text"), body)
-    if forms:
-        text = LABELLED_WIKILINK.sub(lambda match: match.group(1), text)
-        text = MARKDOWN_LINK.sub(lambda match: match.group(1), text)
-    return text
+    return link_labels(CLAIM_BLOCK.sub(lambda match: match.group("text"), body))
 
 
-def overlap(query_tokens: Any, text_tokens: set[str]) -> int:
+def overlap(query_tokens: dict[str, str], text_tokens: set[str]) -> int:
     """How many query terms a text holds.
 
-    `query_tokens` is a set of literal tokens, or a mapping from every token
-    that counts to the term it counts for; then each term counts once, however
-    many of its forms the text holds.
+    `query_tokens` maps every token that counts to the term it counts for, so
+    each term counts once, however many of its forms the text holds.
     """
-    if isinstance(query_tokens, dict):
-        return len({query_tokens[token] for token in text_tokens if token in query_tokens})
-    return len(query_tokens & text_tokens)
+    return len({query_tokens[token] for token in text_tokens if token in query_tokens})
 
 
 def relevant_claims(
     claims: list[dict[str, Any]],
-    query_tokens: Any,
+    query_tokens: dict[str, str],
     concept_match: bool = False,
-    forms: bool = False,
 ) -> list[dict[str, Any]]:
     ranked: list[tuple[int, str, dict[str, Any]]] = []
     for claim in claims:
-        claim_tokens = set(tokens(str(claim.get("text") or ""), drop_stopwords=False, forms=forms))
+        claim_tokens = set(tokens(str(claim.get("text") or ""), drop_stopwords=False))
         held = overlap(query_tokens, claim_tokens)
         if held:
             ranked.append((held, str(claim.get("id") or ""), claim))
@@ -717,13 +709,13 @@ def relevant_claims(
     return []
 
 
-def best_snippet(body: str, query_tokens: Any, forms: bool = False) -> str:
+def best_snippet(body: str, query_tokens: dict[str, str]) -> str:
     candidates: list[tuple[int, str]] = []
     for line in body.splitlines():
         compact = " ".join(line.strip().split())
         if not compact or compact.startswith("#"):
             continue
-        line_tokens = set(tokens(compact, drop_stopwords=False, forms=forms))
+        line_tokens = set(tokens(compact, drop_stopwords=False))
         held = overlap(query_tokens, line_tokens)
         if held:
             candidates.append((held, compact))
@@ -733,16 +725,19 @@ def best_snippet(body: str, query_tokens: Any, forms: bool = False) -> str:
     return snippet if len(snippet) <= 320 else snippet[:317].rstrip() + "..."
 
 
-def document_fields(data: dict[str, Any], body: str, forms: bool = False) -> dict[str, list[str]]:
+def description_of(data: dict[str, Any]) -> str:
+    """A page's description, or a source's extraction notes."""
+    return str(data.get("description") or data.get("extraction_notes") or "")
+
+
+def document_fields(data: dict[str, Any], body: str) -> dict[str, list[str]]:
     """Split one document into the weighted fields BM25F scores over."""
     return {
-        "title": tokens(str(data.get("title") or ""), False, forms),
-        "aliases": tokens(" ".join(alias_values(data.get("aliases"))), False, forms),
-        "headings": tokens(" ".join(HEADING.findall(body)), False, forms),
-        "description": tokens(
-            str(data.get("description") or data.get("extraction_notes") or ""), False, forms
-        ),
-        "body": tokens(body, False, forms),
+        "title": tokens(str(data.get("title") or ""), False),
+        "aliases": tokens(" ".join(alias_values(data.get("aliases"))), False),
+        "headings": tokens(" ".join(HEADING.findall(body)), False),
+        "description": tokens(description_of(data), False),
+        "body": tokens(body, False),
     }
 
 
@@ -774,16 +769,21 @@ def is_navigation(relative: str) -> bool:
     return relative in NAVIGATION_FILES or PurePosixPath(relative).name == "index.md"
 
 
-def read_document(path: Path, relative: str, text: Optional[str] = None, forms: bool = False) -> dict[str, Any]:
+def read_document(path: Path, relative: str, text: Optional[str] = None) -> dict[str, Any]:
     """Parse one Markdown file into what ranking and accounting read from it.
 
     Raises FrontmatterError when the file is outside the frontmatter contract.
     """
     data, body = frontmatter(path.read_text(encoding="utf-8") if text is None else text, relative)
-    searchable_body = visible_body(body, forms)
+    return parsed_document(data, body, path.stem)
+
+
+def parsed_document(data: dict[str, Any], body: str, stem: str) -> dict[str, Any]:
+    """`read_document` for a file whose frontmatter is already parsed; `stem` titles it when it has no title or H1."""
+    searchable_body = visible_body(body)
     heading = H1.search(searchable_body)
-    title = str(data.get("title") or (heading.group(1).strip() if heading else path.stem))
-    fields = document_fields({**data, "title": title}, searchable_body, forms)
+    title = str(data.get("title") or (heading.group(1).strip() if heading else stem))
+    fields = document_fields({**data, "title": title}, searchable_body)
     return {
         "data": data,
         "raw_body": body,
@@ -794,7 +794,7 @@ def read_document(path: Path, relative: str, text: Optional[str] = None, forms: 
     }
 
 
-def unsearched_words(path: Path, relative: str, forms: bool = False) -> set[str]:
+def unsearched_words(path: Path, relative: str) -> set[str]:
     """Every whole word of a file that is counted but not ranked.
 
     A file outside the frontmatter contract or the UTF-8 encoding cannot be
@@ -807,9 +807,9 @@ def unsearched_words(path: Path, relative: str, forms: bool = False) -> set[str]
     except OSError:
         return set()
     try:
-        return read_document(path, relative, text, forms)["words"]
+        return read_document(path, relative, text)["words"]
     except FrontmatterError:
-        return set(tokens(text, False, forms))
+        return set(tokens(text, False))
 
 
 def scope_paths(target: Path, scope: str) -> list[Path]:
@@ -820,44 +820,32 @@ def scope_paths(target: Path, scope: str) -> list[Path]:
     return [path for path in sorted(root.rglob("*.md")) if path.is_file()]
 
 
-def has_phrase(query_phrase: str, body_phrase: str, forms: bool = False) -> bool:
+def has_phrase(query_phrase: str, body_phrase: str) -> bool:
     """Whether a body holds all query words in a row, the phrase signal of the ranking.
 
-    Both arguments are space-joined tokens. With the word-form layer only the
-    literal query words count, and only on whole-token boundaries: "tarif" is
-    no phrase in "festpreistarif" and none in "tarife". The literal search keeps
-    its substring comparison.
+    Both arguments are space-joined tokens. Only the literal query words
+    count, and only on whole-token boundaries: "tarif" is no phrase in
+    "festpreistarif" and none in "tarife".
     """
     if not query_phrase:
         return False
-    if forms:
-        return f" {query_phrase} " in f" {body_phrase} "
-    return query_phrase in body_phrase
+    return f" {query_phrase} " in f" {body_phrase} "
 
 
 def term_members(
     ordered_terms: list[dict[str, str]],
-    vocabulary: dict[str, int],
-    forms: bool,
+    resolver: wordforms.Resolver,
     attested_elsewhere: Iterable[str] = (),
-    resolver: Optional[wordforms.Resolver] = None,
 ) -> dict[str, list[wordforms.Member]]:
     """Per query term, the tokens of the searched files that count for it, with rule and weight.
 
     Query words get word forms and, after them, the heuristics; concept
     expansions get word forms only. A term in `attested_elsewhere` occurs, as
     itself or as a word form, in a layer that was not searched; it is no typo,
-    so it is never corrected to another word. Without the word-form layer
-    every term is its literal token alone. `resolver`, when given, must be a
-    resolver over `vocabulary`; one search builds it once for all its queries.
+    so it is never corrected to another word. `resolver` resolves over the
+    vocabulary of the searched files; one search builds it once for all its
+    queries.
     """
-    if not forms:
-        return {
-            item["term"]: ([(item["term"], "exact", wordforms.WEIGHTS["exact"])] if item["term"] in vocabulary else [])
-            for item in ordered_terms
-        }
-    if resolver is None:
-        resolver = wordforms.Resolver(vocabulary, CLOSED_CLASS, FORM_STOPWORDS)
     attested = set(attested_elsewhere)
     return {
         item["term"]: resolver.resolve(
@@ -867,10 +855,8 @@ def term_members(
     }
 
 
-def layer_resolver(word_sets: list[set[str]], forms: bool) -> Optional[wordforms.Resolver]:
-    """A word-form resolver over the vocabulary of one unsearched layer, or None for the literal search."""
-    if not forms:
-        return None
+def layer_resolver(word_sets: list[set[str]]) -> wordforms.Resolver:
+    """A word-form resolver over the vocabulary of one unsearched layer."""
     vocabulary: dict[str, int] = {}
     for words in word_sets:
         for token in words:
@@ -878,18 +864,28 @@ def layer_resolver(word_sets: list[set[str]], forms: bool) -> Optional[wordforms
     return wordforms.Resolver(vocabulary, CLOSED_CLASS, FORM_STOPWORDS, heuristics=False)
 
 
-def layer_tokens(term_names: list[str], resolver: Optional[wordforms.Resolver]) -> dict[str, frozenset]:
+def layer_tokens(term_names: list[str], resolver: wordforms.Resolver) -> dict[str, frozenset]:
     """Per term, the tokens of a layer that are the same word, from that layer's `layer_resolver`."""
-    if resolver is None:
-        return {term: frozenset([term]) for term in term_names}
     return {
         term: frozenset(token for token, _, _ in resolver.resolve(term, heuristics=False)) for term in term_names
     }
 
 
-def layer_members(term_names: list[str], word_sets: list[set[str]], forms: bool) -> dict[str, frozenset]:
+def layer_members(term_names: list[str], word_sets: list[set[str]]) -> dict[str, frozenset]:
     """Per term, the tokens of an unsearched layer that are the same word: literal and word forms only."""
-    return layer_tokens(term_names, layer_resolver(word_sets, forms))
+    return layer_tokens(term_names, layer_resolver(word_sets))
+
+
+#: The rules whose members count on a navigation page (WIKI.md, an index.md,
+#: meta/questions.md): a term's literal token only. Navigation pages route to
+#: content and are never cited; word forms must not lift an index into the
+#: top, make a word look common, or count as the word in the coverage block.
+NAVIGATION_RULES = frozenset({"exact"})
+
+
+def members_for(members: list[wordforms.Member], navigation: bool) -> list[wordforms.Member]:
+    """The members of a term that count on a page of one role: on a navigation page only NAVIGATION_RULES (pure)."""
+    return [member for member in members if member[1] in NAVIGATION_RULES] if navigation else members
 
 
 def scoring_groups(
@@ -901,10 +897,11 @@ def scoring_groups(
 
     Terms that are forms of one word ("Tarif" and "Tarife", or a concept term
     the query already holds) form one group, so a page is not counted twice for
-    one word. On navigation pages a group holds only its literal tokens. A
-    group's document frequency counts the pages holding a word form; only a
-    group with no such page counts the pages holding a heuristic member, so
-    compound parts and typo corrections never make a word look common.
+    one word. On navigation pages a group holds only its members of
+    NAVIGATION_RULES. A group's document frequency counts the pages holding a
+    word form; only a group with no such page counts the pages holding a
+    heuristic member, so compound parts and typo corrections never make a word
+    look common.
     """
     merged: dict[str, dict[str, Any]] = {}
     label_of: dict[str, str] = {}
@@ -922,7 +919,7 @@ def scoring_groups(
         members = entry["members"]
         if not members:
             continue
-        literal = frozenset(token for token in members if members[token][0] == "exact")
+        on_navigation = frozenset(token for token in members if members[token][0] in NAVIGATION_RULES)
         word_forms = frozenset(token for token in members if members[token][0] in wordforms.WORD_FORM_RULES)
         heuristics = frozenset(members) - word_forms
 
@@ -930,14 +927,14 @@ def scoring_groups(
             return sum(
                 1
                 for candidate in candidates
-                if not candidate["words"].isdisjoint(literal if candidate["navigation"] else tokens_)
+                if not candidate["words"].isdisjoint(on_navigation if candidate["navigation"] else tokens_)
             )
 
         frequency = holders(word_forms) or holders(heuristics)
         weights = {token: members[token][1] for token in sorted(members)}
         content_groups.append(bm25.TermGroup(entry["label"], weights, frequency))
         navigation_groups.append(
-            bm25.TermGroup(entry["label"], {token: weights[token] for token in sorted(literal)}, frequency)
+            bm25.TermGroup(entry["label"], {token: weights[token] for token in sorted(on_navigation)}, frequency)
         )
     return content_groups, navigation_groups, label_of
 
@@ -1125,6 +1122,83 @@ def plan_formulations(query: str, also: list[str]) -> tuple[list[dict[str, Any]]
     return kept, dropped
 
 
+# -- the command line both wrappers share ------------------------------------------
+
+
+def add_search_arguments(
+    parser: Any, *, history: bool, limit_help: str, exhaustive_help: str, manifest_help: str
+) -> None:
+    """Add the search options of both wrappers to an argparse parser, in the order their help lists them.
+
+    A wrapper adds its own release option first (the query skill's
+    `--target`) and words three helps itself; `history` adds
+    `--include-history`, which only a release with history offers.
+    """
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--query", help="Question or retrieval query")
+    group.add_argument(
+        "--request",
+        metavar="-",
+        help="Read the query, its reformulations and an optional selector as one JSON object from standard input; "
+        "only '-' is accepted",
+    )
+    parser.add_argument(
+        "--also",
+        action="append",
+        default=[],
+        metavar="REFORMULATION",
+        help="Reformulation of the query searched in the same call; repeatable, at most 4, each at most 200 characters",
+    )
+    parser.add_argument("--limit", type=int, default=12, help=limit_help)
+    parser.add_argument("--include-sources", action="store_true", help="Also search faithful source Markdown")
+    if history:
+        parser.add_argument("--include-history", action="store_true", help="Also search historical snapshots")
+    parser.add_argument("--exhaustive", action="store_true", help=exhaustive_help)
+    parser.add_argument("--filter-json", default=None, help="Validated metadata selector as JSON (default: all)")
+    parser.add_argument("--expect-manifest-sha256", default="", help=manifest_help)
+
+
+def parse_search_arguments(parser: Any) -> Any:
+    """The parsed command line of `add_search_arguments`, with the combinations argparse cannot refuse refused."""
+    args = parser.parse_args()
+    if args.request is not None and args.request != "-":
+        parser.error("--request accepts only '-' (standard input)")
+    if args.request is not None and args.also:
+        parser.error("--also cannot be combined with --request; put the reformulations into the request's also list")
+    return args
+
+
+def query_from_arguments(args: Any, stdin: Any) -> tuple[str, list[str], Optional[dict[str, Any]]]:
+    """The query, its reformulations and the request's filter from the parsed command line.
+
+    A wrapper calls this before it touches its release, so standard input is
+    always drained and invalid input never depends on the release. Raises
+    RequestError.
+    """
+    if args.request is not None:
+        request = request_from_stdin(stdin)
+        query, also, request_filter = request["query"], request["also"], request["filter"]
+    else:
+        query, also, request_filter = args.query, list(args.also), None
+    check_also(also)
+    if request_filter is not None and args.filter_json is not None:
+        raise _invalid_request("filter is given both in the request and as --filter-json; give it once")
+    return query, also, request_filter
+
+
+def selector_from(request_filter: Optional[dict[str, Any]], filter_json: Optional[str]) -> dict[str, Any]:
+    """The validated selector: the request's filter, else --filter-json, else everything. Raises RequestError."""
+    if request_filter is not None:
+        try:
+            return validate_selector(request_filter)
+        except (ValueError, FrontmatterError) as exc:
+            raise _invalid_request(f"filter is not a valid selector: {exc}") from exc
+    try:
+        return validate_selector(json.loads(filter_json if filter_json is not None else '{"kind":"all"}'))
+    except (json.JSONDecodeError, ValueError, FrontmatterError) as exc:
+        raise RequestError(f"filter-json is invalid: {exc}") from exc
+
+
 # -- one release, any number of queries ------------------------------------------
 
 
@@ -1149,7 +1223,6 @@ def load(
     selector: Optional[dict[str, Any]] = None,
     history_shipped: bool = True,
     path_prefix: str = "",
-    word_forms: bool = True,
     exhaustive: bool = False,
 ) -> LoadedRelease:
     """Read the release under `root` once for every query a call ranks (see `search` for the options).
@@ -1164,10 +1237,7 @@ def load(
         raise ValueError("this release ships no history layer to search")
     if exhaustive and not include_sources:
         raise ValueError("an exhaustive search also ranks the sources; pass include_sources=True")
-    if exhaustive and not word_forms:
-        raise ValueError("an exhaustive search needs the word-form layer")
     selector = selector if selector is not None else {"kind": "all"}
-    forms = bool(word_forms)
     concept_definitions = controlled_concepts(root / "schema/CONCEPTS.md")
 
     searched_scopes = {"wiki": True, "sources": include_sources, "history": include_history}
@@ -1194,7 +1264,7 @@ def load(
         # the file is read here, once, exactly as read_document reads it.
         text = path.read_text(encoding="utf-8") if exhaustive else None
         try:
-            document = read_document(path, relative, text, forms=forms)
+            document = read_document(path, relative, text)
         except FrontmatterError as exc:
             parser_errors.append({"path": path_prefix + relative, "error": str(exc)})
             continue
@@ -1227,12 +1297,12 @@ def load(
             for path in scope_paths(root, scope):
                 relative = path.relative_to(root).as_posix()
                 scope_files[scope] += 1
-                unsearched.setdefault(scope, []).append(unsearched_words(path, relative, forms))
+                unsearched.setdefault(scope, []).append(unsearched_words(path, relative))
 
     # Which tokens count for which term is decided on every searched file,
     # before the selector, so a selector never changes what a word matches.
-    # Navigation pages route to content and are never cited; on them only the
-    # literal token counts, so word forms cannot lift an index into the top.
+    # On navigation pages only NAVIGATION_RULES count, so a member of another
+    # rule counts in the files of content_vocabulary only.
     vocabulary: dict[str, int] = {}
     content_vocabulary: dict[str, int] = {}
     for _scope, words, navigation in searched_words:
@@ -1241,10 +1311,7 @@ def load(
             if not navigation:
                 content_vocabulary[token] = content_vocabulary.get(token, 0) + 1
     return LoadedRelease(
-        root=root,
-        forms=forms,
         include_sources=include_sources,
-        include_history=include_history,
         history_shipped=history_shipped,
         exhaustive=exhaustive,
         # The scan index; None without `exhaustive` and after a parser error.
@@ -1265,10 +1332,10 @@ def load(
         candidates=candidates,
         unsearched=unsearched,
         # Unsearched layers count the literal token and its word forms only.
-        layer_resolvers={scope: layer_resolver(word_sets, forms) for scope, word_sets in unsearched.items()},
+        layer_resolvers={scope: layer_resolver(word_sets) for scope, word_sets in unsearched.items()},
         vocabulary=vocabulary,
         content_vocabulary=content_vocabulary,
-        resolver=wordforms.Resolver(vocabulary, CLOSED_CLASS, FORM_STOPWORDS) if forms else None,
+        resolver=wordforms.Resolver(vocabulary, CLOSED_CLASS, FORM_STOPWORDS),
         corpus=bm25.Corpus(candidate["fields"] for candidate in candidates),
     )
 
@@ -1306,20 +1373,18 @@ class Ranking:
     def __init__(
         self,
         matches: list[tuple[dict[str, Any], dict[str, Any], bool]],
-        highlight: Any,
-        forms: bool,
+        highlight: dict[str, str],
         coverage: dict[str, Any],
         matched_concepts: list[str],
         expanded_terms: list[str],
-        terms: Optional[list[dict[str, str]]] = None,
-        members: Optional[dict[str, list[wordforms.Member]]] = None,
+        terms: list[dict[str, str]],
+        members: dict[str, list[wordforms.Member]],
     ) -> None:
-        self.terms = list(terms or [])
-        self.members = dict(members or {})
+        self.terms = terms
+        self.members = members
         self.ordered = [result for result, _, _ in matches]
         self._pending = [(candidate, concept_match) for _, candidate, concept_match in matches]
         self._highlight = highlight
-        self._forms = forms
         self.rank_of = {result["path"]: number for number, result in enumerate(self.ordered, 1)}
         self.coverage = coverage
         self.facets = facets(self.ordered)
@@ -1331,8 +1396,8 @@ class Ranking:
         result = dict(self.ordered[index])
         candidate, concept_match = self._pending[index]
         page_claims = candidate_claims(candidate)
-        claims = relevant_claims(page_claims, self._highlight, concept_match, self._forms)
-        result["snippet"] = best_snippet(candidate["body"], self._highlight, self._forms)
+        claims = relevant_claims(page_claims, self._highlight, concept_match)
+        result["snippet"] = best_snippet(candidate["body"], self._highlight)
         result["claims"] = claims
         result["claims_total"] = len(page_claims)
         result["claims_returned"] = len(claims)
@@ -1344,11 +1409,10 @@ def rank(loaded: LoadedRelease, query: str, *, limit: int) -> Ranking:
 
     Raises QueryError for a query without a searchable token.
     """
-    forms = loaded.forms
-    query_token_set, matched_concepts, expanded_terms = expand_query(query, loaded.concept_definitions, forms)
+    query_token_set, matched_concepts, expanded_terms = expand_query(query, loaded.concept_definitions)
     if not query_token_set:
         raise QueryError("query must contain at least one searchable token")
-    ordered_terms, dropped_terms = query_terms(query, expanded_terms, forms)
+    ordered_terms, dropped_terms = query_terms(query, expanded_terms)
     term_names = [item["term"] for item in ordered_terms]
     searched_scopes = loaded.searched_scopes
     counted_scopes = loaded.counted_scopes
@@ -1376,40 +1440,40 @@ def rank(loaded: LoadedRelease, query: str, *, limit: int) -> Ranking:
         term for term in term_names if any(term_files[scope][term] for scope in loaded.unsearched)
     }
 
-    members_of = term_members(ordered_terms, vocabulary, forms, attested_unsearched, loaded.resolver)
-    member_tokens = {term: frozenset(token for token, _, _ in members_of[term]) for term in term_names}
-    literal_tokens = {
-        term: frozenset(token for token, rule, _ in members_of[term] if rule == "exact") for term in term_names
-    }
-    # The same word: the literal token and its word forms, never a compound part or typo.
-    form_tokens = {
-        term: frozenset(token for token, rule, _ in members_of[term] if rule in wordforms.WORD_FORM_RULES)
-        for term in term_names
-    }
+    members_of = term_members(ordered_terms, loaded.resolver, attested_unsearched)
+
+    def role_view(navigation: bool, rules: Optional[frozenset] = None) -> dict[str, frozenset]:
+        # Per term, the tokens that count on a page of this role (members_for), of `rules` only when given.
+        return {
+            term: frozenset(
+                token for token, rule, _ in members_for(members_of[term], navigation) if rules is None or rule in rules
+            )
+            for term in term_names
+        }
+
+    # The view of each page role (navigation or not): every token that counts,
+    # and the same word, the literal token and its word forms, never a compound part or typo.
+    counting = {navigation: role_view(navigation) for navigation in (False, True)}
+    same_word = {navigation: role_view(navigation, wordforms.WORD_FORM_RULES) for navigation in (False, True)}
+    member_tokens = counting[False]
     same_word_searched: set[str] = set()
     for scope, words, navigation in loaded.searched_words:
-        account(scope, words, literal_tokens if navigation else member_tokens)
-        same_word = literal_tokens if navigation else form_tokens
-        same_word_searched.update(term for term in term_names if not same_word[term].isdisjoint(words))
+        account(scope, words, counting[navigation])
+        same_word_searched.update(term for term in term_names if not same_word[navigation][term].isdisjoint(words))
 
     corpus = loaded.corpus
     matched_concept_set = set(matched_concepts)
-    query_phrase = " ".join(tokens(query, False, forms))
-    groups: Optional[list[bm25.TermGroup]] = None
-    navigation_groups: Optional[list[bm25.TermGroup]] = None
-    label_of: dict[str, str] = {}
-    # What claims and snippets are matched with: literal tokens, or every
-    # counting token mapped to the word it counts for.
-    highlight: Any = query_token_set
-    if forms:
-        groups, navigation_groups, label_of = scoring_groups(term_names, members_of, candidates)
-        highlight = {}
-        for term in term_names:
-            for token in sorted(member_tokens[term]):
-                highlight.setdefault(token, label_of[term])
+    query_phrase = " ".join(tokens(query, False))
+    content_groups, navigation_groups, label_of = scoring_groups(term_names, members_of, candidates)
+    groups = {False: content_groups, True: navigation_groups}
+    # What claims and snippets are matched with: every counting token mapped to the word it counts for.
+    highlight: dict[str, str] = {}
+    for term in term_names:
+        for token in sorted(member_tokens[term]):
+            highlight.setdefault(token, label_of[term])
     # A file holding no token that counts for any term scores 0, because the
     # ranking never turns a non-match into a match; it is not scored at all.
-    scored_tokens = frozenset().union(*member_tokens.values()) if forms else frozenset(query_token_set)
+    scored_tokens = frozenset().union(*member_tokens.values())
 
     path_prefix = loaded.path_prefix
     matches: list[tuple[dict[str, Any], dict[str, Any], bool]] = []
@@ -1418,27 +1482,23 @@ def rank(loaded: LoadedRelease, query: str, *, limit: int) -> Ranking:
             continue
         data = candidate["data"]
         relative = candidate["relative"]
+        navigation = candidate["navigation"]
         document_concepts = set(as_list(data.get("concepts")))
-        phrase_match = has_phrase(query_phrase, candidate_phrase(candidate), forms)
         counted: dict[str, list[str]] = {}
         score = bm25.score(
             corpus,
             candidate["fields"],
-            query_token_set,
-            phrase_match=phrase_match,
+            groups[navigation],
+            phrase_match=has_phrase(query_phrase, candidate_phrase(candidate)),
             concept_overlap=len(document_concepts & matched_concept_set),
             status=str(data.get("status") or ""),
-            groups=navigation_groups if candidate["navigation"] else groups,
             counted=counted,
+            words=candidate["words"],
         )
         if score <= 0:
             continue
-        if forms:
-            # On a navigation page only a term's own literal token counted.
-            allowed = literal_tokens if candidate["navigation"] else member_tokens
-            counted_tokens = {term: set(counted.get(label_of[term], ())) & allowed[term] for term in term_names}
-        else:
-            counted_tokens = {term: {term} & candidate["words"] for term in term_names}
+        allowed = counting[navigation]
+        counted_tokens = {term: set(counted.get(label_of[term], ())) & allowed[term] for term in term_names}
         result = {
             "path": path_prefix + relative,
             "title": candidate["title"],
@@ -1446,7 +1506,7 @@ def rank(loaded: LoadedRelease, query: str, *, limit: int) -> Ranking:
             "type": str(data.get("type") or ("source" if relative.startswith("sources/") else "")),
             "status": str(data.get("status") or ""),
             "date": str(data.get("date") or data.get("updated") or ""),
-            "description": str(data.get("description") or data.get("extraction_notes") or ""),
+            "description": description_of(data),
             "language": str(data.get("language") or data.get("content_language") or ""),
             "sources": as_list(data.get("sources")),
             "clusters": as_list(data.get("clusters")),
@@ -1468,7 +1528,7 @@ def rank(loaded: LoadedRelease, query: str, *, limit: int) -> Ranking:
             ],
             "claims_total": None,
             "claims_returned": None,
-            "navigation": candidate["navigation"],
+            "navigation": navigation,
         }
         matches.append((result, candidate, bool(document_concepts & matched_concept_set)))
 
@@ -1484,9 +1544,9 @@ def rank(loaded: LoadedRelease, query: str, *, limit: int) -> Ranking:
         return any(term_files[scope][term] for scope in SCOPES if searched_scopes[scope])
 
     def counting_files(token: str, rule: str) -> int:
-        # The searched files in which a member counts: the literal token
-        # everywhere, any other form only outside navigation pages.
-        return (vocabulary if rule == "exact" else content_vocabulary).get(token, 0)
+        # The searched files in which a member counts: a member of
+        # NAVIGATION_RULES everywhere, any other only outside navigation pages.
+        return (vocabulary if rule in NAVIGATION_RULES else content_vocabulary).get(token, 0)
 
     def counting_members(term: str) -> list[tuple[str, str, float, int]]:
         found = [(token, rule, weight, counting_files(token, rule)) for token, rule, weight in members_of[term]]
@@ -1544,7 +1604,7 @@ def rank(loaded: LoadedRelease, query: str, *, limit: int) -> Ranking:
         },
         "boundary": COVERAGE_BOUNDARY,
     }
-    return Ranking(matches, highlight, forms, coverage, matched_concepts, expanded_terms, ordered_terms, members_of)
+    return Ranking(matches, highlight, coverage, matched_concepts, expanded_terms, ordered_terms, members_of)
 
 
 def found_by(rankings: list[Ranking], path: str) -> list[dict[str, int]]:
@@ -1777,12 +1837,9 @@ def locator_span(first: str, last: str) -> str:
     return f"{first}-{value}" if kind == last_kind else f"{first}-{last}"
 
 
-def link_labels(text: str) -> str:
-    """A text with every labelled wiki link and Markdown link replaced by its label, as `visible_body` does."""
-    if "[" not in text:
-        return text
-    text = LABELLED_WIKILINK.sub(lambda match: match.group(1), text)
-    return MARKDOWN_LINK.sub(lambda match: match.group(1), text)
+def readable(raw: str) -> str:
+    """A fragment as the scan reads and shows it: links replaced by their labels, then split words joined (pure)."""
+    return wordforms.repair_text(link_labels(raw))
 
 
 def inner_path(relative: str) -> str:
@@ -2071,7 +2128,7 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
     body_line = text.count("\n", 0, len(text) - len(body)) + 1
     title = str(document["title"])
     aliases = alias_values(data.get("aliases"))
-    description = str(data.get("description") or data.get("extraction_notes") or "")
+    description = description_of(data)
     header_text = title + (" — " + ", ".join(aliases) if aliases else "") + (" — " + description if description else "")
     listed_sources = " ".join(as_list(data.get("sources")))
     header_ids = identifier_tokens(data.get("id"), data.get("source_id"))
@@ -2082,7 +2139,8 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
     passages: list[Passage] = [
         Passage("header", 1, "", "", header_text, header_words | header_ids, (), identifiers=header_ids - header_words)
     ]
-    title_tokens = tokens(title, False, True)
+    # The title tokens read_document gave the title field, for an H1 that repeats the title.
+    title_tokens = document["fields"]["title"]
     plain_kind = "open_question" if inner_path(relative) == "meta/questions.md" else "paragraph"
 
     # The context stacks, each as parallel lists: headings and labels (level,
@@ -2128,7 +2186,7 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
         items.clear()
         pop_headings(level)
         refresh()
-        words = tokens(label, False, True)
+        words = tokens(label, False)
         # An H1 that repeats the title is carried by the header passage.
         if words and not (level == 1 and words == title_tokens):
             found = scan_words(label)
@@ -2149,7 +2207,7 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
             return
         raw = "\n".join(lines)
         # The repaired text is the display text too.
-        repaired = wordforms.repair_text(link_labels(raw))
+        repaired = readable(raw)
         found = scan_words(repaired)
         addresses = link_addresses(raw)
         identifiers = written(addresses, repaired)
@@ -2170,7 +2228,7 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
             if listed or label:
                 opens, opens_tokens = where + (shown,), found
             elif table and cut and not carried:
-                repaired_row = wordforms.repair_text(link_labels(table_row))
+                repaired_row = readable(table_row)
                 row_tokens = scan_words(repaired_row)
                 if row_tokens:
                     opens, opens_tokens = where + (" ".join(repaired_row.split()),), row_tokens
@@ -2261,8 +2319,6 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
         # Read a raw HTML table as a table: each <tr> a row of cells, the first row carried across a cut.
         nonlocal html_block, locator
         block, html_block = html_block, None
-        if not block:
-            return
         raw = "\n".join(line for _, line in block)
         start = block[0][0]
         depth = len(block[0][1]) - len(block[0][1].lstrip())
@@ -2317,13 +2373,13 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
             atx = SCAN_HEADING.match(line) if line[:1] == "#" else None
             if atx:
                 finish()
-                heading(len(atx.group(1)), " ".join(wordforms.repair_text(link_labels(atx.group(2))).split()), number)
+                heading(len(atx.group(1)), " ".join(readable(atx.group(2)).split()), number)
                 return
             if (
                 left[:1] in ("=", "-") and len(lines) == 1 and not table and not listed
                 and SETEXT_UNDERLINE.match(line)
             ):
-                label = " ".join(wordforms.repair_text(link_labels(lines[0])).split())
+                label = " ".join(readable(lines[0]).split())
                 if label and len(label) <= LABEL_MAX_CHARS:
                     number = first_line
                     lines = []
@@ -2340,7 +2396,7 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
                 tag = HTML_HEADING.match(left)
                 summary = None if tag else HTML_SUMMARY.match(left)
                 if tag or summary:
-                    label = html_text(wordforms.repair_text(link_labels(tag.group(2) if tag else summary.group(1))))
+                    label = html_text(readable(tag.group(2) if tag else summary.group(1)))
                     if label:
                         finish()
                         heading(int(tag.group(1)) if tag else LABEL_LEVEL, label, number)
@@ -2421,7 +2477,7 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
         claim_ids = claim_identifiers(claim)
         addresses = link_addresses(match.group("text"))
         # Tokens come from the text with its line breaks, so a hyphen at a line end is repaired as the ranking does.
-        claim_text = wordforms.repair_text(link_labels(match.group("text")))
+        claim_text = readable(match.group("text"))
         words = scan_words(claim_text)
         # Identifiers are the IDs and link targets the claim does not also hold as written text.
         plain = scan_words(UNLABELLED_WIKILINK.sub(" ", claim_text)) if addresses else words
@@ -2439,36 +2495,10 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
 
 
 def concept_runs(query: str, definitions: dict[str, dict[str, Any]]) -> dict[str, list[str]]:
-    """For each concept the query triggers, the query words of its first matching run (pure).
-
-    Iterates exactly as `expand_query(query, definitions, forms=True)`: concept
-    ids sorted, terms in definition order, the first term that matches, and its
-    first start position where every word is the same word.
-    """
-    query_words = tokens(query, drop_stopwords=False, forms=True)
-    runs: dict[str, list[str]] = {}
-    for concept_id, definition in sorted(definitions.items()):
-        terms = [str(term) for term in definition.get("terms", []) if str(term).strip()]
-        for term in terms:
-            term_words = tokens(term, drop_stopwords=False, forms=True)
-            if not term_words:
-                continue
-            width = len(term_words)
-            start = next(
-                (
-                    start
-                    for start in range(len(query_words) - width + 1)
-                    if all(
-                        wordforms.same_word(query_words[start + offset], term_words[offset], CLOSED_CLASS)
-                        for offset in range(width)
-                    )
-                ),
-                None,
-            )
-            if start is not None:
-                runs[concept_id] = query_words[start:start + width]
-                break
-    return runs
+    """For each concept the query triggers, the query words of its matching run, as `expand_query` finds them (pure)."""
+    return {
+        concept_id: run for concept_id, _terms, run in triggered_concepts(tokens(query, drop_stopwords=False), definitions)
+    }
 
 
 def content_words(terms: list[dict[str, str]]) -> list[str]:
@@ -2488,9 +2518,7 @@ def alternatives(
             if word not in runs[concept_id]:
                 continue
             for term in definitions[concept_id].get("terms", []):
-                if not str(term).strip():
-                    continue
-                option = tuple(token for token in tokens(str(term), False, True) if token not in SCAN_EXCLUDED)
+                option = tuple(token for token in tokens(term, False) if token not in SCAN_EXCLUDED)
                 if option and option not in listed:
                     listed.add(option)
                     options.append((concept_id, option))
@@ -2698,17 +2726,17 @@ def scan_members(ranking: Ranking, scan: "ScanIndex", vocabulary: dict[str, int]
                         listed.append(member)
                     known.add(token)
             key = wordforms.stem_key(term)
-            for found, rule, weight in (
-                (parts.get(key, ()), HYPHEN_PART_RULE, HYPHEN_PART_WEIGHT),
-                (scan.ending_forms(term), ENDING_RULE, ENDING_WEIGHT),
-                (scan.verb_forms(term), VERB_ENDING_RULE, VERB_ENDING_WEIGHT),
-                (footnotes.get(key, ()), FOOTNOTE_RULE, FOOTNOTE_WEIGHT),
-                (suspended.get(key, ()), SUSPENDED_RULE, SUSPENDED_WEIGHT),
-                (scan.short_parts(term), SHORT_PART_RULE, SHORT_PART_WEIGHT),
+            for found, rule in (
+                (parts.get(key, ()), HYPHEN_PART_RULE),
+                (scan.ending_forms(term), ENDING_RULE),
+                (scan.verb_forms(term), VERB_ENDING_RULE),
+                (footnotes.get(key, ()), FOOTNOTE_RULE),
+                (suspended.get(key, ()), SUSPENDED_RULE),
+                (scan.short_parts(term), SHORT_PART_RULE),
             ):
                 for token in sorted(found):
                     if token not in known:
-                        listed.append((token, rule, weight))
+                        listed.append((token, rule, wordforms.WEIGHTS[rule]))
                         known.add(token)
         members[term] = listed
     return members
@@ -2837,8 +2865,8 @@ def counted_reformulations(
 
 
 def printed_chars(value: Any, depth: int) -> int:
-    """The characters `value` takes when a wrapper prints it nested `depth` levels deep with REPORT_INDENT."""
-    text = json.dumps(value, ensure_ascii=False, indent=REPORT_INDENT)
+    """The characters `value` takes when `report_json` prints it nested `depth` levels deep."""
+    text = report_json(value)
     return len(text) + REPORT_INDENT * depth * text.count("\n")
 
 
@@ -2853,7 +2881,7 @@ def excerpt(text: str, wanted: frozenset) -> tuple[str, bool]:
     for word in words:
         starts.append(offset)
         offset += len(word) + 1
-    first = next((index for index, word in enumerate(words) if not wanted.isdisjoint(tokens(word, False, True))), 0)
+    first = next((index for index, word in enumerate(words) if not wanted.isdisjoint(tokens(word, False))), 0)
 
     def window(start: int) -> list[str]:
         taken: list[str] = []
@@ -3188,10 +3216,13 @@ class ScanIndex:
         """The members of one part of a hyphenated search word written apart: its stem key alone or as a part."""
         key = wordforms.stem_key(unit)
         found = self.stems().get(key, frozenset()) | self.hyphen_parts().get(key, frozenset())
-        members = [(token, HYPHEN_PART_RULE, HYPHEN_PART_WEIGHT) for token in sorted(found)]
+        weight = wordforms.WEIGHTS
+        members = [(token, HYPHEN_PART_RULE, weight[HYPHEN_PART_RULE]) for token in sorted(found)]
         ending = self.ending_forms(unit) - found
-        members.extend((token, ENDING_RULE, ENDING_WEIGHT) for token in sorted(ending))
-        members.extend((token, SHORT_PART_RULE, SHORT_PART_WEIGHT) for token in sorted(self.short_parts(unit) - found - ending))
+        members.extend((token, ENDING_RULE, weight[ENDING_RULE]) for token in sorted(ending))
+        members.extend(
+            (token, SHORT_PART_RULE, weight[SHORT_PART_RULE]) for token in sorted(self.short_parts(unit) - found - ending)
+        )
         return members
 
 
@@ -3276,7 +3307,10 @@ class _Formulation:
         self.terms = ranking.terms
         self.members: dict[Any, list[wordforms.Member]] = scan_members(ranking, scan, vocabulary)
         self.content = content_words(ranking.terms)
-        self.alternatives = alternatives(self.content, concept_runs(text, definitions), definitions)
+        self.runs = concept_runs(text, definitions)
+        self.alternatives = alternatives(self.content, self.runs, definitions)
+        self._keys: dict[tuple[Any, bool], frozenset] = {}
+        self._every: Optional[frozenset] = None
         self.splits: dict[str, tuple] = {}
         for word in self.content:
             units = hyphen_units(word)
@@ -3298,11 +3332,19 @@ class _Formulation:
         return token
 
     def tokens_of(self, token: Any, word_forms_only: bool) -> frozenset:
-        return frozenset(
-            self.key_of(member, rule)
-            for member, rule, _ in self.members.get(token, ())
-            if not word_forms_only or rule in wordforms.WORD_FORM_RULES
-        )
+        """The matcher's keys of a term's (or a part's) members, of the word forms only when asked, built once."""
+        found = self._keys.get((token, word_forms_only))
+        if found is None:
+            found = self._keys[(token, word_forms_only)] = frozenset(
+                self.key_of(member, rule)
+                for member, rule, _ in self.members.get(token, ())
+                if not word_forms_only or rule in wordforms.WORD_FORM_RULES
+            )
+        return found
+
+    def concepts(self) -> dict[str, frozenset]:
+        """Per content word, the concepts in whose matching run it stands."""
+        return {word: frozenset(key for key, run in self.runs.items() if word in run) for word in self.content}
 
     def hits(self, matcher: _Matcher, word_forms_only: bool) -> set[int]:
         """H_i: passages inside the context of every content word that hold at least one of them themselves."""
@@ -3330,14 +3372,16 @@ class _Formulation:
         return found & owned
 
     def every_member(self) -> frozenset:
-        """Every member token of every content word and of its alternatives."""
-        return frozenset(
-            member
-            for word in self.content
-            for _concept, option in self.alternatives[word]
-            for token in option
-            for member, _, _ in self.members.get(token, ())
-        )
+        """Every member token of every content word and of its alternatives, built once."""
+        if self._every is None:
+            self._every = frozenset(
+                member
+                for word in self.content
+                for _concept, option in self.alternatives[word]
+                for token in option
+                for member, _, _ in self.members.get(token, ())
+            )
+        return self._every
 
     def matched(self, matcher: _Matcher, pid: int) -> list[dict[str, Any]]:
         """Per content word, the member that carried it into a heuristic hit, and where it occurred."""
@@ -3389,32 +3433,118 @@ def printed_claim_keys(
     for where, entries in (("results", results), ("reformulation_results", block)):
         for entry in entries:
             path = str(entry["path"])
-            relative = path[len(path_prefix):] if path_prefix and path.startswith(path_prefix) else path
+            relative = path.removeprefix(path_prefix)
             for claim in entry.get("claims") or []:
                 key = (relative, str(claim.get("id") or "") or str(claim.get("text") or ""))
                 printed.setdefault(key, where)
     return printed
 
 
+def fit_prefix(entries: list[dict[str, Any]], budget: int) -> tuple[list[dict[str, Any]], bool]:
+    """The longest prefix of page entries, hit by hit, that `report_json` prints within `budget` characters (pure).
+
+    Returns the entries of that prefix, the last one possibly with fewer
+    hits, and whether anything was left out. The size is counted where
+    exhaustive_hits stands in a report, one level deep: "[]", each entry with
+    its first hit two levels deep, each further hit four levels deep, and the
+    line breaks, commas and indents between them.
+    """
+    returned: list[dict[str, Any]] = []
+    used = 2  # "[]"
+    for entry in entries:
+        emitted: Optional[dict[str, Any]] = None
+        for hit in entry["hits"]:
+            if emitted is None:
+                # A first entry adds two line breaks and the indents of the entry and of "]",
+                # a later one ",\n" and its indent.
+                cost = (8 if not returned else 6) + printed_chars({**entry, "hits": [hit]}, 2)
+            else:
+                # ",\n" and the indent of a hit.
+                cost = 10 + printed_chars(hit, 4)
+            if used + cost > budget:
+                return returned, True
+            used += cost
+            if emitted is None:
+                emitted = {**entry, "hits": [hit]}
+                returned.append(emitted)
+            else:
+                emitted["hits"].append(hit)
+    return returned, False
+
+
+def _census(formulations: list[_Formulation], matcher: _Matcher, vocabulary: dict[str, int]) -> list[dict[str, Any]]:
+    """Every term of every formulation except closed-class and function words, once per (term, origin).
+
+    Each entry names the formulations that hold the term, how many passages
+    and files hold one of its members per scanned layer (a hyphenated query
+    word also where a passage holds all of its parts), and its members.
+    """
+    scan = matcher.scan
+    census: dict[tuple[str, str], dict[str, Any]] = {}
+    for index, formulation in enumerate(formulations):
+        for item in formulation.terms:
+            term, origin = item["term"], item["origin"]
+            if term in SCAN_EXCLUDED:
+                continue
+            key = (term, origin)
+            if key in census:
+                census[key]["formulations"].append(index)
+                continue
+            members = formulation.members.get(term, [])
+            holders = matcher.own(formulation.tokens_of(term, False))
+            split = formulation.splits.get(term) if origin == "query" else None
+            if split:
+                # A hyphenated word also occurs where a passage holds all of its parts.
+                apart: Optional[set[int]] = None
+                for part in split:
+                    owned = matcher.own(formulation.tokens_of(part, False))
+                    apart = set(owned) if apart is None else apart & owned
+                holders = holders | (apart or set())
+            passages = {scope: 0 for scope in SCOPES}
+            files: dict[str, set[int]] = {scope: set() for scope in SCOPES}
+            for pid in holders:
+                page = scan.passage_page[pid]
+                scope = scan.pages[page]["scope"]
+                passages[scope] += 1
+                files[scope].add(page)
+            ordered = sorted(members, key=lambda member: (-member[2], -vocabulary.get(member[0], 0), member[0]))
+            census[key] = {
+                "term": term,
+                "origin": origin,
+                "formulations": [index],
+                "passages": {scope: passages[scope] if scan.scanned[scope] else None for scope in SCOPES},
+                "files": {scope: len(files[scope]) if scan.scanned[scope] else None for scope in SCOPES},
+                "forms": [{"token": shown_token(token), "rule": rule} for token, rule, _ in ordered[:FORMS_LISTED]],
+                "forms_total": len(members),
+            }
+    return list(census.values())
+
+
 def exhaustive_scan(
     scan: ScanIndex,
     rankings: list[Ranking],
-    texts: list[str],
+    kept: list[dict[str, Any]],
     definitions: dict[str, dict[str, Any]],
     vocabulary: dict[str, int],
     printed: dict[tuple[str, str], str],
-    counted: list[bool],
     budget: int,
 ) -> dict[str, Any]:
     """Every passage that holds all content words of a kept formulation, ordered, cut to `budget` printed characters.
 
-    Returns the returned page entries (`hits`), whether the question's own
-    hits fit into the budget (`narrowable`, internal), and the fields of
-    absence_check that describe the scan: per-formulation counts, census,
-    absent terms, counts, budget, omitted pages and scopes.
+    `kept` holds the kept formulations (index, text, origin), `rankings` their
+    rankings. Returns the returned page entries (`hits`), whether the
+    question's own hits fit into the budget (`narrowable`, internal), and the
+    fields of absence_check that describe the scan: the counted
+    reformulations, per-formulation counts, census, absent terms, counts,
+    budget, omitted pages and scopes.
     """
     matcher = _Matcher(scan)
-    formulations = [_Formulation(text, ranking, definitions, scan, vocabulary) for text, ranking in zip(texts, rankings)]
+    formulations = [
+        _Formulation(entry["text"], ranking, definitions, scan, vocabulary) for entry, ranking in zip(kept, rankings)
+    ]
+    counted = counted_reformulations(
+        kept, [formulation.content for formulation in formulations], [formulation.concepts() for formulation in formulations]
+    )
     by_formulation: list[set[int]] = []
     word_form_hits: set[int] = set()
     summary: list[dict[str, Any]] = []
@@ -3488,47 +3618,19 @@ def exhaustive_scan(
     )
 
     # Emit a strict prefix: hit by hit while the printed size stays within budget.
-    returned: list[dict[str, Any]] = []
-    used = 2  # "[]"
-    stopped = False
-    for entry in entries:
-        emitted: Optional[dict[str, Any]] = None
-        for hit in entry["hits"]:
-            if emitted is None:
-                cost = (8 if not returned else 6) + printed_chars({**entry, "hits": [hit]}, 2)
-            else:
-                cost = 10 + printed_chars(hit, 4)
-            if used + cost > budget:
-                stopped = True
-                break
-            used += cost
-            if emitted is None:
-                emitted = {**entry, "hits": [hit]}
-                returned.append(emitted)
-            else:
-                emitted["hits"].append(hit)
-        if stopped:
-            break
+    returned, stopped = fit_prefix(entries, budget)
     used = printed_chars(returned, 1)
     needed = printed_chars(entries, 1) if stopped else used
     # Narrower reformulations can only help while the question's own hits fit:
     # its hits do not depend on the reformulations.
-    # Counted with the same increments as the emission, and only until the budget is passed.
     narrowable = True
     if stopped:
-        size = 2
+        own_entries: list[dict[str, Any]] = []
         for entry in entries:
             own_hits = [hit for hit in entry["hits"] if 0 in hit["formulations"]]
-            for position, hit in enumerate(own_hits):
-                if position:
-                    size += 10 + printed_chars(hit, 4)
-                else:
-                    size += (8 if size == 2 else 6) + printed_chars({**entry, "hits_total": len(own_hits), "hits": [hit]}, 2)
-                if size > budget:
-                    break
-            if size > budget:
-                narrowable = False
-                break
+            if own_hits:
+                own_entries.append({**entry, "hits_total": len(own_hits), "hits": own_hits})
+        narrowable = not fit_prefix(own_entries, budget)[1]
 
     hits_total = len(all_hits)
     hits_returned = sum(len(entry["hits"]) for entry in returned)
@@ -3549,48 +3651,11 @@ def exhaustive_scan(
         {"path": entry["path"], "hits": entry["hits_total"]} for entry in entries if entry["path"] not in returned_paths
     ][:OMITTED_PAGES_LISTED]
 
-    # The census: every term except closed-class and function words, once per (term, origin).
-    census: dict[tuple[str, str], dict[str, Any]] = {}
-    for index, formulation in enumerate(formulations):
-        for item in formulation.terms:
-            term, origin = item["term"], item["origin"]
-            if term in SCAN_EXCLUDED:
-                continue
-            key = (term, origin)
-            if key in census:
-                census[key]["formulations"].append(index)
-                continue
-            members = formulation.members.get(term, [])
-            holders = matcher.own(formulation.tokens_of(term, False))
-            split = formulation.splits.get(term) if origin == "query" else None
-            if split:
-                # A hyphenated word also occurs where a passage holds all of its parts.
-                apart: Optional[set[int]] = None
-                for part in split:
-                    owned = matcher.own(formulation.tokens_of(part, False))
-                    apart = set(owned) if apart is None else apart & owned
-                holders = holders | (apart or set())
-            passages = {scope: 0 for scope in SCOPES}
-            files: dict[str, set[int]] = {scope: set() for scope in SCOPES}
-            for pid in holders:
-                page = scan.passage_page[pid]
-                scope = scan.pages[page]["scope"]
-                passages[scope] += 1
-                files[scope].add(page)
-            ordered = sorted(members, key=lambda member: (-member[2], -vocabulary.get(member[0], 0), member[0]))
-            census[key] = {
-                "term": term,
-                "origin": origin,
-                "formulations": [index],
-                "passages": {scope: passages[scope] if scan.scanned[scope] else None for scope in SCOPES},
-                "files": {scope: len(files[scope]) if scan.scanned[scope] else None for scope in SCOPES},
-                "forms": [{"token": shown_token(token), "rule": rule} for token, rule, _ in ordered[:FORMS_LISTED]],
-                "forms_total": len(members),
-            }
+    terms = _census(formulations, matcher, vocabulary)
     absent = sorted(
         {
             entry["term"]
-            for entry in census.values()
+            for entry in terms
             if entry["origin"] == "query" and not any(entry["passages"][scope] for scope in SCOPES if scan.scanned[scope])
         }
     )
@@ -3615,7 +3680,7 @@ def exhaustive_scan(
         "absent_terms": absent,
         "formulations": summary,
         "scopes": scopes,
-        "terms": list(census.values()),
+        "terms": terms,
     }
 
 
@@ -3655,42 +3720,24 @@ def absence_check(
     ran without the exhaustive scan; then only `not_exhaustive` is listed and
     every field that was not evaluated is null rather than zero.
     """
+    next_steps: Optional[list[str]] = None
     if scanned is None:
-        return {
-            "format": ABSENCE_CHECK_FORMAT,
-            "complete": False,
-            "reasons": ["not_exhaustive"],
-            "next_steps": None,
-            "reformulations_counted": None,
-            "budget": None,
-            "counts": None,
-            "omitted_pages": None,
-            "absent_terms": None,
-            "formulations": None,
-            "scopes": None,
-            "terms": None,
-            "boundary": ABSENCE_BOUNDARY,
+        reasons = ["not_exhaustive"]
+    else:
+        applies = {
+            "not_exhaustive": False,
+            "too_few_reformulations": scanned["reformulations_counted"] < MIN_EXHAUSTIVE_REFORMULATIONS,
+            "no_content_words": not any(entry["content_words"] for entry in scanned["formulations"]),
+            "budget_exhausted": scanned["budget"]["needed_chars"] > scanned["budget"]["limit_chars"],
         }
-    applies = {
-        "not_exhaustive": False,
-        "too_few_reformulations": scanned["reformulations_counted"] < MIN_EXHAUSTIVE_REFORMULATIONS,
-        "no_content_words": not any(entry["content_words"] for entry in scanned["formulations"]),
-        "budget_exhausted": scanned["budget"]["needed_chars"] > scanned["budget"]["limit_chars"],
-    }
-    reasons = [reason for reason in ABSENCE_REASONS if applies[reason]]
+        reasons = [reason for reason in ABSENCE_REASONS if applies[reason]]
+        next_steps = absence_steps(reasons, results, block, scanned["hits"], scanned["narrowable"])
     return {
         "format": ABSENCE_CHECK_FORMAT,
         "complete": not reasons,
         "reasons": reasons,
-        "next_steps": absence_steps(reasons, results, block, scanned["hits"], scanned.get("narrowable", True)),
-        "reformulations_counted": scanned["reformulations_counted"],
-        "budget": scanned["budget"],
-        "counts": scanned["counts"],
-        "omitted_pages": scanned["omitted_pages"],
-        "absent_terms": scanned["absent_terms"],
-        "formulations": scanned["formulations"],
-        "scopes": scanned["scopes"],
-        "terms": scanned["terms"],
+        "next_steps": next_steps,
+        **{field: None if scanned is None else scanned[field] for field in SCAN_FIELDS},
         "boundary": ABSENCE_BOUNDARY,
     }
 
@@ -3722,6 +3769,45 @@ def search_record(found: dict[str, Any], release: dict[str, Any]) -> dict[str, s
     return {"format": SEARCH_RECORD_FORMAT, "line": line}
 
 
+def report_body(
+    found: dict[str, Any], release: dict[str, Any], selector: dict[str, Any], scope_flags: dict[str, bool]
+) -> dict[str, Any]:
+    """The report a wrapper prints for a search, in the order both wrappers print it (pure).
+
+    `found` is what `search` returned, `release` the release the wrapper
+    verified and `selector` the validated selector. `scope_flags` holds the
+    effective layer options the wrapper offers, in its order (`include_sources`,
+    and `include_history` where history ships).
+    """
+    return {
+        # The query exactly as given: plan_formulations keeps it as formulation 0.
+        "query": found["formulations"][0]["text"],
+        "formulations": found["formulations"],
+        "dropped_formulations": found["dropped_formulations"],
+        "release": release,
+        # The verdict and the record line come first: hosts may cut long output to a preview.
+        "search_record": search_record(found, release),
+        "absence_check": found["absence_check"],
+        "searched_files": found["searched_files"],
+        **scope_flags,
+        "selector": selector,
+        "filtered_out": found["filtered_out"],
+        "matched_concepts": found["matched_concepts"],
+        "expanded_terms": found["expanded_terms"],
+        "facets": found["facets"],
+        "results": found["results"],
+        "reformulation_results": found["reformulation_results"],
+        "coverage": found["coverage"],
+        # Last, so a cut preview still shows everything above.
+        "exhaustive_hits": found["exhaustive_hits"],
+    }
+
+
+def report_json(value: Any) -> str:
+    """A report, or any part of one, as both wrappers print it; the budget of exhaustive_hits is counted in it."""
+    return json.dumps(value, ensure_ascii=False, indent=REPORT_INDENT)
+
+
 def search_loaded(
     loaded: LoadedRelease,
     query: str,
@@ -3743,11 +3829,11 @@ def search_loaded(
     """
     if limit < 1:
         raise ValueError("limit must be at least 1")
-    if exhaustive and not getattr(loaded, "exhaustive", False):
+    if exhaustive and not loaded.exhaustive:
         raise ValueError("an exhaustive search needs a release loaded with exhaustive=True")
     also = list(also)
     kept, dropped = plan_formulations(query, also)
-    if not TOKEN.findall(normalized(query)):
+    if not formulation_key(query):
         raise QueryError("query must contain at least one searchable token")
     rankings = [rank(loaded, query, limit=limit)]
     formulations = [kept[0]]
@@ -3836,19 +3922,13 @@ def search_loaded(
 
     scanned: Optional[dict[str, Any]] = None
     if exhaustive and loaded.scan is not None:
-        contents = [content_words(ranking.terms) for ranking in rankings]
-        concepts = []
-        for entry, words in zip(formulations, contents):
-            runs = concept_runs(entry["text"], loaded.concept_definitions)
-            concepts.append({word: frozenset(key for key, run in runs.items() if word in run) for word in words})
         scanned = exhaustive_scan(
             loaded.scan,
             rankings,
-            [entry["text"] for entry in formulations],
+            formulations,
             loaded.concept_definitions,
             loaded.vocabulary,
             printed_claim_keys(results, block, loaded.path_prefix),
-            counted_reformulations(formulations, contents, concepts),
             exhaustive_budget,
         )
     return {
@@ -3888,7 +3968,6 @@ def search(
     selector: Optional[dict[str, Any]] = None,
     history_shipped: bool = True,
     path_prefix: str = "",
-    word_forms: bool = True,
     exhaustive: bool = False,
     exhaustive_budget: int = EXHAUSTIVE_BUDGET_CHARS,
 ) -> dict[str, Any]:
@@ -3899,8 +3978,7 @@ def search(
     `history_shipped=False` describes a release that carries no history layer,
     such as an exported knowledge skill. `path_prefix` is prepended to every
     path the report names; selectors, scopes and navigation are decided on the
-    release-relative path. `word_forms=False` runs the literal search without
-    the word-form layer, for measurement and tests; the helpers never pass it.
+    release-relative path.
 
     The release is read once and every formulation is ranked over it. The
     query's `matched_concepts`, `expanded_terms`, `facets` (over every match),
@@ -3921,15 +3999,14 @@ def search(
     QueryError for a query without a searchable token, RequestError for
     invalid reformulations and ValueError for an impossible option.
     """
+    # Invalid input is refused before the release is read.
     if limit < 1:
         raise ValueError("limit must be at least 1")
     if include_history and not history_shipped:
         raise ValueError("this release ships no history layer to search")
-    if exhaustive and not word_forms:
-        raise ValueError("an exhaustive search needs the word-form layer")
     also = list(also)
     plan_formulations(query, also)
-    if not TOKEN.findall(normalized(query)):
+    if not formulation_key(query):
         raise QueryError("query must contain at least one searchable token")
     loaded = load(
         root,
@@ -3938,7 +4015,6 @@ def search(
         selector=selector,
         history_shipped=history_shipped,
         path_prefix=path_prefix,
-        word_forms=word_forms,
         exhaustive=exhaustive,
     )
     return search_loaded(

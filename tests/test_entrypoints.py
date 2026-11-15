@@ -23,7 +23,6 @@ from __future__ import annotations
 import ast
 import itertools
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -34,7 +33,7 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from harness import MAINTAIN, QUERY, REPO, build_wiki  # noqa: E402
+from harness import MAINTAIN, QUERY, REPO, build_wiki, python_environment  # noqa: E402
 
 
 TEMPLATES = REPO / "maintain-llm-wiki" / "assets" / "knowledge-skill"
@@ -174,23 +173,13 @@ def reconfigures_output_first(guard: ast.If) -> bool:
     return guarded and switched
 
 
-def subprocess_environment(**overrides: str) -> dict[str, str]:
-    environment = {key: value for key, value in os.environ.items() if not key.upper().startswith("PYTHON")}
-    for key in ("PYTHONHOME", "PYTHONPLATLIBDIR"):
-        if key in os.environ:
-            environment[key] = os.environ[key]
-    environment["PYTHONDONTWRITEBYTECODE"] = "1"
-    environment.update(overrides)
-    return environment
-
-
 def run_isolated(script: Path, *arguments: str, cwd: Path) -> subprocess.CompletedProcess:
     """`-I` drops the script folder from sys.path on every supported Python, 3.9 included."""
     return subprocess.run(
         [sys.executable, "-I", "-B", str(script), *arguments],
         capture_output=True,
         cwd=str(cwd),
-        env=subprocess_environment(),
+        env=python_environment(),
     )
 
 
@@ -352,7 +341,7 @@ class IsolatedAndLegacyCodePageHosts(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, "-B", "-c", f"print({OUTSIDE_CP1252[0]!r})"],
             capture_output=True,
-            env=subprocess_environment(PYTHONIOENCODING="cp1252"),
+            env=python_environment(PYTHONIOENCODING="cp1252"),
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("UnicodeEncodeError", result.stderr.decode("utf-8", errors="replace"))
@@ -368,7 +357,7 @@ class IsolatedAndLegacyCodePageHosts(unittest.TestCase):
                     [sys.executable, "-B", *command, *extra],
                     capture_output=True,
                     cwd=str(self.elsewhere),
-                    env=subprocess_environment(PYTHONIOENCODING="cp1252"),
+                    env=python_environment(PYTHONIOENCODING="cp1252"),
                 )
                 self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
                 text = result.stdout.decode("utf-8")
@@ -398,7 +387,7 @@ class IsolatedAndLegacyCodePageHosts(unittest.TestCase):
                     input=request,
                     capture_output=True,
                     cwd=str(self.elsewhere),
-                    env=subprocess_environment(PYTHONIOENCODING="cp1252"),
+                    env=python_environment(PYTHONIOENCODING="cp1252"),
                 )
                 report = decode_json(self, result)
                 self.assertEqual(

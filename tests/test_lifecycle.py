@@ -36,8 +36,6 @@ Der Arbeitspreis betraegt 7,2 Cent je Kilowattstunde.
 
 def curate_page(wiki: Wiki, source_id: str, source_stem: str, claim_id: str) -> None:
     """Stage and apply one evidence-linked page through the real batch helper."""
-    staging = wiki.root / "staging"
-    staging.mkdir(exist_ok=True)
     page = f"""---
 id: "concept-netzentgelte"
 title: "Netzentgelte"
@@ -68,33 +66,7 @@ sources: {source_id}@page=2
 Der Arbeitspreis betraegt 7,2 Cent je Kilowattstunde.
 <!-- /claim -->
 """
-    # The staged tree mirrors the wiki-relative target path.
-    target_path = "wiki/concepts/netzentgelte.md"
-    staged = staging / target_path
-    staged.parent.mkdir(parents=True, exist_ok=True)
-    staged.write_text(page, encoding="utf-8")
-    plan_file = wiki.root / "page-plan.json"
-    wiki.locked(
-        "page_batch.py",
-        "plan",
-        "--staging-dir",
-        str(staging),
-        "--paths-json",
-        json.dumps([target_path]),
-        "--output",
-        str(plan_file),
-    )
-    plan = json.loads(plan_file.read_text(encoding="utf-8"))
-    wiki.locked(
-        "page_batch.py",
-        "apply",
-        "--staging-dir",
-        str(staging),
-        "--plan-file",
-        str(plan_file),
-        "--expect-plan-sha256",
-        plan["plan_sha256"],
-    )
+    wiki.apply_pages({"wiki/concepts/netzentgelte.md": page})
 
 
 def add_cluster_and_concept(wiki: Wiki) -> None:

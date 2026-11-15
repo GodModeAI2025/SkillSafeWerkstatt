@@ -58,25 +58,39 @@ from html import unescape as _unescape
 from typing import Dict, Iterable, List, Mapping, Optional, Tuple
 
 
-#: Weight of each rule. The literal token is 1.0 and every other rule is
-#: strictly below it, so on otherwise equal pages the literal match ranks first.
-WEIGHTS: Dict[str, float] = {
-    "exact": 1.0,
-    "fold": 0.9,
-    "stem": 0.6,
-    "verb": 0.5,
-    "compound_head": 0.45,
-    "compound_modifier": 0.35,
-    "query_part": 0.35,
-    "typo": 0.3,
+#: Every rule that can make a token count for a term, with its weight and its
+#: class. The literal token is 1.0 and every other rule is strictly below it,
+#: so on otherwise equal pages the literal match ranks first. The classes:
+#:
+#: - word_form: the same word. Only these set a term's rarity.
+#: - heuristic: a disclosed guess of the ranking. It never sets a term's rarity
+#:   while a word form exists; on a page it adds below the word forms (see
+#:   bm25.group_base_score).
+#: - scan: a guess only the exhaustive scan of the search core makes (see the
+#:   rule names there), so a hit through it is checked in the text; its weight
+#:   only orders the forms a report lists.
+RULES: Dict[str, Tuple[float, str]] = {
+    "exact": (1.0, "word_form"),
+    "fold": (0.9, "word_form"),
+    "stem": (0.6, "word_form"),
+    "verb": (0.5, "word_form"),
+    "compound_head": (0.45, "heuristic"),
+    "compound_modifier": (0.35, "heuristic"),
+    "query_part": (0.35, "heuristic"),
+    "typo": (0.3, "heuristic"),
+    "hyphen_part": (0.35, "scan"),
+    "ending": (0.35, "scan"),
+    "verb_ending": (0.35, "scan"),
+    "footnote_mark": (0.35, "scan"),
+    "suspended_compound": (0.35, "scan"),
+    "short_part": (0.35, "scan"),
 }
 
-#: Rules that find the same word. Only these set a term's rarity.
-WORD_FORM_RULES = frozenset({"exact", "fold", "stem", "verb"})
+#: Weight of each rule, from RULES.
+WEIGHTS: Dict[str, float] = {rule: weight for rule, (weight, _) in RULES.items()}
 
-#: Rules that are heuristics. They never set a term's rarity while a word form
-#: exists; on a page they add below the word forms (see bm25.group_base_score).
-HEURISTIC_RULES = frozenset({"compound_head", "compound_modifier", "query_part", "typo"})
+#: Rules that find the same word, from RULES. Only these set a term's rarity.
+WORD_FORM_RULES = frozenset(rule for rule, (_, kind) in RULES.items() if kind == "word_form")
 
 #: Shortest stem an inflection ending may leave.
 MIN_STEM = 4
@@ -130,7 +144,14 @@ _SUPERSCRIPT = re.compile(r"(?<=[^\W_])\^([^\s^]{1,16})\^")
 #: Emphasis around letters or digits only, with * (CommonMark allows no emphasis with _ inside a word).
 _EMPHASIS = re.compile(r"(?<!\*)(\*{1,3})([^\W_]+)\1(?!\*)")
 
-#: Closed word classes, written as people write them; `closed_class` normalises them.
+#: The stopwords, written as people write them: left out of a query's terms
+#: unless nothing else is left, and never a compound part.
+STOPWORDS = """
+aber als am an auch auf aus bei das der die ein eine einer eines für hat im in ist mit oder
+sich sind und von was wie zu zum zur
+a an and are as at be by for from how in is of on or that the to what with
+"""
+#: Closed word classes, written as people write them.
 CLOSED_CLASS_DE = """
 der die das den dem des ein eine einer eines einem einen kein keine keinen keinem keiner
 ich du er sie es wir ihr man mich mir dich dir ihn ihm uns euch sich
@@ -150,11 +171,53 @@ who whom whose when where why which do does did can could would should
 if we you he she they them this these those there not was were been has have had
 our your their my than
 """
+#: Prepositions, contractions, conjunctions, question words and particles the
+#: closed class lacks ("per", "pro", "je", "laut", "gemäß", "wofür",
+#: "wieviel", "bzw", "noch", "eigentlich", "nur"), the degree words of a
+#: question with "wie" ("Wie hoch ...?", "Wie viel ...?", "Wie lange ...?",
+#: "Wie oft ...?"), and the light verbs of a question ("Gibt es ...?", "Wie
+#: geht ...?", "Was gilt ...?", "Was passiert ...?"), which name no topic. A
+#: passage need not hold them; the scan only. The ranking and the precision
+#: gate never use them.
+SCAN_FUNCTION_WORDS = """
+ab ans aufs außer binnen durchs fürs gegenüber hinter hinters innerhalb außerhalb neben samt statt
+trotz übers ums unters vors während wegen zwischen
+per pro je laut lt gemäß gem bezüglich bzgl hinsichtlich mittels anhand zwecks infolge aufgrund seitens
+dank entlang anstatt nebst mitsamt oberhalb unterhalb jenseits
+bzw beziehungsweise sowie sowohl weder
+wofür womit worauf wozu woran worin worüber wovon wodurch wonach wogegen woraus wobei wovor
+wieviel wieviele viel viele vielen weswegen inwiefern hoch lange oft häufig teuer schnell
+noch schon bereits eigentlich überhaupt etwa eben mal ja bitte wohl nur sogar erst
+about after before between into over under via within without per regarding concerning versus vs
+gibt gibts geben gab gegeben geht gehen ging gegangen gilt gelten galt gegolten passiert passieren
+funktioniert funktionieren steht stehen
+get gets got happen happens happened exist exists existed
+"""
+
+#: The function-word tiers, from the narrowest to the widest: (tier, its own
+#: words). A tier holds its own words and every word of the tiers before it.
+#:
+#: - stopword: STOPWORDS.
+#: - closed: matches only literally. Closed-class words (articles, pronouns,
+#:   prepositions, conjunctions, auxiliary and modal verbs, question words,
+#:   negation) are never stemmed, split, corrected, or taken as a form of a
+#:   content word.
+#: - scan: a word a passage never has to hold for the exhaustive scan.
+FUNCTION_WORD_TIERS: Tuple[Tuple[str, str], ...] = (
+    ("stopword", STOPWORDS),
+    ("closed", CLOSED_CLASS_DE + CLOSED_CLASS_EN),
+    ("scan", SCAN_FUNCTION_WORDS),
+)
 
 
-def closed_class(normalise) -> frozenset:
-    """The closed-class words, normalised with the caller's token normaliser."""
-    return frozenset(normalise(word) for word in (CLOSED_CLASS_DE + CLOSED_CLASS_EN).split())
+def function_words(normalise) -> Dict[str, frozenset]:
+    """Each tier of FUNCTION_WORD_TIERS with the words of the tiers before it, normalised by `normalise`."""
+    tiers: Dict[str, frozenset] = {}
+    words: frozenset = frozenset()
+    for tier, own in FUNCTION_WORD_TIERS:
+        words = words.union(normalise(word) for word in own.split())
+        tiers[tier] = words
+    return tiers
 
 
 def _join_line_break(match: "re.Match[str]") -> str:
@@ -620,16 +683,16 @@ def _member_order(member: Member) -> Tuple[float, str]:
     return (-member[2], member[0])
 
 
-def same_word(left: str, right: str, closed: Optional[Iterable[str]] = None) -> bool:
+def same_word(left: str, right: str, closed: Iterable[str]) -> bool:
     """True when two normalised tokens are the same word by spelling or inflection.
 
-    Closed-class words are only the same word as themselves. Used to match
-    confirmed concept terms against a query, where compound parts and typo
-    corrections never apply.
+    Closed-class words (`closed`) are only the same word as themselves. Used
+    to match confirmed concept terms against a query, where compound parts
+    and typo corrections never apply.
     """
     if left == right:
         return True
-    if closed is not None and (left in closed or right in closed):
+    if left in closed or right in closed:
         return False
     left_spelling, right_spelling = spelling_key(left), spelling_key(right)
     return left_spelling == right_spelling or stem(left_spelling) == stem(right_spelling)

@@ -342,7 +342,10 @@ def common_threshold(content_pages: int) -> int:
 
 
 def alias_review(
-    target: Path, wiki_files: list[Path], concept_definitions: dict[str, dict[str, str]]
+    target: Path,
+    wiki_files: list[Path],
+    concept_definitions: dict[str, dict[str, str]],
+    parsed: Optional[dict[Path, tuple[dict[str, Any], str]]] = None,
 ) -> dict[str, Any]:
     """Alias words that many content pages use, and page aliases given to more than one page.
 
@@ -351,14 +354,23 @@ def alias_review(
     questions, and an alias on several pages has no single page that should
     rank first. Words are counted with the search's own tokenization and word
     forms (exact, fold, stem, verb), never with compound or typo heuristics.
+
+    `parsed` holds the frontmatter and body main() already read for each page.
+    A page missing from it, or one main() could not parse (no data and no
+    body), is read here exactly as the search reads it, so a page the search
+    still ranks without frontmatter counts as well.
     """
     content: list[tuple[str, dict[str, Any], set[str]]] = []
     for path in wiki_files:
         relative = path.relative_to(target).as_posix()
         if search_core.is_navigation(relative):
             continue
+        data, body = (parsed or {}).get(path, ({}, ""))
         try:
-            document = search_core.read_document(path, relative, forms=True)
+            if data or body:
+                document = search_core.parsed_document(data, body, path.stem)
+            else:
+                document = search_core.read_document(path, relative)
         except (FrontmatterError, ValueError, OSError):
             continue  # Already reported as a page error.
         own = set().union(*(words for field, words in document["fields"].items() if field != "aliases"))
@@ -370,10 +382,9 @@ def alias_review(
     shared: dict[str, dict[str, Any]] = {}
     for relative, data, _own in content:
         for alias in search_core.alias_values(data.get("aliases")):
-            for word in search_core.tokens(alias, drop_stopwords=False, forms=True):
-                if word not in search_core.FORM_STOPWORDS and len(word) > 1:
-                    checked.append((word, alias, "page", relative))
-            key = " ".join(search_core.tokens(alias, drop_stopwords=False))
+            for word in search_core.tokens(alias):
+                checked.append((word, alias, "page", relative))
+            key = search_core.formulation_key(alias)
             if key:
                 entry = shared.setdefault(key, {"alias": alias, "pages": set()})
                 entry["pages"].add(relative)
@@ -381,14 +392,12 @@ def alias_review(
         if definition.get("status") != "active":
             continue
         for alias in split_pipe(definition.get("aliases", "")):
-            words = search_core.tokens(alias, drop_stopwords=False, forms=True)
+            words = search_core.tokens(alias, drop_stopwords=False)
             # A concept alias of several words matches only as the whole phrase.
             if len(words) == 1 and words[0] not in search_core.FORM_STOPWORDS and len(words[0]) > 1:
                 checked.append((words[0], alias, "concept", f"schema/CONCEPTS.md#{concept_id}"))
 
-    members = search_core.layer_members(
-        sorted({word for word, _, _, _ in checked}), [own for _, _, own in content], True
-    )
+    members = search_core.layer_members(sorted({word for word, _, _, _ in checked}), [own for _, _, own in content])
     common: dict[tuple[str, str], dict[str, Any]] = {}
     for word, alias, source, where in checked:
         if (word, where) in common:
@@ -784,14 +793,14 @@ def main() -> int:
     ]
     page_ids: dict[str, Path] = {}
     page_data: dict[Path, dict[str, Any]] = {}
-    page_bodies: dict[Path, str] = {}
+    parsed_pages: dict[Path, tuple[dict[str, Any], str]] = {}
     claims_by_id: dict[str, dict[str, Any]] = {}
     all_claims: list[dict[str, Any]] = []
 
     for path in wiki_files:
         data, body = parse_frontmatter(path, errors)
         page_data[path] = data
-        page_bodies[path] = body
+        parsed_pages[path] = (data, body)
         for key in PAGE_KEYS:
             if key not in data:
                 errors.append(f"{path}: missing page field {key}")
@@ -1076,7 +1085,7 @@ def main() -> int:
                 )
             ),
             # For confirmation by the user; never an error or a warning.
-            "alias_review": alias_review(target, wiki_files, concept_definitions),
+            "alias_review": alias_review(target, wiki_files, concept_definitions, parsed_pages),
         },
     }
     if not args.check_only:
