@@ -511,7 +511,7 @@ class ExportRefusesABrokenSkill(unittest.TestCase):
         """SKILL.md routes Windows and quoted text through --request -; that path must run too."""
         core = self.skill_copy / "scripts" / "search_core.py"
         text = core.read_text(encoding="utf-8")
-        anchor = "def request_from_stdin(stream: Any) -> dict[str, Any]:\n"
+        anchor = "def request_from_stdin(stream: Any, *, verbatim: bool = False) -> dict[str, Any]:\n"
         self.assertIn(anchor, text)
         broken = anchor + '    raise RuntimeError("request path is broken")\n'
         core.write_text(text.replace(anchor, broken, 1), encoding="utf-8")

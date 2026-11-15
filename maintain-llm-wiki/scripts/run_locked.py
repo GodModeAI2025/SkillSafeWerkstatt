@@ -15,6 +15,7 @@ HELPERS = {
     "apply_identity.py",
     "build_graph.py",
     "claim_id.py",
+    "findability_questions.py",
     "frontmatter_actions.py",
     "init_wiki.py",
     "inventory_wiki.py",

@@ -137,6 +137,15 @@ class RequestParsing(unittest.TestCase):
         self.assertEqual(search_core.read_request(b'{"query": "Was gilt? Wann?"}')["query"], "Was gilt? Wann?")
         self.assertEqual(search_core.read_request(b'{"query": "\\u00a7 19?"}')["query"], "§ 19?")
         self.assertEqual(search_core.read_request(b'{"query": "\\u00d6kostrom"}')["query"], "Ökostrom")
+        # Verbatim wording (findability questions) sends a real "?" before a letter as ?;
+        # a search request refuses it either way, and a literal one stays refused.
+        escaped = b'{"query": "k\\u00fcndigen\\u003fdanke"}'
+        self.assertEqual(search_core.read_request(escaped, verbatim=True)["query"], "kündigen?danke")
+        for raw, verbatim in ((escaped, False), (b'{"query": "K?ndigung"}', True)):
+            with self.subTest(raw=raw, verbatim=verbatim):
+                with self.assertRaises(search_core.RequestError) as caught:
+                    search_core.read_request(raw, verbatim=verbatim)
+                self.assertIn("looks re-encoded on the way", str(caught.exception))
 
     def test_shape_errors_name_the_offending_key(self) -> None:
         cases = {

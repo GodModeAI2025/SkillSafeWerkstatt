@@ -111,6 +111,7 @@ Diese Trennung verhindert, dass eine normale Wissensabfrage versehentlich Dateie
 |   |-- releases.jsonl         unveränderliche Release-Einträge
 |   |-- quality-reviews.jsonl  tatsächlich durchgeführte Reviews
 |   |-- quality-status.json    veröffentlichter Qualitätsstatus
+|   |-- findability-questions.jsonl  optionale Auffindbarkeitsfragen; nur für Pfleger, nie im Release
 |   |-- manifest.json          Hash-Grenze des aktuellen Releases
 |   `-- history/
 |       `-- <snapshot-id>/     Wiederherstellungspunkte mit eigenem Manifest
@@ -152,6 +153,8 @@ Die Initialisierung baut das vollständige Wiki zunächst außerhalb des Zielver
 5. Die Markdown-Fassung wird mit einer stabilen `source_id` unter `sources/` registriert; Quelle und Registereintrag werden gemeinsam veröffentlicht oder gemeinsam verworfen.
 6. Wenn Originalbytes verfügbar sind, kann ihr Hash ermittelt werden; ein lokaler absoluter Dateipfad wird trotzdem nicht im Wiki gespeichert.
 7. Erst danach wird der Inhalt in die gepflegte Wissensschicht eingeordnet und synthetisiert.
+
+Seiten- und Foliengrenzen stehen als `<!-- page: N -->` beziehungsweise `<!-- slide: N -->` auf einer eigenen Zeile. Die Vorprüfung warnt, wenn eine solche Marke mitten in einer Zeile steht, denn dort findet sie weder die Leseansicht noch die Locator-Prüfung. Gängige Konverter schreiben diese Marken nicht von sich aus; der Skill wandelt deshalb seitenweise um oder ersetzt die Seitenumbrüche des Konverters durch die Markenzeile.
 
 `sources/` enthält damit das **aus dem Original erkannte, treue Markdown**, nicht zwingend die Originaldatei selbst. Das Original darf außerhalb des Wikis verbleiben. Unvollständig lesbares Material wird als `partial` gekennzeichnet und nicht als vollständig extrahiert ausgegeben.
 
@@ -197,7 +200,7 @@ Materielle Aussagen auf aktiven Wiki-Seiten werden in Claim-Blöcken geführt. E
 - eine oder mehrere `source_id@locator`-Angaben;
 - optional Beziehungen zu ersetzten oder widersprechenden Claims.
 
-Der Locator verweist auf eine nachvollziehbare Stelle wie Seite, Folie, Tabellenblatt, Abschnitt, Überschrift, Absatz oder Zeitmarke in der registrierten Markdown-Quelle.
+Für Locator gibt es kanonische Formen, die der Lint gegen die registrierte Extraktion auflöst: `page=N` oder `page=A-B` (Seitenmarken), `slide=N` (Folienmarken), `section=…`, `heading=…` oder `sheet=…` (eine Überschrift der Extraktion; `section=Preise` passt auf „§ 3 Preise“, wenn nur eine Überschrift so heißt), `timestamp=…` (eine Zeitmarke wie `00:12:30` im Text oder in einer Überschrift) und `document`. Löst ein solcher Locator nicht auf, meldet der Lint eine Warnung mit Claim, Locator und Grund. Gründe sind etwa Seite 7 in einer vierseitigen Extraktion, eine Seitenangabe in einer Extraktion ohne Seitenmarken, ein umgedrehter Bereich oder eine Überschrift, die es nicht oder mehrfach gibt. Hat eine Extraktion gar keine Seitenmarken, fasst der Lint alle Seitenangaben auf diese Quelle in einer Warnung zusammen und nennt die Claims in der Statistik. Andere Schreibweisen wie `S. 12` bleiben zulässig, werden aber nur gezählt, nicht geprüft. Eine unbekannte Quell-ID bleibt ein Fehler. Keine dieser Warnungen blockiert einen Release. In den HTML-Leseansichten springt ein Beleg mit `page=N` jetzt auf die Seitenmarke.
 
 Eine neuere Quelle macht eine ältere Aussage nicht automatisch ungültig. Ersetzung, Gültigkeitsbereich und Widerspruch werden ausdrücklich dokumentiert. Bei einem Konflikt bleiben beide belegten Positionen sichtbar, solange keine belastbare Auflösung vorliegt.
 
@@ -210,6 +213,8 @@ Cluster und Begriffswelten sind bewusst getrennt:
 **Begriffswelten** bilden kontrolliertes Vokabular für Suche und Terminologie. Sie enthalten einen bevorzugten Begriff, Definitionen, Aliase und optionale Beziehungen zu übergeordneten oder verwandten Begriffen. Nur sie erweitern eine Anfrage um andere Wörter; Formen desselben Wortes, Kompositumteile und Tippfehler behandelt die Suche selbst (Abschnitt 5.4). Jede neue `CONCEPTS.md` nennt diese Regel. Steht in einer bestehenden `CONCEPTS.md` noch der alte Satz „Search may expand a query only through confirmed preferred terms and aliases.", meldet der Lint eine Warnung mit dem neuen Wortlaut. Sie blockiert keinen Release.
 
 Seiten-Aliase in der Sprache der Nutzer folgen drei Regeln: Wörter der Nutzer statt Wörter des Wikis (keine Wortformen), eindeutig im Fachgebiet, ein Alias auf genau einer Seite und vom Anwender bestätigt. Lint legt unter `stats.alias_review` häufige Alias-Wörter (in mindestens 10 % der Inhaltsseiten, mindestens 3) und mehrfach vergebene Aliase zur Bestätigung vor; das ist kein Fehler und blockiert keinen Release.
+
+Jede Begriffswelt beginnt mit einer Überschrift zweiter Ebene, die ihre stabile ID trägt. Jede andere Überschrift, die mit `#` beginnt, beendet die laufende Begriffswelt; Felder darunter gehören zu keiner. Bisher hängte eine Zwischenüberschrift wie „## Hinweise“ ihre Felder still an die Begriffswelt darüber, und ein `- Status: draft` darunter nahm diese Begriffswelt aus der Suche. Steht ein solches Feld unter einer fremden Überschrift, meldet der Lint einen Fehler mit Zeilennummer; erklärende Abschnitte ohne Felder bleiben erlaubt, ebenso Listenpunkte mit anderen Schlüsseln wie `- Hinweis: …`. Zeilen in Codeblöcken (mit Backticks oder Tilden) und in mehrzeiligen HTML-Kommentaren zählen nicht mit. Sollte eine Überschrift wie „## Preisbestandteile“ eine neue Begriffswelt beginnen, braucht sie eine stabile ID in Kleinbuchstaben („## preisbestandteile“); die Meldung sagt das, statt die Felder in die Begriffswelt darüber verschieben zu lassen, wo sie deren Begriffe überschreiben würden. Für `CLUSTERS.md` gilt dieselbe Regel. Lint, Suche, Graph und jeder neu exportierte Wissens-Skill lesen beide Dateien mit demselben Code; bereits exportierte Wissens-Skills lesen bis zum nächsten Export wie bisher.
 
 Eine Änderung der Begriffswelt verschiebt keine Datei. Eine bestätigte Änderung des Primär-Clusters kann dagegen eine Seitenverschiebung auslösen. Der Skill schlägt Cluster und Begriffe mit Abgrenzung, Überlappungen und Beispielen vor und lässt den Anwender sie bestätigen, umbenennen, zusammenführen, teilen, neu einfärben, verknüpfen oder ablehnen.
 
@@ -344,7 +349,7 @@ Ein Restore löscht keine aktuelle Datei nur deshalb, weil diese in einem älter
 Der Skill unterscheidet drei Dinge:
 
 1. **Lint:** deterministische Strukturprüfung bei jedem Release.
-2. **Qualitätsreview:** semantische Prüfung von Belegen, Gültigkeit, Dubletten, offenen Fragen, Sprache, Seitengrenzen, Clustern und Begriffswelten.
+2. **Qualitätsreview:** semantische Prüfung von Belegen, Gültigkeit, Dubletten, offenen Fragen, Sprache, Seitengrenzen, Clustern und Begriffswelten, Quellenabdeckung und, falls vorhanden, Auffindbarkeitsfragen (Abschnitt 4.26).
 3. **Cleaning-Review:** optionale Suche nach Konsolidierungs-, Entfernungs- oder Reorganisationskandidaten.
 
 Ein fälliges Cleaning ist nur eine Erinnerung. Es löscht oder verändert nichts automatisch. Der Skill beginnt mit einer Vorschau und fragt bei bedeutungsändernden oder destruktiven Vorschlägen nach Bestätigung.
@@ -405,6 +410,8 @@ Wird derselbe erfolgreiche Release-Auftrag nach einem Timeout erneut aufgerufen,
 
 Leser akzeptieren ausschließlich einen durch dieses Manifest verifizierten Stand. Dadurch werden halbfertige Pflegezustände und Mischstände nicht als gültiges Wiki ausgegeben.
 
+Die Release-Ausgabe enthält die Lint-Statistiken, darunter die Quellenabdeckung; in `meta/quality-status.json` steht sie nicht.
+
 ### 4.16 Eingefrorener Wissens-Skill
 
 Der Pflege-Skill kann einen verifizierten Release als eigenständigen Wissens-Skill exportieren. Dieser Export:
@@ -420,7 +427,7 @@ Der Pflege-Skill kann einen verifizierten Release als eigenständigen Wissens-Sk
 - enthält keine absoluten Quellpfade, Tokens oder transienten Locks;
 - wird als Skill-Ordner und `.skill`-Paket erzeugt.
 
-Soll der Inhalt aktualisiert werden, wird das kanonische Wiki gepflegt und veröffentlicht. Danach wird ein neuer eingefrorener Skill-Abzug erstellt; der alte Export wird nicht direkt bearbeitet.
+Soll der Inhalt aktualisiert werden, wird das kanonische Wiki gepflegt und veröffentlicht. Danach wird ein neuer eingefrorener Skill-Abzug erstellt; der alte Export wird nicht direkt bearbeitet. Auffindbarkeitsfragen liegen außerhalb des Releases und kommen nie in einen Export.
 
 **Skalare Aliase:** Neu exportierte Wissens-Skills lesen einen einzelnen Wert `aliases: Foo` als einen Alias, wie der Lese-Skill. Bereits installierte Exporte ignorieren ihn, bis sie neu exportiert werden. Für Wikis, die Aliase als Liste schreiben, ändert sich die Rangliste nicht.
 
@@ -586,6 +593,12 @@ Der Skill kann seine vollständige Funktionsoberfläche maschinenlesbar beschrei
 - verfügbare Filteroperatoren.
 
 Der Katalog beschreibt Fähigkeiten, erteilt aber keine Berechtigung. Bestätigungs- und Sicherheitsregeln bleiben unverändert.
+
+### 4.26 Quellenabdeckung und Auffindbarkeitsfragen
+
+**Quellenabdeckung.** Was nie in einen Claim überführt wurde, findet die Wiki-Suche nie. Der Lint zählt deshalb unter `stats.source_coverage`, welche registrierten Quellen und welche ihrer Einheiten kein aktiver oder strittiger Claim zitiert. Einheiten sind Seiten oder Folien, wenn die Extraktion Marken hat, sonst Abschnitte (je Überschrift), sonst das ganze Dokument. Der eigene Text einer Titelüberschrift, die alle Abschnitte umspannt, ist keine Einheit, weil nur ein breiter Beleg ihn nennen könnte. Ein Locator, der eine mehrseitige Quelle als Ganzes nennt (`document` oder die Titelüberschrift), zählt als breiter Beleg und deckt keine Einheit ab. Bewertet werden Quellen mit Status `active` oder `partial`. Die Liste nennt zuerst ganz unzitierte Quellen, dann teilweise zitierte, höchstens 50, je höchstens 20 Einheiten; aufeinanderfolgende Seiten erscheinen als Bereich (`page=4-9`). Für den Vergleich vor dem Release führt die Statistik jede zitierte Quelle mit ihren Zahlen. Das ist eine Statistik für den Pfleger, keine Warnung. Hintergrundmaterial oder eine frisch übernommene Sammlung bleibt zu Recht unzitiert, und eine Warnung, die sich nie abstellen lässt, stumpft ab. Die Statistik blockiert keinen Release. Sie steht in der Release-Ausgabe, nie in `quality-status.json` oder in der Qualitätszeile für Leser. Vor dem Release vergleicht der Skill sie mit der Ausgangsprüfung, legt neu unzitierte Quellen dem Anwender vor und hält dessen Entscheidung in `meta/changes.md` fest. Auf dem Test-Wiki meldet sie 2 unzitierte Quellen und eine unzitierte Seite einer dritten; dort liegen 7 der 8 Fakten, die nur in Quellen stehen. Der achte steht auf einer Seite, die ein anderer Claim zitiert: Die Abdeckung ist nur so fein wie die Locator.
+
+**Auffindbarkeitsfragen (optional).** Ob die Wörter echter Nutzer einen Fakt noch erreichen, misst eine kleine Sammlung von höchstens 200 Fragen in `meta/findability-questions.jsonl`. Der Skill nimmt eine Frage nur auf, wenn Eigentümer oder Nutzer sie wörtlich geliefert haben, nie vom Agenten formuliert: Fragen, die der Agent mit offener Seite schreibt, bestehen immer. Prüfen kann das Werkzeug diese Zusicherung nicht. Jede Frage zielt auf einen Claim, nicht nur auf eine Seite; sonst bliebe sie grün, nachdem der Fakt gelöscht wurde. Der Skill nimmt eine Frage nur mit bestätigtem Ziel-Claim auf, übernimmt Tippfehler und Umgangssprache unverändert, übernimmt aus einer längeren Nachricht nur ganze Sätze und speichert als Autor nur die Rolle (`owner` oder `user`). Den Wortlaut bekommt das Werkzeug über die Standardeingabe; ein echtes „?“ direkt vor einem Buchstaben („kündigen?danke“) schickt der Agent als `\u003f`, sonst hält die Prüfung es für ein unterwegs beschädigtes Zeichen. `findability_questions.py check` stellt jede Frage mit dem Suchkern des Lese-Skills auf den Arbeitsdateien und meldet, ob ihr Claim unter den ersten 12 Treffern zurückkommt. Möglich sind `found`, `found_page_only`, `not_found`, `target_missing` und `target_inactive`. Vor dem Release vergleicht der Skill mit der Ausgangsprüfung und legt verlorene Fragen dem Anwender vor; blockieren kann eine Frage den Release nicht. Die Datei liegt im Wiki-Ordner, aber außerhalb der Release-Grenze: Sie wird nicht gehasht, nicht verifiziert, nicht in den Standard-Snapshot aufgenommen und nie exportiert, und der Lese-Skill liest sie nicht. Vertraulich ist sie damit nicht: Wer den Wiki-Ordner lesen kann, kann auch sie lesen.
 
 ## 5. Der Lese-Skill `query-llm-wiki`
 
@@ -789,12 +802,12 @@ Für die Suche nennt der Katalog alle Parameter, die der Helfer annimmt, auch `-
 ### Bestehendes Wiki erweitern
 
 1. Der Pflege-Skill erwirbt den Lock, bevor er Inhalte untersucht oder konvertiert.
-2. Er prüft bestehende Regeln, Profil, Index, Cluster, Begriffe und relevante Seiten.
+2. Er prüft bestehende Regeln, Profil, Index, Cluster, Begriffe und relevante Seiten; vorhandene Auffindbarkeitsfragen werden als Ausgangsstand geprüft.
 3. Neue Quellen werden registriert; Duplikate werden übersprungen.
 4. Vor direkten Änderungen entsteht ein Snapshot.
 5. Inhalte werden inkrementell ergänzt, Konflikte und offene Fragen werden dokumentiert.
 6. Betroffene Navigation und Graphansichten werden aktualisiert.
-7. Lint und Release veröffentlichen genau einen neuen konsistenten Stand.
+7. Lint und Release veröffentlichen genau einen neuen konsistenten Stand. Vor dem Release legt der Skill neue Locator-Warnungen, neu unzitierte Quellen und verlorene Auffindbarkeitsfragen vor.
 8. Erst danach wird der Lock freigegeben.
 
 ### Metadaten bereinigen
@@ -976,6 +989,9 @@ Beispiele für den Pflege-Skill:
 - „Erzeuge aus dem aktuellen Release einen unveränderlichen Wissens-Skill.“
 - „Exportiere das Wiki als Open-Knowledge-Format-Bündel, damit ein anderes Team damit arbeiten kann.“
 - „Wie kompatibel ist mein Wiki zum Open Knowledge Format, und was ginge beim Export verloren?“
+- „Welche Quellen sind im Wiki noch gar nicht ausgewertet?“
+- „Ein Kunde hat gefragt: ‚…‘. Das soll das Wiki immer finden.“
+- „Prüfe vor dem Release, ob unsere Auffindbarkeitsfragen noch funktionieren.“
 
 Beispiele für den Lese-Skill:
 
@@ -1003,7 +1019,7 @@ Beispiele für den Lese-Skill:
 | Restore anwenden | Bestätigte Dateien wiederherstellen | Recovery-Snapshot, Hash-Schutz |
 | Seite verschieben | Pfad ändern und interne Links nachführen | Vorschau-Hash, Bestätigung, Snapshot |
 | Sprachmigration planen | Vollständige Auswirkung ermitteln | Keine Teilmigration |
-| Lint | Struktur und Verträge prüfen; Alias-Statistik zur Bestätigung | Nur sichere deterministische Reparaturen |
+| Lint | Struktur und Verträge prüfen; Locator-Auflösung, Alias-Statistik zur Bestätigung, Quellenabdeckung als Statistik | Nur sichere deterministische Reparaturen |
 | Graph bauen | Graphdaten, HTML-Leseansichten und Gruppenübersichten erzeugen | Nur abgeleitete Dateien |
 | Review aufzeichnen | Tatsächliche Qualitäts-/Cleaning-Prüfung dokumentieren | Kein erfundener Zeitstempel |
 | Release | Version, Protokoll, Qualität und Manifest veröffentlichen | Strikter Lint, Manifest zuletzt |
@@ -1016,6 +1032,9 @@ Beispiele für den Lese-Skill:
 | Beobachtung registrieren | Ereigniswissen als Quelle aufnehmen | Akteur und Anlass sind Pflicht, sonst Ablehnung |
 | Sammlung übernehmen (Plan) | Bestehende Markdown-Sammlung berichten | Read-only, Titel aus dem Dokument, Blocker und Hinweise |
 | Sammlung übernehmen (Apply) | Bestätigte Dateien als Quellen registrieren | Hash-Bindung, Snapshot, keine Seite unter `wiki/` |
+| Auffindbarkeitsfrage aufnehmen | Wörtliche Frage von Eigentümer oder Nutzer mit Ziel-Claim | Nur mit Bestätigung des Ziels, nie vom Agenten formuliert, außerhalb des Releases |
+| Auffindbarkeitsfrage entfernen | Eine Frage löschen | Bestätigung, Snapshot der Datei |
+| Auffindbarkeit prüfen | Jede Frage mit dem Suchkern des Lese-Skills stellen | Nur Bericht, blockiert keinen Release |
 
 ## 12. Funktionskatalog des Lese-Skills
 
@@ -1066,6 +1085,7 @@ Die Skills sind absichtlich konservativ:
 - Metadatenfilter grenzen Suchmengen ein, beweisen aber weder Wahrheit noch Vollständigkeit.
 - Die Suche ist lexikalisch: Sie findet Wörter und ihre regelmäßigen Formen, keine Bedeutungen. Synonyme, Umschreibungen und andere Sprachen erreichen die Suche nur über Seiten-Aliase, Begriffswelten und die Umformulierungen des Agenten; Treffer nur aus Umformulierungen sind so gut wie diese und werden getrennt ausgewiesen. Ein leeres Ergebnis beweist nicht, dass ein Thema fehlt; auch die vollständige Prüfung mit `--exhaustive` zeigt nur, dass keine Passage die geprüften Wörter zusammen enthält. Kompositumteile und Tippfehlerkorrekturen sind Heuristiken und können danebenliegen; jeder Treffer nennt deshalb seine Regel. Gemessene Lücken und ein Stufenplan ohne Embedding-Suche stehen in [docs/bedeutungssuche-und-vollstaendigkeit.md](docs/bedeutungssuche-und-vollstaendigkeit.md).
 - Automatische Strukturprüfungen ersetzen kein fachliches Review durch einen zuständigen Menschen.
+- Die Quellenabdeckung ist nur so fein wie die Locator: Ein Abschnitt auf einer Seite, die ein anderer Claim zitiert, gilt als abgedeckt, Text vor der ersten Seitenmarke zählt zu keiner Einheit, und eine zitierte Seite beweist nicht, dass jeder Fakt darauf übernommen wurde. Auffindbarkeitsfragen messen nur die gespeicherten Formulierungen.
 - Die Erkennung einer synchronisierten Ablage ist eine Heuristik auf Pfadnamen und Umgebungsvariablen; es gibt keine unterstützte Schnittstelle zum Zustand eines Sync-Clients.
 - Ob eine veröffentlichte Datei die Ablage erreicht hat, kann der Skill nicht feststellen — nur prüfen und warnen.
 - Die Erkennung datenloser Dateien ist plattformabhängig und liefert dort, wo kein Signal existiert, ausdrücklich „unbekannt" statt einer Vermutung.

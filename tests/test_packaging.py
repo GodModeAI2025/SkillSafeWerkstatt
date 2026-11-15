@@ -257,7 +257,11 @@ class ExportableLibraries(unittest.TestCase):
         for skill in SKILLS:
             with self.subTest(skill=skill):
                 core = REPO / skill / "scripts" / "search_core.py"
-                self.assertEqual(local_imports(core) & {"verify_release", "verify_knowledge", "portable_io", "navigation"}, set())
+                self.assertEqual(
+                    local_imports(core)
+                    & {"verify_release", "verify_knowledge", "portable_io", "navigation", "source_coverage"},
+                    set(),
+                )
                 self.assertEqual(self.write_calls(core), [])
 
 
@@ -437,6 +441,8 @@ class Documentation(unittest.TestCase):
             "Open Knowledge Format",
             "storage_path_prefix",
             "hydration_required",
+            "Quellenabdeckung",
+            "Auffindbarkeitsfrage",
         ):
             with self.subTest(topic=topic):
                 self.assertIn(topic, readme)

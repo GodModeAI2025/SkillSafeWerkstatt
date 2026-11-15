@@ -88,8 +88,14 @@ NUMBER_UNITS = (
 NUMBER_UNIT = re.compile(r"(?<![\w-])(\d+)(" + "|".join(NUMBER_UNITS) + r")(?![^\W_])")
 #: Where `number_spelling` can change anything: a separator before a group of three digits, or a unit after a digit.
 NUMBER_SHAPE = re.compile(r"\d(?:[. '’]\d{3}(?!\d)|(?:" + "|".join(NUMBER_UNITS) + r")(?![^\W_]))")
+#: A definition heading of schema/CONCEPTS.md or schema/CLUSTERS.md: level two with a stable lowercase ID.
 CONCEPT_HEADING = re.compile(r"^##\s+([a-z0-9]+(?:-[a-z0-9]+)*)\s*$")
+#: A `- Field: value` line of a definition.
 CONCEPT_FIELD = re.compile(r"^-\s+([A-Za-z]+):\s*(.*)$")
+#: Any Markdown ATX heading line (unstripped): at most three spaces, one to six '#', then a space or the line end.
+SCHEMA_HEADING = re.compile(r"^ {0,3}#{1,6}(?:\s|$)")
+#: The opening line of a fenced block in a schema file, after stripping: three or more backticks or tildes.
+SCHEMA_FENCE = re.compile(r"^(`{3,}|~{3,})")
 CLAIM_BLOCK = re.compile(
     r"<!--\s*claim\s*\n(?P<meta>.*?)-->\s*(?P<text>.*?)\s*<!--\s*/claim\s*-->",
     re.DOTALL | re.IGNORECASE,
@@ -493,28 +499,73 @@ def split_pipe(value: str) -> list[str]:
     return [item.strip() for item in value.split("|") if item.strip()]
 
 
+def schema_definitions(text: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Definitions of CONCEPTS.md or CLUSTERS.md in file order, and the field lines that belong to none (pure).
+
+    A level-two heading with a stable ID starts a definition and its `- Field: value`
+    lines follow. Any other ATX heading ends the open definition, so a section such as
+    `## Notes` can never pass its fields to the definition above it. Fenced blocks
+    (three or more backticks or tildes, closed only by a run of the same character at
+    least as long) and HTML comments over several lines are skipped, so a `#` line in
+    an example or a commented-out draft ends nothing; neither does a line indented by
+    four or more spaces. Returns (definitions, orphans): {"id", "line", "fields"} and
+    {"line", "field", "heading", "closed"}; `heading` is the nearest heading above the
+    orphan, `closed` the definition the old parse applied it to; lines are 1-based.
+    A repeated field keeps its last value. Lint, the search and the graph all read
+    both files through this one function.
+    """
+    definitions: list[dict[str, Any]] = []
+    orphans: list[dict[str, Any]] = []
+    current: Optional[dict[str, Any]] = None
+    closer: Optional[dict[str, str]] = None
+    fence = ""  # the run of backticks or tildes that opened the current fenced block
+    comment = False  # inside an HTML comment that spans several lines
+    for number, raw_line in enumerate(text.splitlines(), 1):
+        line = raw_line.strip()
+        if fence:
+            if line.startswith(fence):
+                fence = ""
+            continue
+        if comment:
+            comment = "-->" not in line
+            continue
+        opening = SCHEMA_FENCE.match(line)
+        if opening:
+            fence = opening.group(1)
+            continue
+        if line.startswith("<!--") and "-->" not in line[4:]:
+            comment = True
+            continue
+        heading = CONCEPT_HEADING.match(line)
+        if heading:
+            current = {"id": heading.group(1), "line": number, "fields": {}}
+            definitions.append(current)
+            closer = None
+            continue
+        if SCHEMA_HEADING.match(raw_line):
+            if current is not None:
+                closer = {"heading": line, "closed": current["id"]}
+            elif closer is not None:
+                closer = {**closer, "heading": line}
+            current = None
+            continue
+        field = CONCEPT_FIELD.match(line)
+        if not field:
+            continue
+        if current is not None:
+            current["fields"][field.group(1).casefold()] = field.group(2).strip()
+        elif closer is not None:
+            orphans.append({"line": number, "field": field.group(1).casefold(), **closer})
+    return definitions, orphans
+
+
 def controlled_concepts(path: Path) -> dict[str, dict[str, Any]]:
     if not path.is_file():
         return {}
     definitions: dict[str, dict[str, Any]] = {}
-    current: Optional[dict[str, Any]] = None
-    fenced = False
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if line.startswith("```"):
-            fenced = not fenced
-            continue
-        if fenced:
-            continue
-        heading = CONCEPT_HEADING.match(line)
-        if heading:
-            concept_id = heading.group(1)
-            current = {"id": concept_id}
-            definitions[concept_id] = current
-            continue
-        field = CONCEPT_FIELD.match(line)
-        if field and current is not None:
-            current[field.group(1).casefold()] = field.group(2).strip()
+    for block in schema_definitions(path.read_text(encoding="utf-8"))[0]:
+        # A repeated ID replaces the earlier definition as a whole.
+        definitions[block["id"]] = {"id": block["id"], **block["fields"]}
     return {
         concept_id: {
             **definition,
@@ -950,7 +1001,7 @@ def _invalid_reformulations(detail: str) -> RequestError:
     return RequestError(f"reformulations are invalid: {detail}")
 
 
-def request_from_stdin(stream: Any) -> dict[str, Any]:
+def request_from_stdin(stream: Any, *, verbatim: bool = False) -> dict[str, Any]:
     """Read one request from a wrapper's standard input and check it (see `read_request`).
 
     Only the stream's bytes are read: the text layer decodes with the host's
@@ -973,7 +1024,7 @@ def request_from_stdin(stream: Any) -> dict[str, Any]:
         raw = buffer.read(MAX_REQUEST_BYTES + 1)
     except (OSError, ValueError) as exc:
         raise absent from exc
-    return read_request(raw or b"")
+    return read_request(raw or b"", verbatim=verbatim)
 
 
 def _request_text(raw: bytes) -> str:
@@ -994,13 +1045,16 @@ def _request_text(raw: bytes) -> str:
         raise _invalid_request(f"not UTF-8 text; send UTF-8, or {ESCAPE_HINT}") from exc
 
 
-def read_request(raw: bytes) -> dict[str, Any]:
+def read_request(raw: bytes, *, verbatim: bool = False) -> dict[str, Any]:
     """Decode and check one request object `{"query": ..., "also": [...], "filter": {...}}`.
 
     Returns `query` exactly as given, `also` as a list (empty when absent) and
     `filter` as the given object or None when absent. The selector itself is
     validated by the wrapper, like `--filter-json`. Raises RequestError with a
-    message ready for the user.
+    message ready for the user. `verbatim` is for wording that must keep a
+    person's punctuation (findability questions): a `?` before a letter then
+    counts as re-encoded only where the JSON text carries it literally, so the
+    client sends a real one as `\\u003f`.
     """
     if len(raw) > MAX_REQUEST_BYTES:
         raise _invalid_request(f"request exceeds {MAX_REQUEST_BYTES} bytes")
@@ -1048,9 +1102,10 @@ def read_request(raw: bytes) -> dict[str, Any]:
     for field, item in fields:
         if RE_SURROGATE.search(item):
             raise _invalid_request(f"{field} {SURROGATE_DETAIL}")
-        if "�" in item or RE_ENCODED.search(item):
+        if "�" in item or (RE_ENCODED.search(item) and (not verbatim or RE_ENCODED.search(text))):
             raise _invalid_request(
                 f"{field} looks re-encoded on the way (a ? before a letter, or U+FFFD); {ESCAPE_HINT}"
+                + (", and write a ? that really stands before a letter as \\u003f" if verbatim else "")
             )
     # The selector is printed back with the result, so it must be printable too.
     if selector is not None and any(RE_SURROGATE.search(text) for text in _json_strings(selector)):

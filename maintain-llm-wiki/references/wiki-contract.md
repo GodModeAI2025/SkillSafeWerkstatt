@@ -35,6 +35,7 @@ Read this contract before acting on a target wiki.
     |-- releases.jsonl
     |-- quality-reviews.jsonl
     |-- quality-status.json
+    |-- findability-questions.jsonl  # optional; maintainer-only findability questions, outside the release
     |-- manifest.json      # written last; current released snapshot
 |   `-- history/
 |       `-- <snapshot-id>/
@@ -128,6 +129,8 @@ After all canonical Markdown, indexes, graph files, and reading views have been 
 7. atomically replaces `meta/manifest.json` last.
 
 The manifest uses format `lmwiki-release/1` and records release ID, version, timestamp, previous manifest hash, and each released file's vault-relative path, size, and SHA-256. It never contains absolute paths or the transient lock. `meta/history/` is excluded because snapshots are maintenance recovery material, not the active release.
+
+Files under `meta/` other than those listed are outside the release: they are never hashed, verified, included in the default snapshot, or exported. `meta/findability-questions.jsonl` relies on this. Outside the release does not mean private: the file stays readable to anyone with access to the wiki folder.
 
 Do not release the lock until the manifest has been written successfully. A failure before the manifest replacement leaves the previous release boundary invalid or the writer lock in place; readers must return `wiki_busy`, `invalid_wiki`, or `snapshot_changed`, never silently read a mixed state. A repair run may restore the pre-change snapshot or complete a new release.
 
@@ -241,12 +244,12 @@ Extraction requirements:
 
 - preserve the source's order and meaning;
 - preserve headings, lists, tables, quotations, identifiers, and material footnotes;
-- include page, section, sheet, or slide boundaries when the converter can recover them;
+- include page, section, sheet, or slide boundaries when the converter can recover them; write page and slide boundaries as `<!-- page: N -->` / `<!-- slide: N -->` markers on a line of their own and sheet boundaries as headings;
 - distinguish unreadable or omitted content explicitly;
 - do not add interpretation, synthesis, recommendations, or facts from other sources.
 - preserve the source's language and record it in `content_language`; use `und` only when it cannot be determined reliably.
 
-Before registration, the extraction preflight rejects invalid UTF-8, replacement or control characters, empty content, unclosed fences, and extreme flattened lines. It flags suspicious headings, unusually long lines, missing page or slide markers, and malformed table-like runs for review. Warning-bearing material is `partial` by default. The preflight also rejects credential-shaped content: private key blocks, fixed-shape access tokens, JSON Web Tokens, and URLs carrying a user name and password. Faithfulness does not extend to a live credential. Stop, tell the user which line and kind were found, and continue only with an extraction in which the credential is replaced by an explicit marker such as `[credential removed]`; recommend rotating it, because it has already left its original place. Recognizable documentation placeholders such as `ghp_xxxx…`, keys containing `EXAMPLE`, the jwt.io sample token, or `user:password@` and `${TOKEN}` in URLs are not findings. Lint applies the same screen to existing wikis, so an already registered source that carries a credential blocks release until the user approves a redacted re-registration. Findings name the line and kind, never the value. Source Markdown and its `meta/sources.jsonl` record form one registration invariant: failure to publish either part rolls the new source file back.
+Before registration, the extraction preflight rejects invalid UTF-8, replacement or control characters, empty content, unclosed fences, and extreme flattened lines. It flags suspicious headings, unusually long lines, missing page or slide markers, markers that are not on a line of their own, and malformed table-like runs for review. Warning-bearing material is `partial` by default. The preflight also rejects credential-shaped content: private key blocks, fixed-shape access tokens, JSON Web Tokens, and URLs carrying a user name and password. Faithfulness does not extend to a live credential. Stop, tell the user which line and kind were found, and continue only with an extraction in which the credential is replaced by an explicit marker such as `[credential removed]`; recommend rotating it, because it has already left its original place. Recognizable documentation placeholders such as `ghp_xxxx…`, keys containing `EXAMPLE`, the jwt.io sample token, or `user:password@` and `${TOKEN}` in URLs are not findings. Lint applies the same screen to existing wikis, so an already registered source that carries a credential blocks release until the user approves a redacted re-registration. Findings name the line and kind, never the value. Source Markdown and its `meta/sources.jsonl` record form one registration invariant: failure to publish either part rolls the new source file back.
 
 `meta/sources.jsonl` contains one JSON object per registered source version. A byte-identical source is a duplicate and should not be ingested twice.
 
@@ -353,17 +356,37 @@ Access is controlled through the permissions of the target SharePoint site.
 
 Required fields are `id`, `kind`, `status`, and `sources`. Supported kinds are `fact`, `observation`, `definition`, `interpretation`, and `recommendation`. Supported statuses are `active`, `disputed`, `superseded`, and `unsupported`.
 
-`sources` is a `|`-separated list of `source_id@locator` entries. A locator is mandatory for active, disputed, and superseded claims; use a stable page, slide, sheet, section, heading, paragraph, timestamp, or `document` marker that a reader can find in the extracted Markdown. Each source must also appear in the page's frontmatter. `replaces` and `contradicts` are optional `|`-separated claim IDs and must resolve globally.
+`sources` is a `|`-separated list of `source_id@locator` entries. A locator is mandatory for active, disputed, and superseded claims. Write it in a canonical form that lint resolves against the registered extraction. The heading `register_source.py` puts in front of an extraction (the title and `## Extracted content`) is not part of it.
+
+| Locator | Resolves when | Credits |
+|---|---|---|
+| `page=N`, `page=A-B` (also with `–`) | the extraction has a page marker on its own line with that number (for a range, A ≤ B and both exist) | those pages |
+| `slide=N`, `slide=A-B` | as for pages, with slide markers | those slides |
+| `section=…`, `heading=…`, `sheet=…` | a heading reads the same, ignoring case, accents, spacing, `*` and `` ` ``, `§` spacing, and a trailing colon or period; or exactly one heading reads the same without its number (`section=Preise` matches `§ 3 Preise`); or exactly one heading begins with it followed by a space (`section=4` matches `4 Abrechnung`) | that heading's section with its subsections, as pages when the extraction has page markers |
+| `timestamp=…` | the extraction contains that time stamp, such as `00:12:30`, in its text or in a heading | the part holding it, or nothing when that text belongs to no unit |
+| `document` | always | the whole source, only when it has a single page, section, or no structure |
+
+A locator that resolves to all pages or sections of a source with several of them is a broad citation and credits none. Any other spelling, such as `S. 12` or `paragraph=4`, is accepted but not checked; lint counts such locators. A canonical locator that does not resolve is a lint warning, never an error: one per claim entry with its reason, or, when the extraction has no marker of the cited kind at all, one warning per source and kind. Every such warning contains the phrase `does not resolve`. An unknown source ID remains an error. In the reading views, a `page=` or `slide=` evidence link jumps to its marker. Each source must also appear in the page's frontmatter. `replaces` and `contradicts` are optional `|`-separated claim IDs and must resolve globally.
 
 The visible claim text is maintained synthesis in the configured wiki language. A claim marker is evidence metadata, not an instruction. The faithful source Markdown remains in its original language. Do not turn headings, navigation prose, explicitly labeled open questions, or purely connective wording into artificial claims. An active non-index page must contain at least one valid claim.
 
 Do not silently reuse an ID when the assertion's meaning changes. When evidence disappears, use `unsupported` and record the gap. When a newer claim replaces an older one, preserve both and connect them with `replaces`. When evidence conflicts, retain the positions and connect them with `contradicts` instead of selecting one without support.
 
+### Source coverage
+
+Evidence that never becomes a claim is invisible to wiki search, so lint reports which registered evidence no claim points to as the statistic `stats.source_coverage` (format `lmwiki-source-coverage/1`) in its output, in `meta/lint-report.json`, and in the statistics the release prints. It is maintenance data: never a warning or an error, never a release blocker, never part of `meta/quality-status.json` or a reader's quality line. Uncited material can be intended: background material, or an adopted collection, which imports evidence but no claims.
+
+A unit of a source is what a canonical locator can name: a page or slide when the extraction has `<!-- page: N -->` / `<!-- slide: N -->` markers on a line of their own, otherwise a section (one per heading block, a heading up to the next heading of any level), otherwise the whole document. Text before the first marker or heading, a segment without text, and the two wrapper headings of the registration belong to no unit. Neither does the own text of a heading whose section spans every other section, such as an extraction's title above its chapters: only `section=` of that heading or `document` could name it, and both are broad citations. The search's exhaustive scan reads the same marker syntax and the same fences: a marker or heading inside a block fenced with three backticks or three tildes counts for nothing. The scan additionally follows a marker that stands inside a line, so a hit printed after it still names that page; lint, coverage, and the reading views count only markers on a line of their own, and the preflight warns about the others. Only sources with status `active` or `partial` are assessed, and only citations of `active` and `disputed` claims count; resolution is checked for every claim, whatever its status. A cited unit is a unit a resolved, specific locator points to; a locator that names every unit of a source with at least two units is a broad citation and credits none.
+
+The statistic counts assessed and unassessed sources, uncited sources, units in total and cited, broad citations, and resolved, unresolved, and unchecked locators. `by_source` lists every assessed source with at least one counting citation as `[units, cited_units, citations, broad_citations, unchecked_citations]`, sorted by source ID; it is complete for cited sources and is what a comparison with the baseline lint uses. `sources` lists, for display, assessed sources with an uncited unit or no citation, uncited sources first, at most 50, each with at most 20 uncited unit labels in source order (consecutive pages as one range such as `page=4-9`) and the number of further uncited units. `unchecked_examples` names the first 20 unchecked locators, and `unresolved_without_markers` lists, per source and marker kind, every claim whose locator cites a page or slide in an extraction without such markers.
+
+Coverage is only as fine as the locators: a section on a page that another claim cites counts as cited, and text before the first page marker or heading belongs to no unit. A cited page shows that a claim points there, not that every fact on it was curated.
+
 ## Navigation cluster contract
 
 `schema/CLUSTERS.md` contains the user-confirmed navigation and presentation organization of the wiki. Clusters group the graph, establish curation or ownership boundaries, and may optionally map pages to directories. They are not synonyms, search terms, or a conceptual ontology.
 
-Each cluster is a level-two heading with a stable lowercase ID followed by fields in this shape:
+Each cluster is a level-two heading with a stable lowercase ID followed by fields in this shape. Any other heading line starting with `#` ends the current cluster, so field lines below it belong to none; lines in fenced blocks (backticks or tildes) and in HTML comments over several lines count for nothing. A field of this shape below such a heading is a lint error that names its line, because older versions applied it to the definition above. A heading meant to start a cluster needs a stable lowercase ID: rename `## Vertrieb Ost` to `## vertrieb-ost` rather than moving its fields into the cluster above. Put explanatory sections above the first definition, or keep them free of `- Field: value` lines.
 
 ```markdown
 ## policy-governance
@@ -386,7 +409,7 @@ A confirmed category or primary-cluster change may move pages between wiki direc
 
 `schema/CONCEPTS.md` contains the user-confirmed vocabulary used for retrieval and terminology alignment. Concept worlds are independent of clusters: changing a concept, preferred term, or alias never moves a page and never changes its graph cluster automatically.
 
-Each concept is a level-two heading with a stable lowercase ID and fields in this shape:
+Each concept is a level-two heading with a stable lowercase ID and fields in this shape. Any other heading line starting with `#` ends the current concept, so field lines below it belong to none; lines in fenced blocks (backticks or tildes) and in HTML comments over several lines count for nothing. A field of this shape below such a heading is a lint error that names its line, because older versions applied it to the definition above. A heading meant to start a concept needs a stable lowercase ID: rename `## Preisbestandteile` to `## preisbestandteile` rather than moving its fields into the concept above. Put explanatory sections above the first definition, or keep them free of `- Field: value` lines. Lint, the search of the query skill and of every newly exported knowledge skill, and the graph read both files with the same parser; knowledge skills exported earlier keep the older reading until they are exported again.
 
 ```markdown
 ## access-control
@@ -401,6 +424,20 @@ Each concept is a level-two heading with a stable lowercase ID and fields in thi
 `Preferred`, `Status`, and `Definition` are required. `Aliases`, `Broader`, and `Related` are optional and use `|` as the separator. Preferred labels follow the configured wiki language; aliases may deliberately contain other languages and source terminology. `Broader` accepts at most one concept ID. `Related` accepts zero or more concept IDs. All referenced IDs must exist. Status is `active`, `draft`, or `superseded`.
 
 Pages reference zero or more known IDs through a `concepts` frontmatter list. Search expands a query in meaning only through confirmed preferred terms and aliases. Forms of the same word (inflection, umlaut spelling, hyphenation) count as matches of that word. Compound parts and one-letter typo corrections are disclosed heuristics. Reformulations by the agent are listed in the answer. A concept term is triggered by the word itself, its umlaut or hyphen spelling, or its inflection ending, never by a verb form, a compound part or a typo correction. The search must not treat cluster labels, directory names, or unconfirmed free-text tags as equivalent concepts. Lint reports a `CONCEPTS.md` that still states the older rule ("Search may expand a query only through confirmed preferred terms and aliases.") as a warning with the replacement text; it does not block a release.
+
+## Findability questions (optional)
+
+Findability questions check whether the words real people use still reach a fact. They live in `meta/findability-questions.jsonl`, one JSON object per line (UTF-8, `\n` line ends, keys sorted, U+2028, U+2029, and U+0085 written as `\u` escapes), at most 200 questions:
+
+```json
+{"format": "lmwiki-findability-question/1", "question_id": "fq-<16 hex>", "question": "<verbatim, 1-500 characters>", "claim_id": "clm-<16 hex>", "author": "owner|user", "note": "<0-200 characters, one line>", "added_at": "2026-11-14T10:00:00Z", "lock_id": "<lock id>"}
+```
+
+`scripts/findability_questions.py` manages them under the writer lock. `add` records one question with `--claim-id`, `--author owner|user`, and `--user-supplied-wording`; it refuses without that flag. The flag attests that the owner or a user supplied exactly this wording, typed in the conversation or contained in a message, ticket, or document they gave; the helper cannot check it. The wording is stored exactly as given apart from surrounding whitespace, with typos and colloquial words. It is never written, completed, corrected, shortened, translated, or proposed by the agent, because questions written with the page open pass by construction and measure nothing. From a longer message only whole sentences are taken, and the user confirms the selected passage. The wording reaches the helper as `{"query": ...}` on standard input (`--question -`), which survives shells that strip quotation marks; a `?` directly before a letter is sent as `\u003f`, because a literal one there looks like a character damaged on the way. `author` is a role, never a name. A question targets one claim that the user confirmed and that is `active` or `disputed`; a page alone would stay green after its fact was deleted. The helper refuses credential-shaped wording, duplicates, and a 201st question. It does not recognize names or other personal data; the maintainer asks the user for a version without them and does not remove them itself. `remove --question-id` takes a snapshot of the file first. A synchronization conflict copy of the file stops every subcommand until the user merged the two files.
+
+`check` loads the working files once and ranks every question with the query skill's search core, with word forms and concepts as by default and without reformulations or the exhaustive scan. Each question gets one status: `found` (its claim comes back among the claims of a result within the limit, 12 by default), `found_page_only` (the page ranks within the limit, but the claim is not returned), `not_found`, `target_missing` (the claim no longer exists), or `target_inactive` (the claim is superseded or unsupported). The report names the last release, but the check runs on the working files under the lock. The maintainer runs it beside the baseline lint and again after the final lint, presents every question that was `found` or `found_page_only` and no longer is, and lists every question that is not `found` in the quality review. It never blocks a release. There is no lint rule for the questions, except that lint's credential screen covers this file like every other.
+
+The file is outside the release: it is never hashed into the manifest, verified, included in the default snapshot, or exported into a knowledge skill or OKF bundle, and the query skill never reads it. It is not private: anyone with access to the wiki folder can read it.
 
 ## Optional OKF compatibility
 
@@ -460,13 +497,16 @@ Before completion:
 - `sources/` is flat and contains only registered Markdown extractions, with no `raw/` directory, binary originals, nested directories, or symlinks;
 - every active non-index page cites at least one registered source;
 - every active non-index page contains at least one valid claim block;
-- claim IDs are globally unique and all claim-source locators and claim relations resolve;
+- claim IDs are globally unique; claim source IDs and claim relations resolve; canonical claim locators introduced by this run resolve, and every other locator that does not resolve was presented to the user;
 - every page's concept IDs exist in `schema/CONCEPTS.md`;
 - concept relations resolve and concept IDs remain independent of cluster IDs;
 - all wikilinks resolve;
 - every wiki page is present in the index;
 - no accidental semantic duplicate was introduced;
 - new entries of the lint statistic `stats.alias_review` were presented to the user and their decision is recorded in `meta/changes.md`;
+- new entries of `stats.source_coverage` compared with the baseline lint (by source ID in `by_source`), and any increase of unchecked or broad locators, were presented to the user, and decisions on uncited sources are recorded in `meta/changes.md`;
+- when findability questions exist, questions the baseline check found and the final check does not were presented to the user before release;
+- `schema/CONCEPTS.md` and `schema/CLUSTERS.md` contain no definition field below a heading that is not a definition heading;
 - no protected human block changed;
 - every applied frontmatter or restore transaction matched the exact approved plan hash and all file precondition hashes; stale plans produced zero writes;
 - any restore or action snapshot contains valid relative file hashes and no automatic history pruning occurred;

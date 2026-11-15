@@ -28,6 +28,7 @@ import freshness
 import navigation
 import search_core
 import secret_screen
+import source_coverage
 import sync_artifacts
 import trust_contract
 
@@ -92,10 +93,14 @@ CLAIM_BLOCK = re.compile(
 )
 CLAIM_ID_RE = re.compile(r"^clm-[0-9a-f]{16}$")
 CLAIM_SOURCE_RE = re.compile(r"^(src-[0-9a-f]{16})@(.+)$")
-CLUSTER_HEADING = re.compile(r"^##\s+([a-z0-9]+(?:-[a-z0-9]+)*)\s*$")
-CLUSTER_FIELD = re.compile(r"^-\s+([A-Za-z]+):\s*(.*)$")
-CONCEPT_HEADING = CLUSTER_HEADING
-CONCEPT_FIELD = CLUSTER_FIELD
+#: The documented fields of a concept and of a cluster. An orphaned field line
+#: (below a heading that ended the definition) with one of these keys is an
+#: error, because older versions applied it to the definition above.
+CONCEPT_SHAPE = ("preferred", "status", "definition", "aliases", "broader", "related")
+CLUSTER_SHAPE = ("label", "color", "status", "purpose", "directory", "includes", "excludes")
+#: The field that names a definition. Orphaned below a level-two heading, it shows
+#: that the heading was meant to start a definition but holds no valid ID.
+NAMING_FIELD = {"concept": "preferred", "cluster": "label"}
 DEFAULT_CLUSTER_COLORS = set(CLUSTER_COLORS)
 
 
@@ -222,31 +227,63 @@ def load_quality_reviews(path: Path, errors: list[str]) -> dict[str, dict[str, A
     return latest
 
 
+def suggested_id(heading: str) -> str:
+    """A stable lowercase ID made from a heading's words for a lint hint, or "" when none can be made."""
+    words = re.sub(r"\s+#+\s*$", "", heading.lstrip("#"))
+    return re.sub(r"[^a-z0-9]+", "-", search_core.normalized(words)).strip("-")
+
+
+def schema_blocks(path: Path, relative: str, noun: str, shape: tuple[str, ...], errors: list[str]) -> dict[str, dict[str, str]]:
+    """The definitions of one schema file through the shared parser, with its line errors.
+
+    Reports duplicate IDs and orphaned fields of the documented shape, sorted by
+    line. A repeated ID replaces the earlier definition, as the search reads it.
+    Any other orphan (a prose list such as `- Hinweis: ...` below `## Notes`) is
+    not reported: the old parse attached it as a field nobody reads.
+    """
+    blocks, orphans = search_core.schema_definitions(path.read_text(encoding="utf-8"))
+    found: list[tuple[int, str]] = []
+    definitions: dict[str, dict[str, str]] = {}
+    for block in blocks:
+        if block["id"] in definitions:
+            found.append((block["line"], f"{relative}:{block['line']}: duplicate {noun} ID {block['id']}"))
+        definitions[block["id"]] = {"id": block["id"], **block["fields"]}
+    # A level-two heading with the naming field below it was meant as a definition
+    # ("## Preisbestandteile"): moving its fields up would merge two definitions.
+    misnamed = {
+        (orphan["heading"], orphan["closed"]) for orphan in orphans
+        if orphan["field"] == NAMING_FIELD[noun] and orphan["heading"].startswith("## ")
+    }
+    for orphan in orphans:
+        if orphan["field"] in shape:
+            heading, closed = orphan["heading"], orphan["closed"]
+            slug = suggested_id(heading)
+            example = f"such as '## {slug}'" if slug else "(lowercase letters, digits, and hyphens)"
+            if (heading, closed) in misnamed:
+                advice = (
+                    f"{heading!r} is no {noun} heading, because a {noun} needs a stable lowercase ID {example}: "
+                    f"rename the heading if it starts a new {noun}, rather than moving its fields into {noun} {closed}"
+                )
+            else:
+                advice = (
+                    f"Move it above that heading if it belongs to {noun} {closed}, rename the heading to a stable "
+                    f"lowercase ID {example} if it was meant to start a {noun}, or move the section above the "
+                    f"first {noun} if it only explains"
+                )
+            found.append((
+                orphan["line"],
+                f"{relative}:{orphan['line']}: field '{orphan['field']}' under heading {heading!r} belongs to no "
+                f"{noun}; older versions applied it to {noun} {closed}. {advice}",
+            ))
+    errors.extend(message for _, message in sorted(found, key=lambda item: item[0]))
+    return definitions
+
+
 def load_clusters(path: Path, errors: list[str], warnings: list[str]) -> dict[str, dict[str, str]]:
     if not path.is_file():
         errors.append("schema/CLUSTERS.md is missing; navigation clusters are not configured")
         return {}
-    definitions: dict[str, dict[str, str]] = {}
-    current: Optional[dict[str, str]] = None
-    fenced = False
-    for number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        line = raw_line.strip()
-        if line.startswith("```"):
-            fenced = not fenced
-            continue
-        if fenced:
-            continue
-        heading = CLUSTER_HEADING.match(line)
-        if heading:
-            cluster_id = heading.group(1)
-            if cluster_id in definitions:
-                errors.append(f"schema/CLUSTERS.md:{number}: duplicate cluster ID {cluster_id}")
-            current = {"id": cluster_id}
-            definitions[cluster_id] = current
-            continue
-        field = CLUSTER_FIELD.match(line)
-        if field and current is not None:
-            current[field.group(1).casefold()] = field.group(2).strip()
+    definitions = schema_blocks(path, "schema/CLUSTERS.md", "cluster", CLUSTER_SHAPE, errors)
 
     for cluster_id, definition in definitions.items():
         for field in ("label", "color", "status", "purpose"):
@@ -448,27 +485,7 @@ def load_concepts(path: Path, errors: list[str]) -> dict[str, dict[str, str]]:
     if not path.is_file():
         errors.append("schema/CONCEPTS.md is missing; controlled concepts are not configured")
         return {}
-    definitions: dict[str, dict[str, str]] = {}
-    current: Optional[dict[str, str]] = None
-    fenced = False
-    for number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        line = raw_line.strip()
-        if line.startswith("```"):
-            fenced = not fenced
-            continue
-        if fenced:
-            continue
-        heading = CONCEPT_HEADING.match(line)
-        if heading:
-            concept_id = heading.group(1)
-            if concept_id in definitions:
-                errors.append(f"schema/CONCEPTS.md:{number}: duplicate concept ID {concept_id}")
-            current = {"id": concept_id}
-            definitions[concept_id] = current
-            continue
-        field = CONCEPT_FIELD.match(line)
-        if field and current is not None:
-            current[field.group(1).casefold()] = field.group(2).strip()
+    definitions = schema_blocks(path, "schema/CONCEPTS.md", "concept", CONCEPT_SHAPE, errors)
 
     vocabulary: dict[str, str] = {}
     for concept_id, definition in definitions.items():
@@ -731,9 +748,19 @@ def main() -> int:
                 )
     source_files = sorted(sources_root.glob("*.md")) if sources_root.is_dir() else []
     source_ids_from_files: set[str] = set()
+    # The structure of each registered source for locator resolution and coverage;
+    # it keeps no source text.
+    source_records: dict[str, dict[str, Any]] = {}
 
     for path in source_files:
-        data, _ = parse_frontmatter(path, errors)
+        try:
+            source_document = parse_file(path, require_frontmatter=True)
+        except (OSError, UnicodeError, FrontmatterError) as exc:
+            errors.append(str(exc))
+            data, source_body, first_line = {}, "", 1
+        else:
+            data, source_body = source_document.data, source_document.body
+            first_line = source_document.frontmatter.count("\n") + 1
         for key in SOURCE_KEYS:
             if key not in data:
                 errors.append(f"{path}: missing source field {key}")
@@ -758,6 +785,14 @@ def main() -> int:
             errors.append(f"{path}: content_language is not a portable BCP-47-style code")
         if not portable_reference(data.get("original_ref")):
             errors.append(f"{path}: original_ref is not portable")
+        if data and isinstance(source_id, str) and source_id in registry and source_id not in source_records:
+            source_records[source_id] = {
+                "source_id": source_id,
+                "path": path.relative_to(target).as_posix(),
+                "title": str(data.get("title") or ""),
+                "status": str(data.get("status") or ""),
+                "structure": source_coverage.source_structure(source_body, first_line),
+            }
 
     for source_id, record in registry.items():
         relative = record.get("path")
@@ -796,6 +831,9 @@ def main() -> int:
     parsed_pages: dict[Path, tuple[dict[str, Any], str]] = {}
     claims_by_id: dict[str, dict[str, Any]] = {}
     all_claims: list[dict[str, Any]] = []
+    # Claim entries without an entry-level error, resolved once per (source, locator).
+    citations: list[dict[str, Any]] = []
+    resolution_cache: dict[tuple[str, str], source_coverage.Resolution] = {}
 
     for path in wiki_files:
         data, body = parse_frontmatter(path, errors)
@@ -934,6 +972,56 @@ def main() -> int:
                     errors.append(
                         f"{path}: claim {claim_id} uses {source_id}, but page frontmatter does not cite it"
                     )
+                source_record = source_records.get(source_id)
+                if source_id in registry and source_id in page_source_ids and source_record is not None:
+                    locator = source_match.group(2).strip()
+                    key = (source_id, locator)
+                    if key not in resolution_cache:
+                        resolution_cache[key] = source_coverage.resolve(
+                            source_coverage.parse_locator(locator), source_record["structure"]
+                        )
+                    citations.append({
+                        "page": path.relative_to(target).as_posix(),
+                        "page_display": str(path),
+                        "claim_id": claim_id or str(claim.get("number")),
+                        "claim_status": str(claim.get("status") or ""),
+                        "source_id": source_id,
+                        "entry": str(entry).strip(),
+                        "resolution": resolution_cache[key],
+                    })
+
+    # A canonical locator that does not resolve is a warning, never an error.
+    # Without any marker of the cited kind, one stable warning per source and
+    # kind replaces one per claim; the statistic lists the claims.
+    missing_markers: set[tuple[str, str]] = set()
+    for citation in citations:
+        resolution = citation["resolution"]
+        if resolution.state != "unresolved":
+            continue
+        source_path = source_records[citation["source_id"]]["path"]
+        if resolution.missing_markers:
+            missing_markers.add((source_path, resolution.missing_markers))
+            continue
+        warnings.append(
+            f"{citation['page_display']}: claim {citation['claim_id']} locator {citation['entry']} "
+            f"does not resolve in {source_path}: {resolution.reason}"
+        )
+    for source_path, kind in sorted(missing_markers):
+        warnings.append(
+            f"{target / source_path}: every claim locator that cites a {kind} does not resolve, because the "
+            f"extraction has no {kind} markers; cite a heading with section=, or register an extraction with "
+            f"{kind} markers (stats.source_coverage.unresolved_without_markers lists the claims)"
+        )
+    coverage_sources = [
+        source_records.get(source_id) or {
+            "source_id": source_id,
+            "path": str(registry[source_id].get("path") or ""),
+            "title": str(registry[source_id].get("title") or ""),
+            "status": "",
+            "structure": None,
+        }
+        for source_id in sorted(registry)
+    ]
 
     for claim in all_claims:
         claim_id = str(claim.get("id") or claim.get("number"))
@@ -1086,6 +1174,9 @@ def main() -> int:
             ),
             # For confirmation by the user; never an error or a warning.
             "alias_review": alias_review(target, wiki_files, concept_definitions, parsed_pages),
+            # Maintenance data: never an error or a warning, never a release blocker,
+            # never part of meta/quality-status.json.
+            "source_coverage": source_coverage.coverage_stats(coverage_sources, citations),
         },
     }
     if not args.check_only:

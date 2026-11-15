@@ -159,6 +159,25 @@ class SearchQualityGate(unittest.TestCase):
                 with self.subTest(folder=folder.relative_to(quality.REPO).as_posix()):
                     self.assertFalse(self.caches_after_build[folder], "the build cached bytecode in the repository")
 
+    def test_the_fixture_source_coverage_matches_the_plan(self) -> None:
+        """Befund 6: the uncited units hold 7 of the 8 facts that only sources state (Stufe 5)."""
+        report = json.loads((self.wiki / "meta/lint-report.json").read_text(encoding="utf-8"))
+        coverage = report["stats"]["source_coverage"]
+        self.assertEqual(
+            {key: coverage[key] for key in ("sources_assessed", "sources_uncited", "units_total", "units_cited", "broad_citations")},
+            {"sources_assessed": 11, "sources_uncited": 2, "units_total": 35, "units_cited": 28, "broad_citations": 0},
+        )
+        self.assertEqual(coverage["locators"], {"resolved": 277, "unresolved": 0, "unchecked": 0})
+        self.assertEqual(len(coverage["by_source"]), 9)
+        listed = [(entry["title"], entry["uncited_units"], entry["citations"]) for entry in coverage["sources"]]
+        self.assertEqual(len(listed), 3)
+        self.assertEqual(sorted(title.split()[0] for title, _, _ in listed[:2]), ["Leitfaden", "Notfallhandbuch"])
+        self.assertEqual([(units, citations) for _, units, citations in listed[:2]], [(["page=1-3"], 0)] * 2)
+        self.assertIn("RL-FM-03", listed[2][0])
+        self.assertEqual(listed[2][1], ["page=3"])
+        self.assertGreater(listed[2][2], 0)
+        self.assertEqual([warning for warning in report["warnings"] if "does not resolve" in warning], [])
+
     def test_the_command_line_ranks_like_the_core(self) -> None:
         """A few real CLI calls, so the gate also covers the wrapper."""
         script = quality.QUERY_SCRIPTS / "search_wiki.py"

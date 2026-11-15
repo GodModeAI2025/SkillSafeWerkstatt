@@ -22,6 +22,8 @@ if _SCRIPT_DIR not in sys.path:
 
 import navigation
 import portable_io
+import search_core
+import source_coverage
 from typing import Any, Optional
 from urllib.parse import quote
 from uuid import uuid4
@@ -33,13 +35,12 @@ from wiki_lock import require_lock
 
 WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
 H1 = re.compile(r"^#\s+(.+)$", re.MULTILINE)
-CLUSTER_HEADING = re.compile(r"^##\s+([a-z0-9]+(?:-[a-z0-9]+)*)\s*$")
-CLUSTER_FIELD = re.compile(r"^-\s+([A-Za-z]+):\s*(.*)$")
 CLAIM_BLOCK = re.compile(
     r"<!--\s*claim\s*\n(?P<meta>.*?)-->\s*(?P<text>.*?)\s*<!--\s*/claim\s*-->",
     re.DOTALL | re.IGNORECASE,
 )
-PAGE_MARKER = re.compile(r"^<!--\s*(page|slide)\s*:\s*([^>]+?)\s*-->$", re.IGNORECASE)
+#: The one page or slide marker lint, coverage and the preflight read: on a line of its own.
+PAGE_MARKER = source_coverage.PAGE_MARKER
 CLAIM_SENTINEL = re.compile(r"^@@LMWIKI_CLAIM_(\d+)@@$")
 HEX_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
 DEFAULT_CLUSTER_COLORS = CLUSTER_COLORS
@@ -128,9 +129,23 @@ def inline_markup(text: str, current_output: Path, page_outputs: dict[str, Path]
     return "".join(rendered)
 
 
-def locator_anchor(locator: str) -> str:
+def legacy_anchor(locator: str) -> str:
+    """The page anchor of a free-form locator such as `S. 12` or `p. 4`, or "" when it names no page number."""
     match = re.search(r"(?:^|[.\s_-])(?:S|p|page|slide)[.\s:_-]*(\d+)", locator, re.IGNORECASE)
-    return f"page-{match.group(1)}" if match else ""
+    return f"page-{int(match.group(1))}" if match else ""
+
+
+def marker_anchor(value: str) -> str:
+    """The id of a page or slide marker: `page-<number>` for a number (leading zeros dropped), else its value."""
+    return legacy_anchor(f"page {value}") or f"page-{re.sub(r'[^A-Za-z0-9_-]+', '-', value).strip('-')}"
+
+
+def locator_anchor(locator: str) -> str:
+    """Where an evidence link jumps: the marker a canonical page= or slide= locator names, else a legacy page number."""
+    parsed = source_coverage.parse_locator(locator)
+    if parsed.form in ("page", "slide") and parsed.value:
+        return f"page-{parsed.start}" if parsed.start is not None else marker_anchor(parsed.value)
+    return legacy_anchor(locator)
 
 
 def source_reader(source_id: str, page_outputs: dict[str, Path]) -> Optional[Path]:
@@ -223,7 +238,7 @@ def render_markdown(
         if page_marker:
             kind = "Seite" if page_marker.group(1).casefold() == "page" else "Folie"
             value = page_marker.group(2).strip()
-            anchor = locator_anchor(f"page {value}") or f"page-{re.sub(r'[^A-Za-z0-9_-]+', '-', value).strip('-')}"
+            anchor = marker_anchor(value)
             rendered.append(
                 f'<div class="page-marker" id="{html.escape(anchor, quote=True)}" '
                 f'role="separator" aria-label="{html.escape(kind + " " + value, quote=True)}">'
@@ -231,11 +246,13 @@ def render_markdown(
             )
             index += 1
             continue
-        if stripped.startswith("```"):
+        if stripped.startswith(("```", "~~~")):
+            # A tilde fence is code too, as for the scan and coverage: a marker in it is no anchor.
+            fence = stripped[:3]
             language = stripped[3:].strip()
             code: list[str] = []
             index += 1
-            while index < len(lines) and not lines[index].strip().startswith("```"):
+            while index < len(lines) and not lines[index].strip().startswith(fence):
                 code.append(lines[index])
                 index += 1
             index += 1
@@ -310,7 +327,10 @@ def render_markdown(
         index += 1
         while index < len(lines) and lines[index].strip():
             candidate = lines[index].strip()
-            if re.match(r"^(#{1,6})\s+", candidate) or candidate.startswith(("```", ">")):
+            if re.match(r"^(#{1,6})\s+", candidate) or candidate.startswith(("```", "~~~", ">")):
+                break
+            # A marker right below a text line is still a marker, as for lint and the scan.
+            if candidate.startswith("<!--") and PAGE_MARKER.fullmatch(candidate):
                 break
             if re.match(r"^\s*([-*+]\s+|\d+[.)]\s+)", lines[index]):
                 break
@@ -344,24 +364,11 @@ def parse_cluster_definitions(path: Path) -> dict[str, dict[str, str]]:
     if not path.is_file():
         return {}
     definitions: dict[str, dict[str, str]] = {}
-    current: Optional[dict[str, str]] = None
-    fenced = False
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if line.startswith("```"):
-            fenced = not fenced
-            continue
-        if fenced:
-            continue
-        heading = CLUSTER_HEADING.match(line)
-        if heading:
-            cluster_id = heading.group(1)
-            current = {"id": cluster_id, "label": cluster_id.replace("-", " ").title()}
-            definitions[cluster_id] = current
-            continue
-        field = CLUSTER_FIELD.match(line)
-        if field and current is not None:
-            current[field.group(1).casefold()] = field.group(2).strip()
+    # The shared parser lint and search use: a heading that is not a definition
+    # heading ends the cluster, so a trailing section cannot set its label or color.
+    for block in search_core.schema_definitions(path.read_text(encoding="utf-8"))[0]:
+        cluster_id = block["id"]
+        definitions[cluster_id] = {"id": cluster_id, "label": cluster_id.replace("-", " ").title(), **block["fields"]}
     for index, cluster in enumerate(definitions.values()):
         color = cluster.get("color", "")
         if not HEX_COLOR.fullmatch(color):

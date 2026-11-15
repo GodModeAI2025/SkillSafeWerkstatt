@@ -27,7 +27,7 @@ CATALOG = {
         action("plan-identity", "plan_identity.py", "Render a hash-bound SOUL and content-policy proposal without touching a wiki.", [{"name": "input", "type": "identity JSON", "required": True}, {"name": "wiki_language", "type": "BCP-47 string", "required": True}], writes=False, preview=True, confirmation=True),
         action("apply-identity", "apply_identity.py", "Apply only a confirmed identity proposal and snapshot prior identity files.", [{"name": "plan_file", "type": "path", "required": True}, {"name": "expect_proposal_sha256", "type": "sha256", "required": True}], writes=True, snapshot=True, confirmation=True),
         action("initialize", "initialize_wiki.py", "Build and release a new wiki in staging, then commit it without exposing a lock token.", [{"name": "target", "type": "path", "required": True}, {"name": "title", "type": "string", "required": True}, {"name": "topic", "type": "string", "required": True}, {"name": "wiki_language", "type": "BCP-47 string", "required": True}, {"name": "identity_plan", "type": "confirmed plan path", "required": True}, {"name": "expect_identity_sha256", "type": "sha256", "required": True}], writes=True, snapshot=False, confirmation=True),
-        action("validate-extraction", "validate_extraction.py", "Assess UTF-8, flattening, page markers, headings, table structure, and credential-shaped content before registration.", [{"name": "markdown_file", "type": "runtime path", "required": True}, {"name": "source_type", "type": "string", "required": False}], writes=False),
+        action("validate-extraction", "validate_extraction.py", "Assess UTF-8, flattening, own-line page and slide markers, headings, table structure, and credential-shaped content before registration.", [{"name": "markdown_file", "type": "runtime path", "required": True}, {"name": "source_type", "type": "string", "required": False}], writes=False),
         action("register-source", "register_source.py", "Register faithful Markdown source evidence without storing an absolute source path.", [{"name": "markdown_file", "type": "runtime path", "required": True}, {"name": "title", "type": "string", "required": True}, {"name": "original_ref", "type": "portable reference", "required": True}], writes=True),
         action("inventory-frontmatter", "inventory_wiki.py", "Return property counts, observed types, samples, and schema drift.", [], writes=False),
         action("plan-frontmatter", "frontmatter_actions.py plan", "Resolve a selector and create an immutable before/after plan with file hashes.", [{"name": "selector", "type": "selector", "required": True}, {"name": "action", "type": "frontmatter action", "required": True}, {"name": "output", "type": "temporary plan path", "required": True}], writes=False, preview=True),
@@ -40,7 +40,7 @@ CATALOG = {
         action("plan-language-migration", "plan_language_migration.py", "Report complete impact of a maintained-language migration.", [{"name": "to_language", "type": "BCP-47 string", "required": True}], writes=False, preview=True),
         action("plan-page-batch", "page_batch.py plan", "Hash a staged wiki-page batch and target preconditions outside the canonical wiki.", [{"name": "staging_dir", "type": "runtime path", "required": True}, {"name": "paths", "type": "wiki path[]", "required": True}], writes=False, preview=True),
         action("apply-page-batch", "page_batch.py apply", "Validate a complete temporary mirror, then commit the batch with atomic per-file replacement and snapshot recovery.", [{"name": "staging_dir", "type": "runtime path", "required": True}, {"name": "plan_file", "type": "path", "required": True}, {"name": "expect_plan_sha256", "type": "sha256", "required": True}], writes=True, snapshot=True),
-        action("lint", "lint_wiki.py", "Validate deterministic structure; check-only is no-write and fix-safe permits only deterministic repairs; reports an alias review statistic (common alias words, shared aliases) for confirmation, never as a failure.", [{"name": "fix_safe", "type": "boolean", "required": False}, {"name": "check_only", "type": "boolean", "required": False}], writes=True),
+        action("lint", "lint_wiki.py", "Validate deterministic structure; check-only is no-write and fix-safe permits only deterministic repairs; warns on claim locators that do not resolve in their source; reports an alias review statistic (common alias words, shared aliases) for confirmation and source coverage (uncited sources, pages, sections) as a statistic, never as a failure.", [{"name": "fix_safe", "type": "boolean", "required": False}, {"name": "check_only", "type": "boolean", "required": False}], writes=True),
         action("build-graph", "build_graph.py", "Regenerate the offline graph and relative HTML reading views.", [], writes=True),
         action("quality-review-record", "record_quality_review.py", "Record a review only after it actually occurred.", [{"name": "kind", "type": "quality | cleaning", "required": True}, {"name": "outcome", "type": "passed | attention-needed | not-applicable", "required": True}], writes=True),
         action("release", "release_wiki.py", "Idempotently lint, version, record quality status, hash controlled files, and publish the manifest last.", [{"name": "bump", "type": "patch | minor | major", "required": True}, {"name": "operation_id", "type": "portable idempotency key", "required": True}, {"name": "expect_current_version", "type": "semantic version", "required": True}], writes=True),
@@ -126,6 +126,37 @@ CATALOG = {
             confirmation=True,
         ),
         action("report-okf", "report_okf.py", "Report optional OKF required/recommended field compatibility without mutation.", [{"name": "include_sources", "type": "boolean", "required": False}], writes=False),
+        action(
+            "findability-add",
+            "findability_questions.py add",
+            "Record one findability question in the owner's or a user's own words with its confirmed target claim, "
+            "outside the release; never a question the agent wrote.",
+            [
+                {"name": "question", "type": "verbatim string, at most 500 characters, or '-' for {\"query\": ...} on standard input", "required": True},
+                {"name": "claim_id", "type": "clm-<16 hex>", "required": True},
+                {"name": "author", "type": "owner | user", "required": True},
+                {"name": "user_supplied_wording", "type": "boolean; only for wording the owner or a user supplied", "required": True},
+                {"name": "note", "type": "string, at most 200 characters", "required": False},
+            ],
+            writes=True,
+        ),
+        action(
+            "findability-remove",
+            "findability_questions.py remove",
+            "Remove one findability question after the user confirmed it; snapshots the file first.",
+            [{"name": "question_id", "type": "fq-<16 hex>", "required": True}],
+            writes=True,
+            snapshot=True,
+            confirmation=True,
+        ),
+        action(
+            "findability-check",
+            "findability_questions.py check",
+            "Rank every findability question with the query skill's search core on the working files and report "
+            "which no longer find their target claim; never blocks a release.",
+            [{"name": "limit", "type": "integer 1-100 (default 12)", "required": False}],
+            writes=False,
+        ),
     ],
 }
 
