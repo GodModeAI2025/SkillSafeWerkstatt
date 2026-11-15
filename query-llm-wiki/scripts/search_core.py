@@ -206,14 +206,24 @@ MIN_EXHAUSTIVE_REFORMULATIONS = 2
 SEARCH_RECORD_QUERY_CHARS = 200
 #: The kinds of passage the scan cuts a file into; hits on one line sort in this order.
 PASSAGE_KINDS = ("header", "heading", "claim", "paragraph", "open_question")
-#: Prepositions and contractions the closed class lacks, and the light verbs
-#: of a question ("Gibt es ...?", "Wie geht ...?", "Was gilt ...?", "Was
-#: passiert ...?"), which name no topic. A passage need not hold them; the
-#: scan only. The ranking and the precision gate never use them.
+#: Prepositions, contractions, conjunctions, question words and particles the
+#: closed class lacks ("per", "pro", "je", "laut", "gemäß", "wofür",
+#: "wieviel", "bzw", "noch", "eigentlich", "nur"), the degree words of a
+#: question with "wie" ("Wie hoch ...?", "Wie viel ...?", "Wie lange ...?",
+#: "Wie oft ...?"), and the light verbs of a question ("Gibt es ...?", "Wie
+#: geht ...?", "Was gilt ...?", "Was passiert ...?"), which name no topic. A
+#: passage need not hold them; the scan only. The ranking and the precision
+#: gate never use them.
 SCAN_FUNCTION_WORDS = frozenset(normalized(word) for word in (
     "ab ans aufs außer binnen durchs fürs gegenüber hinter hinters innerhalb außerhalb neben samt statt "
     "trotz übers ums unters vors während wegen zwischen "
-    "about after before between into over under via within without "
+    "per pro je laut lt gemäß gem bezüglich bzgl hinsichtlich mittels anhand zwecks infolge aufgrund seitens "
+    "dank entlang anstatt nebst mitsamt oberhalb unterhalb jenseits "
+    "bzw beziehungsweise sowie sowohl weder "
+    "wofür womit worauf wozu woran worin worüber wovon wodurch wonach wogegen woraus wobei wovor "
+    "wieviel wieviele viel viele vielen weswegen inwiefern hoch lange oft häufig teuer schnell "
+    "noch schon bereits eigentlich überhaupt etwa eben mal ja bitte wohl nur sogar erst "
+    "about after before between into over under via within without per regarding concerning versus vs "
     "gibt gibts geben gab gegeben geht gehen ging gegangen gilt gelten galt gegolten passiert passieren "
     "funktioniert funktionieren steht stehen "
     "get gets got happen happens happened exist exists existed").split())
@@ -238,7 +248,9 @@ ABSENCE_BOUNDARY = (
     "the passage, its parent list items and the first row of a split table, nothing else: a passage that "
     "needs a neighbouring paragraph, or a sentence of its paragraph beyond a cut, or that words the answer "
     "differently, with other words, an irregular form, a number in words or in another unit, or another "
-    "language, is not a hit, and layers marked scanned: false were not checked."
+    "language, is not a hit, and layers marked scanned: false were not checked. A table is read as a table "
+    "only as a pipe, grid, simple or multiline table or as raw HTML; one laid out otherwise is read as "
+    "paragraphs, without its header row."
 )
 #: Order of the layers among pages with otherwise equal hits.
 SCOPE_RANK = {"wiki": 0, "sources": 1, "history": 2}
@@ -274,18 +286,105 @@ LABEL_LEVEL = 7
 HYPHEN_PART_RULE = "hyphen_part"
 #: Its weight, as low as a compound modifier; it only orders the listed forms and `matched`.
 HYPHEN_PART_WEIGHT = 0.35
-#: The scan's rule for a token that is the term with one of INFLECTION_ENDINGS
-#: added or removed where the stem rule cannot see it: plurals in -er, with or
-#: without umlaut ("Häuser", "Kinder"), and the forms of a stem shorter than
-#: four letters ("Tag", "Tage", "Tagen"). It is a heuristic: "Zahl" also meets
-#: "Zähler", so a hit through it is checked in the text.
+#: The scan's rule for a token that shares its base with the term where the
+#: stem rule cannot see it: the base is the word itself or the word without one
+#: of INFLECTION_ENDINGS. That covers plurals in -er, with or without umlaut
+#: ("Häuser", "Kinder"), in -s after a vowel ("Autos"), in -se ("Ergebnisse")
+#: and in -nen ("Kundinnen"), the forms of a stem shorter than four letters
+#: ("Tag", "Tage", "Tagen"), and the case endings -er and -em of an adjective
+#: that no adjective suffix marks ("intelligentem" and "intelligenten",
+#: "fester" and "festen"). It is a heuristic: "Zahl" also meets "Zähler", so a
+#: hit through it is checked in the text.
 ENDING_RULE = "ending"
 #: Its weight, as low as a hyphen part.
 ENDING_WEIGHT = 0.35
-#: The endings the rule adds to a term or removes from it.
-INFLECTION_ENDINGS = ("e", "en", "n", "er", "ern", "es")
+#: The endings the rule removes from a term and from a scanned token to find their base.
+INFLECTION_ENDINGS = ("e", "en", "n", "er", "ern", "es", "em", "s", "se", "sen", "nen")
 #: The shortest stem the rule may leave or extend.
 ENDING_MIN_STEM = 3
+#: The scan's rule for a token that is another verb form of the term where the
+#: word forms cannot see it: a regular verb whose stem has four letters
+#: ("senkt" and "senken", "zahlte" and "zahlen", "prüft" and "geprüft"). One
+#: of VERB_ENDINGS is removed from the term, another one added, or the stem
+#: is put into a participle (ge-...-t). It is a heuristic: "Markt" also meets
+#: "Marken", so a hit through it is checked in the text.
+VERB_ENDING_RULE = "verb_ending"
+#: Its weight, as low as an ending.
+VERB_ENDING_WEIGHT = 0.35
+#: The verb endings the rule removes from a term and adds to its stem.
+VERB_ENDINGS = ("e", "en", "n", "t", "et", "te", "ten", "ete", "eten", "st", "est")
+#: The shortest stem the verb rule may leave or extend.
+VERB_MIN_STEM = 4
+#: The particles of separable verbs, which put ge- and zu- between particle and
+#: stem ("abschalten", "abgeschaltet", "abzuschalten"). The verb rule also takes
+#: a token for a form of such a verb, normalised; the longer particles come first.
+SEPARABLE_PARTICLES = tuple(sorted(
+    {
+        normalized(word)
+        for word in (
+            "ab an auf aus bei dar durch ein empor entgegen fest fort frei her herab heran herauf heraus herbei "
+            "herein herum herunter hervor hin hinab hinauf hinaus hinein hinzu hoch los mit nach nieder um vor "
+            "voran voraus vorbei weg weiter wieder zu zurecht zurück zusammen"
+        ).split()
+    },
+    key=lambda particle: (-len(particle), particle),
+))
+#: The shortest stem after a separable particle ("einbauen" and "eingebaut" share "bau").
+SEPARABLE_MIN_STEM = 3
+#: The scan's rule for a word of two or three letters inside a longer word,
+#: which the compound rules (parts of four letters or more) never consider: as
+#: the first part, when the rest, after a linking element, is one or more
+#: words of the scanned files ("Gas" in "Gaskunden", "Gasversorger"), or as
+#: the last part, with or without an inflection ending, after at least
+#: SHORT_PART_LEAD letters ("Gas" in "Erdgas", "Tag" in "Feiertagen"). It is a
+#: heuristic: "Eis" also meets "Beweis", so a hit through it is checked in the text.
+SHORT_PART_RULE = "short_part"
+#: Its weight, as low as a compound modifier.
+SHORT_PART_WEIGHT = 0.35
+#: The shortest and the longest word the rule applies to.
+SHORT_PART_MIN = 2
+SHORT_PART_MAX = 3
+#: The fewest letters before a short word that is the last part of a longer word.
+SHORT_PART_LEAD = 3
+#: The scan's rule for a compound written with a suspension hyphen: "Grund- und
+#: Leistungspreis" holds "Grundpreis", "Vertragsbeginn und -ende" holds
+#: "Vertragsende". The scan joins the written part to every possible part of
+#: the other word and matches a term against those joined forms only; it is a
+#: heuristic, so a hit through it is checked in the text.
+SUSPENDED_RULE = "suspended_compound"
+#: Its weight, as low as a hyphen part.
+SUSPENDED_WEIGHT = 0.35
+#: The mark that keeps a joined form of a suspended compound apart from every
+#: written token; TOKEN never matches it, and the report prints the form without it.
+SUSPENDED_MARK = "~"
+#: A suspension hyphen before a conjunction or a slash: "Grund- und", "Netz-, ", "Strom-/".
+SUSPENDED_FRONT = re.compile(r"-(?:,?\s+(?:und|oder|bzw\.?|sowie|bis|and|or|&)\s+|\s*/\s*)(?=[^\W\d_])")
+#: A suspension hyphen after a comma or a conjunction: "und -ende", ", -verlängerung".
+SUSPENDED_BACK = re.compile(r"(?:,|\s(?:und|oder|bzw\.?|sowie|bis|and|or|&))\s+-(?=[^\W\d_])")
+#: A conjunction a suspension hyphen may stand before or after.
+SUSPENDED_CONJUNCTIONS = frozenset(("und", "oder", "bzw", "bzw.", "sowie", "bis", "and", "or", "&"))
+#: A run of letters.
+LETTERS = re.compile(r"[^\W\d_]+")
+#: The shortest part of a word that a suspended compound may take over.
+SUSPENDED_MIN_PART = 3
+#: The scan's rule for a word with a footnote mark glued to it as one or two
+#: plain digits, as MarkItDown writes <sup>2</sup> ("Kündigungsfrist2"). The
+#: joined token is kept as well, so a name like "Fix12" still matches itself.
+FOOTNOTE_RULE = "footnote_mark"
+#: Its weight, as low as a hyphen part.
+FOOTNOTE_WEIGHT = 0.35
+#: A token of at least four letters with one or two digits glued to its end.
+FOOTNOTE_TOKEN = re.compile(r"([^\W\d_]{4,})\d{1,2}")
+#: Superscript digits (¹ ² ³ ⁰ ⁴-⁹), which normalisation turns into plain digits glued to the word.
+SUPERSCRIPT_DIGIT = re.compile("[¹²³⁰⁴-⁹]")
+#: The border of a grid table (pandoc writes one for cells with several paragraphs): +---+---+ or +===+===+.
+GRID_BORDER = re.compile(r"^ {0,3}\+(?:[-=:]+\+)+[ \t]*$")
+#: The column rule of a simple or multiline table (pandoc's default for a Word table): two or more runs of dashes.
+COLUMN_RULE = re.compile(r"^ {0,3}-{3,}(?: +-{3,})+[ \t]*$")
+#: A full-width rule: the top and bottom border of a multiline table.
+FULL_RULE = re.compile(r"^ {0,3}-{3,}[ \t]*$")
+#: The most lines a multiline table's header may take.
+TABLE_HEADER_MAX_LINES = 10
 #: The start of a raw HTML table, as pandoc writes a table with merged cells or block content.
 HTML_TABLE_START = re.compile(r"<table\b", re.IGNORECASE)
 #: The end of a raw HTML table.
@@ -304,6 +403,11 @@ HTML_SUMMARY = re.compile(r"^(?:<details\b[^>]*>\s*)?<summary\b[^>]*>(.*?)</summ
 HTML_DETAILS_END = re.compile(r"^</details\s*>$", re.IGNORECASE)
 #: Any HTML tag or comment, removed from the text of a table, heading or summary.
 HTML_TAG = re.compile(r"<[^>]*>")
+#: An inline HTML tag, which a browser shows without a space: removed from the text without one.
+HTML_INLINE_TAG = re.compile(
+    r"</?(?:a|abbr|b|bdi|bdo|cite|code|data|del|dfn|em|i|ins|kbd|mark|q|s|samp|small|span|strong|time|u|var|wbr)\b[^>]*>",
+    re.IGNORECASE,
+)
 #: A source ID inside a wiki link or path, as the wiki contract names source files (`src-<hash>-<slug>.md`).
 SOURCE_ID_IN_TEXT = re.compile(r"\bsrc-[0-9a-f]{16}(?![0-9a-z])")
 #: A wiki link without a label; its target is an address, not text.
@@ -330,16 +434,40 @@ def number_spelling(value: str, apart: Optional[list[str]] = None) -> str:
     return NUMBER_UNIT.sub(r"\1 \2", DIGIT_GROUPS.sub(join, value))
 
 
+def superscript_tokens(repaired: str, written: Iterable[str]) -> list[str]:
+    """The tokens a repaired text gives with every superscript glued to its word that `written` lacks (pure).
+
+    "m^2^" is split into "m" and "2" as written, and gives "m2" here, so a
+    search for "m²" (normalised "m2") meets it; "Kündigungsfrist^1^" keeps
+    the word apart from its footnote mark and adds "kundigungsfrist1".
+    """
+    joined = wordforms.join_superscripts(repaired)
+    if joined == repaired:
+        return []
+    seen = set(written)
+    extra: list[str] = []
+    for token in TOKEN.findall(number_spelling(normalized(joined))):
+        if token not in seen:
+            seen.add(token)
+            extra.append(token)
+    return extra
+
+
 def tokens(value: str, drop_stopwords: bool = True, forms: bool = False) -> list[str]:
     """The normalised whole words of a text.
 
-    With `forms` (the word-form layer), layout artefacts that split a word are
-    repaired first, numbers are brought into one spelling (`number_spelling`),
-    and the stopword list is compared in its normalised form. Without it,
-    tokens are exactly those of the literal search.
+    With `forms` (the word-form layer), layout and markup artefacts that split
+    a word are repaired first (`wordforms.repair_text`), numbers are brought
+    into one spelling (`number_spelling`), a word with a superscript
+    ("m^2^") also gives its joined token ("m2") after the split ones, and the
+    stopword list is compared in its normalised form. Without it, tokens are
+    exactly those of the literal search.
     """
     if forms:
-        values = TOKEN.findall(number_spelling(normalized(wordforms.repair_text(value))))
+        repaired = wordforms.repair_text(value)
+        values = TOKEN.findall(number_spelling(normalized(repaired)))
+        if "^" in repaired:
+            values.extend(superscript_tokens(repaired, values))
     else:
         values = TOKEN.findall(normalized(value))
     if drop_stopwords:
@@ -1461,21 +1589,138 @@ class Passage(NamedTuple):
     identifiers: frozenset = frozenset()
 
 
+def _letters_before(text: str, end: int) -> int:
+    """Where the run of letters that ends at `end` starts (`end` when there is none)."""
+    start = end
+    while start > 0 and text[start - 1].isalpha():
+        start -= 1
+    return start
+
+
+def _skip_space_before(text: str, end: int) -> int:
+    while end > 0 and text[end - 1] in " \t\n":
+        end -= 1
+    return end
+
+
+def _word_before(text: str, end: int) -> int:
+    """Where the word that ends at `end` starts, a hyphenated one ("e-mail") included."""
+    start = _letters_before(text, end)
+    while start >= 2 and start < end and text[start - 1] == "-" and text[start - 2].isalpha():
+        start = _letters_before(text, start - 1)
+    return start
+
+
+def suspended_forms(text: str) -> set[str]:
+    """The joined forms of every compound a normalised text writes with a suspension hyphen, marked (pure).
+
+    "grund- und leistungspreis" gives "grund" joined to every trailing part of
+    "leistungspreis" of at least SUSPENDED_MIN_PART letters ("grundpreis",
+    "grundspreis", ...), and "vertragsbeginn und -ende" gives every leading part
+    of "vertragsbeginn" joined to "ende" ("vertragsende", ...). Chains count
+    too ("grund-, arbeits- und leistungspreis", "strom-/gas-/wasserversorgung",
+    "beginn, -dauer und -ende"). Each form carries SUSPENDED_MARK, so it never
+    stands for a written token: the scan matches a term against these forms
+    only under SUSPENDED_RULE, where most of them meet nothing.
+    """
+    found: set[str] = set()
+    longest = wordforms.MAX_COMPOUND
+    for match in SUSPENDED_FRONT.finditer(text):
+        end = match.start()
+        if not end or not text[end - 1].isalpha():
+            continue
+        other = LETTERS.match(text, match.end())
+        if other is None or len(other.group(0)) > longest:
+            continue
+        word = other.group(0)
+        parts = [word[cut:] for cut in range(1, len(word) - SUSPENDED_MIN_PART + 1)]
+        for _ in range(8):
+            start = _word_before(text, end)
+            written = text[start:end]
+            if not written or len(written) > longest:
+                break
+            found.update(SUSPENDED_MARK + written + part for part in parts)
+            # An earlier part of a chain: "grund-, arbeits- und ..." or "strom-/gas-/...".
+            before = _skip_space_before(text, start)
+            if before >= 2 and text[before - 1] in ",/" and text[before - 2] == "-":
+                end = before - 2
+                continue
+            break
+    for match in SUSPENDED_BACK.finditer(text):
+        other = LETTERS.match(text, match.end())
+        if other is None or len(other.group(0)) > longest:
+            continue
+        # Walk back over earlier suspended parts of a chain ("beginn, -dauer und -ende") to the written word.
+        end = _skip_space_before(text, match.start())
+        word = ""
+        for _ in range(8):
+            start = _word_before(text, end)
+            if start == end:
+                break
+            if start and text[start - 1] == "-" and (start < 2 or not text[start - 2].isalpha()):
+                end = _skip_space_before(text, start - 1)
+                if end and text[end - 1] in ",&":
+                    end = _skip_space_before(text, end - 1)
+                    continue
+                stop = end - 1 if end and text[end - 1] == "." else end
+                conjunction = _letters_before(text, stop)
+                if text[conjunction:stop] not in SUSPENDED_CONJUNCTIONS:
+                    break
+                end = _skip_space_before(text, conjunction)
+                continue
+            word = text[start:end]
+            break
+        if not word or len(word) > longest:
+            continue
+        found.update(
+            SUSPENDED_MARK + word[:cut] + other.group(0) for cut in range(SUSPENDED_MIN_PART, len(word))
+        )
+    return found
+
+
 def scan_words(repaired: str) -> frozenset:
     """The tokens the scan indexes for an already repaired text (pure).
 
     They are the tokens of the word-form layer (`tokens(..., False, True)`),
     plus the groups of every number joined across a space, which may have
-    been two numbers ("100 200") rather than one.
+    been two numbers ("100 200") rather than one; plus, where a superscript
+    digit is glued to a word ("Kündigungsfrist²", which normalisation turns
+    into "kundigungsfrist2"), the word and the digit apart, while the joined
+    token stays; plus, where a superscript in pandoc's markup follows a word
+    ("m^2^", "Kündigungsfrist^1^"), the joined token (`superscript_tokens`),
+    while the word and the mark stay apart; plus the marked joined forms of
+    compounds written with a suspension hyphen (`suspended_forms`).
     """
     apart: list[str] = []
-    found = frozenset(TOKEN.findall(number_spelling(normalized(repaired), apart)))
-    return found.union(apart) if apart else found
+    text = normalized(repaired)
+    found = frozenset(TOKEN.findall(number_spelling(text, apart)))
+    if apart:
+        found = found.union(apart)
+    if "^" in repaired:
+        joined = superscript_tokens(repaired, found)
+        if joined:
+            found = found.union(joined)
+    if SUPERSCRIPT_DIGIT.search(repaired) is not None:
+        spaced = SUPERSCRIPT_DIGIT.sub(lambda match: " " + match.group(0), repaired)
+        found = found.union(TOKEN.findall(number_spelling(normalized(spaced))))
+    if "-" in text:
+        joined = suspended_forms(text)
+        if joined:
+            found = found.union(joined)
+    return found
 
 
 def html_text(fragment: str) -> str:
-    """The text of an HTML fragment: tags and comments removed, entities decoded, whitespace collapsed (pure)."""
+    """The text of an HTML fragment: tags and comments removed, entities decoded, whitespace collapsed (pure).
+
+    A subscript is joined to its word and a superscript written as pandoc's
+    ^...^ (`wordforms.repair_markup`), and an inline tag ("<strong>",
+    "<em>", "<span>") is removed without a space, so "CO<sub>2</sub>" and
+    "<b>Kündigungs</b>frist" stay one word as a browser shows them; every
+    other tag stands for a space.
+    """
     if "<" in fragment:
+        fragment = HTML_INLINE_TAG.sub("", wordforms.repair_markup(fragment))
         fragment = HTML_TAG.sub(" ", fragment)
     if "&" in fragment:
         fragment = html_unescape(fragment)
@@ -1593,6 +1838,204 @@ def claim_identifiers(claim: dict[str, Any]) -> frozenset:
     )
 
 
+def _blank_or_marker(line: str) -> bool:
+    """True for a blank line or a line that holds only page or slide markers."""
+    stripped = line.strip()
+    return not stripped or (stripped.startswith("<!--") and not PAGE_MARKER.sub("", stripped).strip())
+
+
+def _column_cells(line: str, bounds: list[Optional[int]]) -> list[str]:
+    """The cells of one line of a simple or multiline table, cut where the column rule's runs start."""
+    return [line[bounds[column]:bounds[column + 1]].strip() for column in range(len(bounds) - 1)]
+
+
+def _grid_cells(line: str) -> list[str]:
+    """The cells of one content line of a grid table, between its pipes."""
+    inner = line.strip()
+    inner = inner[1:] if inner.startswith("|") else inner
+    inner = inner[:-1] if inner.endswith("|") else inner
+    return [cell.strip() for cell in inner.split("|")]
+
+
+def _table_rows(
+    lines: list[str], first: int, last: int, groups: list[list[int]], cells_of: Any
+) -> tuple[list[tuple[int, str, list[str]]], list[str]]:
+    """Each group of lines as one pipe-style row, with the page markers met up to it, and the markers after the last row.
+
+    The fragments of a cell are joined with a line break, so a hyphen at the
+    end of a fragment is repaired as in a paragraph.
+    """
+    markers_at: dict[int, list[str]] = {}
+    for number in range(first, last + 1):
+        if "<!--" in lines[number]:
+            found = [f"{match.group(1).lower()}={match.group(2)}" for match in PAGE_MARKER.finditer(lines[number])]
+            if found:
+                markers_at[number] = found
+    rows: list[tuple[int, str, list[str]]] = []
+    pending: list[str] = []
+    done = first - 1
+    for group in groups:
+        for number in range(done + 1, group[-1] + 1):
+            pending.extend(markers_at.get(number, ()))
+        done = group[-1]
+        columns: list[list[str]] = []
+        for number in group:
+            line = PAGE_MARKER.sub(" ", lines[number]) if number in markers_at else lines[number]
+            for column, cell in enumerate(cells_of(line.rstrip())):
+                if column == len(columns):
+                    columns.append([])
+                if cell:
+                    columns[column].append(cell)
+        if any(columns):
+            rows.append((group[0], "| " + " | ".join("\n".join(column) for column in columns) + " |", pending))
+            pending = []
+    for number in range(done + 1, last + 1):
+        pending.extend(markers_at.get(number, ()))
+    return rows, pending
+
+
+def _rule_groups(lines: list[str], start: int, single: bool) -> Optional[tuple[list[list[int]], int]]:
+    """The rows from `start` up to a closing rule, and the rule's line, or None when no rule closes them.
+
+    Rows are separated by blank lines, unless `single` makes every line a row.
+    Two blank lines in a row, a heading at column 0 or a fence end the search
+    without a table.
+    """
+    groups: list[list[int]] = []
+    current: list[int] = []
+    blank = False
+    for number in range(start, len(lines)):
+        line = lines[number].rstrip()
+        if not line.strip():
+            if blank:
+                return None
+            blank = True
+            if current:
+                groups.append(current)
+                current = []
+            continue
+        blank = False
+        if COLUMN_RULE.match(line) or FULL_RULE.match(line):
+            if current:
+                groups.append(current)
+            return (groups, number) if groups else None
+        if line.startswith("#") or FENCE.match(line):
+            return None
+        if single:
+            groups.append([number])
+        else:
+            current.append(number)
+    return None
+
+
+def pandoc_table(lines: list[str], index: int) -> Optional[tuple[int, int, list[tuple[int, str, list[str]]], list[str]]]:
+    """A table in one of pandoc's Markdown forms that starts at `lines[index]`, or None (pure).
+
+    The forms are the grid table (rows between +---+ borders, the header above
+    a +===+ border), the multiline table (pandoc's default for a Word table: a
+    full-width rule, the header, a column rule of dashes, rows separated by
+    blank lines, a closing rule), the simple table (a header line, a column
+    rule, one row per line, up to a blank line) and both without a header.
+    Returns the number of lines the table takes, the indent of its first line,
+    its rows as pipe-style text with the index of each row's first line and
+    the page markers met up to it (the header row first), and the markers
+    after its last row. Cells are cut at the column rule's runs or at the
+    grid's pipes, so a cell over several lines stays one cell.
+    """
+    line = lines[index].rstrip()
+    left = line.lstrip()
+    depth = len(line) - len(left)
+    count = len(lines)
+    previous = lines[index - 1] if index else ""
+    if left[:1] == "+":
+        if GRID_BORDER.match(line) is None:
+            return None
+        groups: list[list[int]] = []
+        current: list[int] = []
+        header_end = 0
+        number = index + 1
+        while number < count:
+            row = lines[number].rstrip()
+            if GRID_BORDER.match(row):
+                if current:
+                    groups.append(current)
+                    current = []
+                if "=" in row and not header_end:
+                    header_end = len(groups)
+            elif row.lstrip().startswith("|"):
+                current.append(number)
+            else:
+                break
+            number += 1
+        if current:
+            groups.append(current)
+        if not groups:
+            return None
+        if header_end > 1:
+            groups = [[number for group in groups[:header_end] for number in group]] + groups[header_end:]
+        rows, trailing = _table_rows(lines, index, number - 1, groups, _grid_cells)
+        return (number - index, depth, rows, trailing) if rows else None
+    if left[:1] == "-":
+        if FULL_RULE.match(line):
+            # A multiline table with a header: the header lines run up to the column rule.
+            for rule in range(index + 1, min(count, index + 2 + TABLE_HEADER_MAX_LINES)):
+                ruled = lines[rule].rstrip()
+                if not ruled.strip() or FULL_RULE.match(ruled):
+                    return None
+                if COLUMN_RULE.match(ruled):
+                    break
+            else:
+                return None
+            if rule == index + 1:
+                return None
+            found = _rule_groups(lines, rule + 1, False)
+            if found is None:
+                return None
+            body, close = found
+            groups = [list(range(index + 1, rule))] + body
+        elif COLUMN_RULE.match(line) and _blank_or_marker(previous):
+            # A table without a header: between two column rules, rows separated by blank lines or one per line.
+            found = _rule_groups(lines, index + 1, False)
+            if found is None:
+                return None
+            body, close = found
+            if all(len(group) == 1 for group in body) or not any(
+                not lines[number].strip() for number in range(index + 1, close)
+            ):
+                body = [[number] for group in body for number in group]
+            rule = index
+            groups = body
+        else:
+            return None
+        starts = [match.start() for match in re.finditer(r"-+", lines[rule].rstrip())]
+        bounds: list[Optional[int]] = [0, *starts[1:], None]
+        rows, trailing = _table_rows(lines, index, close, groups, lambda text: _column_cells(text, bounds))
+        return (close - index + 1, depth, rows, trailing) if rows else None
+    if (
+        index + 1 < count and left and left[0] not in "#|<>" and LIST_ITEM.match(line) is None
+        and COLUMN_RULE.match(lines[index + 1].rstrip())
+        and (_blank_or_marker(previous) or FULL_RULE.match(previous.rstrip()))
+    ):
+        # A simple table: one header line, the column rule, one row per line up to a blank line or a closing rule.
+        groups = [[index]]
+        close = index + 1
+        for number in range(index + 2, count):
+            row = lines[number].rstrip()
+            if not row.strip():
+                break
+            close = number
+            if COLUMN_RULE.match(row) or FULL_RULE.match(row):
+                break
+            groups.append([number])
+        if len(groups) == 1:
+            return None
+        starts = [match.start() for match in re.finditer(r"-+", lines[index + 1].rstrip())]
+        bounds = [0, *starts[1:], None]
+        rows, trailing = _table_rows(lines, index, close, groups, lambda text: _column_cells(text, bounds))
+        return (close - index + 1, depth, rows, trailing) if rows else None
+    return None
+
+
 def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Passage]:
     """Cut one file into the passages the exhaustive scan matches (pure).
 
@@ -1614,7 +2057,10 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
     HTML details block, which lasts until the next heading or label), from its
     parent list items, and, in a table cut at the size cap, from the table's
     first row. A raw HTML table is read as a table: each row becomes a row of
-    cells, and its first row is the one a cut carries. The page header and
+    cells, and its first row is the one a cut carries. So are pandoc's grid,
+    multiline and simple tables (`pandoc_table`): a row over several lines or
+    separated by blank lines stays one row of cells, and the header row is
+    the first row a cut carries. The page header and
     every claim also carry the identifiers of their metadata as whole tokens:
     page and source IDs, and the claim, source, replaced and contradicted
     claim IDs. The targets of unlabelled wiki links are identifiers too
@@ -1923,12 +2369,39 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
             enter(len(line) - len(left))
         append(line, number)
 
+    def pandoc_rows(table: tuple[int, int, list[tuple[int, str, list[str]]], list[str]], start: int) -> None:
+        # A pandoc grid, multiline or simple table is read as a table: each row one row of cells, the header carried across a cut.
+        nonlocal locator
+        _, depth, rows, trailing = table
+        finish()
+        for offset, row, markers in rows:
+            if markers:
+                locator = markers[-1]
+            table_line(row, start + offset, depth)
+        finish()
+        if trailing:
+            locator = trailing[-1]
+
     position = 0
     line_at = body_line
 
     def walk(segment: str, start: int) -> None:
-        for offset, line in enumerate(segment.split("\n")):
-            handle(line, start + offset)
+        segment_lines = segment.split("\n")
+        count = len(segment_lines)
+        index = 0
+        while index < count:
+            line = segment_lines[index]
+            if (
+                not fenced and html_block is None
+                and (line.lstrip()[:1] in ("-", "+") or (index + 1 < count and segment_lines[index + 1].lstrip()[:1] == "-"))
+            ):
+                table = pandoc_table(segment_lines, index)
+                if table is not None:
+                    pandoc_rows(table, start)
+                    index += table[0]
+                    continue
+            handle(line, start + index)
+            index += 1
 
     def close() -> None:
         if html_block is not None:
@@ -2025,19 +2498,155 @@ def alternatives(
     return found
 
 
+def hyphen_groups(units: list[str]) -> list[str]:
+    """The written parts of a hyphenated token with every one-character part kept on its neighbour (pure).
+
+    A part of one character joins the part after it, or the part before it
+    when it is the last: "e-mail-adresse" gives "e-mail" and "adresse",
+    "typ-2-stecker" gives "typ" and "2-stecker", "vitamin-c" gives
+    "vitamin-c". So "E-Mail" stays one part and "E" is never one.
+    """
+    groups: list[str] = []
+    pending = ""
+    for unit in units:
+        if pending:
+            unit = pending + "-" + unit
+            pending = ""
+        if len(unit) < 2:
+            pending = unit
+            continue
+        groups.append(unit)
+    if pending:
+        if groups:
+            groups[-1] = groups[-1] + "-" + pending
+        else:
+            groups.append(pending)
+    return groups
+
+
 def hyphen_units(word: str) -> tuple:
     """The parts of a hyphenated content word that a passage may write apart, or () (pure).
 
-    Closed-class and function words among them are dropped; at least two
-    distinct parts of two or more characters must remain, so "E-Mobilität"
-    never stands for "Mobilität" alone.
+    A one-character part stays on its neighbour (`hyphen_groups`), so
+    "E-Mail-Adresse" gives "e-mail" and "adresse", and "E-Mobilität" gives
+    no parts at all: it never stands for "Mobilität" alone. Closed-class and
+    function words among the parts are dropped; at least two distinct parts
+    must remain.
     """
     if "-" not in word and "_" not in word:
         return ()
-    units = tuple(dict.fromkeys(unit for unit in wordforms.units_of(word) if unit not in SCAN_EXCLUDED))
-    if len(units) < 2 or any(len(unit) < 2 for unit in units):
+    units = tuple(dict.fromkeys(unit for unit in hyphen_groups(wordforms.units_of(word)) if unit not in SCAN_EXCLUDED))
+    if len(units) < 2:
         return ()
     return units
+
+
+def shown_token(token: str) -> str:
+    """A member token as a report prints it: a joined form of a suspended compound without its mark."""
+    return token[1:] if token[:1] == SUSPENDED_MARK else token
+
+
+def ending_bases(spelling: str) -> set[str]:
+    """The bases of a folded spelling: itself and itself without one of INFLECTION_ENDINGS (pure).
+
+    A base keeps at least ENDING_MIN_STEM letters, and a spelling shorter than
+    that has none. Two words share a base when the `ending` rule matches them.
+    """
+    if not spelling.isalpha() or len(spelling) < ENDING_MIN_STEM:
+        return set()
+    bases = {spelling}
+    bases.update(
+        spelling[: -len(ending)]
+        for ending in INFLECTION_ENDINGS
+        if spelling.endswith(ending) and len(spelling) - len(ending) >= ENDING_MIN_STEM
+    )
+    return bases
+
+
+def ending_variants(spelling: str) -> set[str]:
+    """The spellings that share a base with a folded spelling, as the `ending` rule compares (pure).
+
+    Every base of `ending_bases` with nothing or one of INFLECTION_ENDINGS
+    after it: "intelligenten" gives "intelligentem" and "intelligenter"
+    (through "intelligent"), "tag" gives "tage", "auto" gives "autos". The
+    spelling itself is left out.
+    """
+    variants = {base + ending for base in ending_bases(spelling) for ending in ("", *INFLECTION_ENDINGS)}
+    variants.discard(spelling)
+    return variants
+
+
+def verb_stems(spelling: str) -> set[str]:
+    """The verb stems a folded spelling may hold: without one of VERB_ENDINGS, or inside a participle ge-...-t (pure)."""
+    if not spelling.isalpha():
+        return set()
+    stems = {
+        spelling[: -len(ending)]
+        for ending in VERB_ENDINGS
+        if spelling.endswith(ending) and len(spelling) - len(ending) >= VERB_MIN_STEM
+    }
+    if spelling.startswith("ge") and spelling.endswith("t"):
+        inner = spelling[2:-2] if spelling.endswith("et") else spelling[2:-1]
+        if len(inner) >= VERB_MIN_STEM:
+            stems.add(inner)
+    return stems
+
+
+def separable_stems(spelling: str) -> set[tuple[str, str]]:
+    """The (particle, stem) pairs of a separable verb that a folded spelling may be a form of (pure).
+
+    A spelling that starts with one of SEPARABLE_PARTICLES is read three ways:
+    particle, stem and one of VERB_ENDINGS ("abschalten", "abschaltete");
+    particle, ge-, stem and -t, -et or -en, the participle ("abgeschaltet",
+    "angepasst", "angegeben"); and particle, zu-, stem and -n or -en, the
+    infinitive with zu ("abzuschalten"). Each stem keeps at least
+    SEPARABLE_MIN_STEM letters.
+    """
+    pairs: set[tuple[str, str]] = set()
+    if not spelling.isalpha():
+        return pairs
+    for particle in SEPARABLE_PARTICLES:
+        if not spelling.startswith(particle):
+            continue
+        rest = spelling[len(particle):]
+        if len(rest) < SEPARABLE_MIN_STEM:
+            continue
+        stems = {
+            rest[: -len(ending)]
+            for ending in VERB_ENDINGS
+            if rest.endswith(ending) and len(rest) - len(ending) >= SEPARABLE_MIN_STEM
+        }
+        for infix, endings in (("ge", ("t", "et", "en")), ("zu", ("n", "en"))):
+            if rest.startswith(infix):
+                stems.update(
+                    rest[2: -len(ending)]
+                    for ending in endings
+                    if rest.endswith(ending) and len(rest) - 2 - len(ending) >= SEPARABLE_MIN_STEM
+                )
+        pairs.update((particle, stem) for stem in stems)
+    return pairs
+
+
+def verb_variants(spelling: str) -> set[str]:
+    """The other verb forms of a folded spelling, as the `verb_ending` rule compares (pure).
+
+    Every stem of `verb_stems` with each of VERB_ENDINGS and as a participle
+    ge-...-t and ge-...-et: "senkt" gives "senken", "senkte" and "gesenkt".
+    Every pair of `separable_stems` with each of VERB_ENDINGS after the stem,
+    as a participle with ge- after the particle (-t, -et, -en), and as an
+    infinitive with zu- after the particle: "abschalten" gives "abgeschaltet"
+    and "abzuschalten", "abgeschaltet" gives "abschalten".
+    """
+    variants: set[str] = set()
+    for stem in verb_stems(spelling):
+        variants.update(stem + ending for ending in VERB_ENDINGS)
+        variants.update(("ge" + stem + "t", "ge" + stem + "et"))
+    for particle, stem in separable_stems(spelling):
+        variants.update(particle + stem + ending for ending in VERB_ENDINGS)
+        variants.update(particle + "ge" + stem + ending for ending in ("t", "et", "en"))
+        variants.update((particle + "zu" + stem + "en", particle + "zu" + stem + "n"))
+    variants.discard(spelling)
+    return variants
 
 
 def scan_members(ranking: Ranking, scan: "ScanIndex", vocabulary: dict[str, int]) -> dict[Any, list[wordforms.Member]]:
@@ -2058,9 +2667,22 @@ def scan_members(ranking: Ranking, scan: "ScanIndex", vocabulary: dict[str, int]
     - every scanned token that is the term with an inflection ending added
       or removed where the stem rule cannot see it ("krankenhauser" for
       "krankenhaus", "tage" for "tag") is added under the heuristic rule
-      `ending` (see `ScanIndex.ending_forms`).
+      `ending` (see `ScanIndex.ending_forms`);
+    - every scanned token that is another verb form of a four-letter stem
+      ("senken" for "senkt", "zahlt" for "zahlen") is added under the
+      heuristic rule `verb_ending` (see `ScanIndex.verb_forms`);
+    - every scanned token that glues a one- or two-digit footnote mark to the
+      term's stem key ("kundigungsfrist2") is added under `footnote_mark`, and
+      every marked joined form of a suspended compound with the term's stem
+      key ("grund- und leistungspreis" for "grundpreis") under
+      `suspended_compound`;
+    - for a term of two or three letters, every scanned token that holds it
+      as its first or last part ("gaskunden", "erdgas" for "gas") is added
+      under `short_part` (see `ScanIndex.short_parts`).
     """
     parts = scan.hyphen_parts()
+    footnotes = scan.footnote_marks()
+    suspended = scan.suspended()
     members: dict[Any, list[wordforms.Member]] = {}
     for item in ranking.terms:
         term = item["term"]
@@ -2075,43 +2697,141 @@ def scan_members(ranking: Ranking, scan: "ScanIndex", vocabulary: dict[str, int]
                     else:
                         listed.append(member)
                     known.add(token)
-            for token in sorted(parts.get(wordforms.stem_key(term), ())):
-                if token not in known:
-                    listed.append((token, HYPHEN_PART_RULE, HYPHEN_PART_WEIGHT))
-                    known.add(token)
-            for token in sorted(scan.ending_forms(term)):
-                if token not in known:
-                    listed.append((token, ENDING_RULE, ENDING_WEIGHT))
+            key = wordforms.stem_key(term)
+            for found, rule, weight in (
+                (parts.get(key, ()), HYPHEN_PART_RULE, HYPHEN_PART_WEIGHT),
+                (scan.ending_forms(term), ENDING_RULE, ENDING_WEIGHT),
+                (scan.verb_forms(term), VERB_ENDING_RULE, VERB_ENDING_WEIGHT),
+                (footnotes.get(key, ()), FOOTNOTE_RULE, FOOTNOTE_WEIGHT),
+                (suspended.get(key, ()), SUSPENDED_RULE, SUSPENDED_WEIGHT),
+                (scan.short_parts(term), SHORT_PART_RULE, SHORT_PART_WEIGHT),
+            ):
+                for token in sorted(found):
+                    if token not in known:
+                        listed.append((token, rule, weight))
+                        known.add(token)
         members[term] = listed
     return members
 
 
-def counted_reformulations(formulations: list[dict[str, Any]], contents: list[list[str]]) -> list[bool]:
+def _word_sequence(text: str, words: frozenset, memo: dict[str, bool]) -> bool:
+    """Whether a folded spelling is one or more of `words` joined by linking elements (the last one by its stem too)."""
+    known = memo.get(text)
+    if known is not None:
+        return known
+    found = text in words or wordforms.stem(text) in words
+    if not found and len(text) <= wordforms.MAX_COMPOUND:
+        for cut in range(wordforms.MIN_PART, len(text) - wordforms.MIN_PART + 1):
+            if text[:cut] not in words:
+                continue
+            if any(
+                text.startswith(link, cut) and len(text) - cut - len(link) >= wordforms.MIN_PART
+                and _word_sequence(text[cut + len(link):], words, memo)
+                for link in wordforms.LINKS
+            ):
+                found = True
+                break
+    memo[text] = found
+    return found
+
+
+def _linked_words(rest: str, words: frozenset, memo: dict[str, bool]) -> bool:
+    """Whether the rest of a word after a short first part is a linking element and one or more `words`."""
+    return any(
+        rest.startswith(link) and len(rest) - len(link) >= wordforms.MIN_PART and _word_sequence(rest[len(link):], words, memo)
+        for link in wordforms.LINKS
+    )
+
+
+def same_scan_word(left: str, right: str) -> bool:
+    """Whether the scan matches two content words as forms of each other (pure).
+
+    True for the same word in another spelling or inflection (`exact`, `fold`
+    and `stem`: one stem key, so also a hyphenated word written joined or
+    hyphenated elsewhere), a verb form of the word forms (`verb`: a shared
+    verb key), a shared base of the `ending` rule ("Kinder" and "Kind",
+    "Tage" and "Tag", "intelligentem" and "intelligenten"), and another verb
+    form of a four-letter stem or of a separable verb (`verb_ending`:
+    "senkt" and "senken", "abgeschaltet" and "abschalten").
+    """
+    if left == right:
+        return True
+    left_key, right_key = wordforms.stem_key(left), wordforms.stem_key(right)
+    if left_key == right_key:
+        return True
+    if left_key.isalpha() and right_key.isalpha():
+        if not {left_key, *wordforms.verb_keys(left_key)}.isdisjoint((right_key, *wordforms.verb_keys(right_key))):
+            return True
+    left_spelling, right_spelling = wordforms.spelling_key(left), wordforms.spelling_key(right)
+    if not (left_spelling.isalpha() and right_spelling.isalpha()):
+        return False
+    return (
+        right_spelling in ending_variants(left_spelling) or left_spelling in ending_variants(right_spelling)
+        or right_spelling in verb_variants(left_spelling) or left_spelling in verb_variants(right_spelling)
+    )
+
+
+def counted_reformulations(
+    formulations: list[dict[str, Any]],
+    contents: list[list[str]],
+    concepts: Optional[list[dict[str, frozenset]]] = None,
+) -> list[bool]:
     """Which kept formulations count as reformulations for a complete absence check (pure).
 
     The question never counts. A reformulation counts when it has a content
-    word and its set of content-word stem keys is neither equal to nor a
-    superset of the question's set or of any earlier counted reformulation's
-    set: the same words in another order, another spelling or another
-    inflection are no new search, and neither are added words, which under
-    the hit rule can only narrow what the scan finds. A hyphenated word
-    counts as its parts (`hyphen_units`), because the scan matches
-    "SMS-Warndienst" and "SMS Warndienst" against each other.
+    word and does not hold every content word of the question or of another
+    reformulation with content words, wherever that one stands; of several
+    reformulations that hold each other's words, only the first counts. The
+    same words in another order, spelling or inflection are no new search, and
+    neither are added words, which under the hit rule can only narrow what the
+    scan finds. So the order of the reformulations never changes the count.
+
+    Two words are the same when the scan matches them as forms of each other
+    (`same_scan_word`), or when both stand in a run of the same confirmed
+    concept in their own formulation (`concepts`: per formulation, the concept
+    ids per content word), because the scan then matches every term of that
+    concept for both. A hyphenated word is held where a word with the same
+    stem key is ("SMS-Warndienst", "SMSWarndienst", "SMS-Warn-Dienst"), or
+    where all of its parts are (`hyphen_units`: "SMS Warndienst"); the parts
+    of a hyphenated word hold what they hold alone.
     """
+    concepts = concepts or [{} for _ in contents]
 
-    def stem_keys(words: list[str]) -> frozenset:
-        return frozenset(wordforms.stem_key(unit) for word in words for unit in (hyphen_units(word) or (word,)))
+    def pool(index: int) -> list[tuple[str, frozenset]]:
+        words = [(word, concepts[index].get(word, frozenset())) for word in contents[index]]
+        words.extend((unit, frozenset()) for word in contents[index] for unit in hyphen_units(word))
+        return words
 
-    question = stem_keys(contents[0]) if contents else frozenset()
-    seen = [question] if question else []
+    def same(left: tuple[str, frozenset], right: tuple[str, frozenset]) -> bool:
+        return not left[1].isdisjoint(right[1]) or same_scan_word(left[0], right[0])
+
+    def holds(index: int, other: int) -> bool:
+        """Whether formulation `index` holds every content word of formulation `other`."""
+        words = pool(index)
+        for word in contents[other]:
+            item = (word, concepts[other].get(word, frozenset()))
+            if any(same(item, candidate) for candidate in words):
+                continue
+            units = hyphen_units(word)
+            if units and all(any(same((unit, frozenset()), candidate) for candidate in words) for unit in units):
+                continue
+            return False
+        return True
+
+    filled = [index for index, words in enumerate(contents) if words]
     counted: list[bool] = []
-    for index, (entry, words) in enumerate(zip(formulations, contents)):
-        keys = stem_keys(words)
-        counts = (
-            index > 0 and entry.get("origin") == "also" and bool(words) and not any(keys >= earlier for earlier in seen)
-        )
+    for index, entry in enumerate(formulations[: len(contents)]):
+        counts = index > 0 and entry.get("origin") == "also" and bool(contents[index])
+        if counts and contents[0] and holds(index, 0):
+            counts = False
         if counts:
-            seen.append(keys)
+            for other in filled:
+                if other in (0, index) or not holds(index, other):
+                    continue
+                # A strict superset never counts; of equal ones only the first does.
+                if not holds(other, index) or other < index:
+                    counts = False
+                    break
         counted.append(counts)
     return counted
 
@@ -2196,7 +2916,10 @@ class ScanIndex:
         self._parts: Optional[dict[str, frozenset]] = None
         self._stems: Optional[dict[str, frozenset]] = None
         self._spellings: Optional[dict[str, frozenset]] = None
+        self._footnotes: Optional[dict[str, frozenset]] = None
+        self._suspended: Optional[dict[str, frozenset]] = None
         self._scan_only: Optional[tuple[Any, dict[str, frozenset]]] = None
+        self._part_words: Optional[tuple[frozenset, list[tuple[str, str]]]] = None
         for relative, scope, text, document, selected in files:
             if scan_navigation(relative):
                 self.counts[scope]["navigation_skipped"] += 1
@@ -2278,16 +3001,24 @@ class ScanIndex:
 
         Whether a token is text is decided per passage: a token that stands
         somewhere only as an identifier or link target is still split where it
-        is written as text, and never where it is an address.
+        is written as text, and never where it is an address. A part of one
+        character is indexed only together with its neighbour
+        (`hyphen_groups`): "e-mail-adresse" is listed under "mail",
+        "adress" and "email", never under "e".
         """
         if self._parts is None:
             parts: dict[str, set[str]] = {}
             for token in self.own:
                 if ("-" not in token and "_" not in token) or not self.written_holders(token):
                     continue
-                for unit in wordforms.units_of(token):
+                units = wordforms.units_of(token)
+                for unit in units:
                     if len(unit) >= 2 and unit not in SCAN_EXCLUDED:
                         parts.setdefault(wordforms.stem_key(unit), set()).add(token)
+                if any(len(unit) < 2 for unit in units):
+                    for group in hyphen_groups(units):
+                        if "-" in group:
+                            parts.setdefault(wordforms.stem_key(group), set()).add(token)
             self._parts = {key: frozenset(found) for key, found in parts.items()}
         return self._parts
 
@@ -2316,21 +3047,33 @@ class ScanIndex:
         return self._spellings
 
     def ending_forms(self, term: str) -> frozenset:
-        """The scanned tokens that are `term` with one of INFLECTION_ENDINGS added or removed, compared in folded spelling.
+        """The scanned tokens that share a base with `term` (`ending_variants`), compared in folded spelling.
 
         "krankenhaus" finds "krankenhauser" and "krankenhausern", "tag" finds
-        "tage", "tagen" and "tages", "tage" finds "tag"; a stem of fewer than
-        ENDING_MIN_STEM letters is never extended or left.
+        "tage", "tagen" and "tages", "tage" finds "tag", "intelligenten"
+        finds "intelligentem" and "intelligenter", "auto" finds "autos"; a
+        base of fewer than ENDING_MIN_STEM letters is never used.
         """
-        key = wordforms.spelling_key(term)
-        if term in SCAN_EXCLUDED or not key.isalpha() or len(key) < ENDING_MIN_STEM:
+        if term in SCAN_EXCLUDED:
             return frozenset()
-        candidates = {key + ending for ending in INFLECTION_ENDINGS}
-        candidates.update(
-            key[: -len(ending)]
-            for ending in INFLECTION_ENDINGS
-            if key.endswith(ending) and len(key) - len(ending) >= ENDING_MIN_STEM
-        )
+        return self._scanned(ending_variants(wordforms.spelling_key(term)), term)
+
+    def verb_forms(self, term: str) -> frozenset:
+        """The scanned tokens that are another verb form of `term` (`verb_variants`), compared in folded spelling.
+
+        "senkt" finds "senken" and "gesenkt", "zahlen" finds "zahlt" and
+        "zahlte", "abschalten" finds "abgeschaltet" and "abzuschalten"; a
+        stem of fewer than VERB_MIN_STEM letters (SEPARABLE_MIN_STEM after a
+        separable particle) is never used.
+        """
+        if term in SCAN_EXCLUDED:
+            return frozenset()
+        return self._scanned(verb_variants(wordforms.spelling_key(term)), term)
+
+    def _scanned(self, candidates: set[str], term: str) -> frozenset:
+        """The scanned tokens that are one of the folded `candidates`, without `term` and the excluded words."""
+        if not candidates:
+            return frozenset()
         spellings = self.spellings()
         found: set[str] = set()
         for candidate in candidates:
@@ -2339,6 +3082,87 @@ class ScanIndex:
             found.update(spellings.get(candidate, ()))
         found.discard(term)
         return frozenset(found - SCAN_EXCLUDED)
+
+    def footnote_marks(self) -> dict[str, frozenset]:
+        """Per stem key of the letters, the scanned tokens that glue one or two digits to a word of four or more letters, built once.
+
+        "kundigungsfrist2" is listed under "kundigungsfrist": a footnote mark
+        that a converter wrote as a plain digit.
+        """
+        if self._footnotes is None:
+            footnotes: dict[str, set[str]] = {}
+            for token in self.own:
+                if token[-1:].isdigit():
+                    match = FOOTNOTE_TOKEN.fullmatch(token)
+                    if match is not None:
+                        footnotes.setdefault(wordforms.stem_key(match.group(1)), set()).add(token)
+            self._footnotes = {key: frozenset(found) for key, found in footnotes.items()}
+        return self._footnotes
+
+    def part_words(self) -> tuple[frozenset, list[tuple[str, str]]]:
+        """The words a short part's rest may be, and the words a short part is looked for in, built once.
+
+        The first are the folded spellings and stem keys of every alphabetic
+        scanned token of at least wordforms.MIN_PART letters outside the
+        excluded words. The second are (token, folded spelling) for every
+        alphabetic scanned token, and for every part of a hyphenated token
+        written as text, of at most wordforms.MAX_COMPOUND letters.
+        """
+        if self._part_words is None:
+            words: set[str] = set()
+            alpha: list[tuple[str, str]] = []
+            for token in self.own:
+                if token.isalpha():
+                    if len(token) > wordforms.MAX_COMPOUND:
+                        continue
+                    spelling = wordforms.spelling_key(token)
+                    alpha.append((token, spelling))
+                    if len(spelling) >= wordforms.MIN_PART and token not in SCAN_EXCLUDED:
+                        words.add(spelling)
+                        words.add(wordforms.stem(spelling))
+                elif "-" in token and token[:1] != SUSPENDED_MARK and self.written_holders(token):
+                    for unit in wordforms.units_of(token):
+                        if unit.isalpha() and len(unit) <= wordforms.MAX_COMPOUND:
+                            alpha.append((token, wordforms.spelling_key(unit)))
+            self._part_words = (frozenset(words), alpha)
+        return self._part_words
+
+    def short_parts(self, term: str) -> frozenset:
+        """The scanned tokens that hold a term of two or three letters as a part (SHORT_PART_RULE).
+
+        "gas" finds "gaskunden" and "gasversorger" when "kunden" and
+        "versorger" are words of the scanned files, and "erdgas",
+        "flussiggas" and "erdgas-tarif" without that condition; "tag" finds
+        "feiertagen". A term outside those lengths, or excluded, finds nothing.
+        """
+        if term in SCAN_EXCLUDED:
+            return frozenset()
+        key = wordforms.spelling_key(term)
+        if not key.isalpha() or not SHORT_PART_MIN <= len(key) <= SHORT_PART_MAX:
+            return frozenset()
+        words, alpha = self.part_words()
+        heads = tuple(key + ending for ending in ("", *INFLECTION_ENDINGS))
+        memo: dict[str, bool] = {}
+        found: set[str] = set()
+        for token, spelling in alpha:
+            if token in found or len(spelling) < len(key) + SHORT_PART_LEAD:
+                continue
+            if any(
+                spelling.endswith(head) and len(spelling) - len(head) >= SHORT_PART_LEAD for head in heads
+            ) or (spelling.startswith(key) and _linked_words(spelling[len(key):], words, memo)):
+                found.add(token)
+        found.discard(term)
+        return frozenset(found - SCAN_EXCLUDED)
+
+    def suspended(self) -> dict[str, frozenset]:
+        """Per stem key, the marked joined forms of suspended compounds (`suspended_forms`), built once."""
+        if self._suspended is None:
+            joined: dict[str, set[str]] = {}
+            for token in self.own:
+                if token[:1] == SUSPENDED_MARK:
+                    joined.setdefault(wordforms.stem_key(token[1:]), set()).add(token)
+            self._suspended = {key: frozenset(found) for key, found in joined.items()}
+        return self._suspended
 
     def scan_only_forms(self, term: str, vocabulary: dict[str, int]) -> list[tuple[str, str]]:
         """Scanned tokens the ranking's vocabulary lacks that are `term` itself or one of its word forms, with the rule.
@@ -2365,7 +3189,9 @@ class ScanIndex:
         key = wordforms.stem_key(unit)
         found = self.stems().get(key, frozenset()) | self.hyphen_parts().get(key, frozenset())
         members = [(token, HYPHEN_PART_RULE, HYPHEN_PART_WEIGHT) for token in sorted(found)]
-        members.extend((token, ENDING_RULE, ENDING_WEIGHT) for token in sorted(self.ending_forms(unit) - found))
+        ending = self.ending_forms(unit) - found
+        members.extend((token, ENDING_RULE, ENDING_WEIGHT) for token in sorted(ending))
+        members.extend((token, SHORT_PART_RULE, SHORT_PART_WEIGHT) for token in sorted(self.short_parts(unit) - found - ending))
         return members
 
 
@@ -2464,8 +3290,10 @@ class _Formulation:
             self.alternatives[word] = self.alternatives[word] + [(None, keys)]
 
     def key_of(self, token: str, rule: str) -> Any:
-        """The matcher's key for one member: a joined token taken by hyphen_part counts only where it is text."""
-        if rule == HYPHEN_PART_RULE and token in self.scan.address_only and ("-" in token or "_" in token):
+        """The matcher's key for one member: a token taken by hyphen_part or short_part counts only where it is text."""
+        if token in self.scan.address_only and (
+            rule == SHORT_PART_RULE or (rule == HYPHEN_PART_RULE and ("-" in token or "_" in token))
+        ):
             return (TEXT_ONLY, token)
         return token
 
@@ -2542,7 +3370,7 @@ class _Formulation:
                     continue
                 entry: dict[str, Any] = {
                     "term": word,
-                    "token": best[0][2],
+                    "token": shown_token(best[0][2]),
                     "rule": best[1],
                     "in": ("text", "heading", "header")[best[0][0]],
                 }
@@ -2756,7 +3584,7 @@ def exhaustive_scan(
                 "formulations": [index],
                 "passages": {scope: passages[scope] if scan.scanned[scope] else None for scope in SCOPES},
                 "files": {scope: len(files[scope]) if scan.scanned[scope] else None for scope in SCOPES},
-                "forms": [{"token": token, "rule": rule} for token, rule, _ in ordered[:FORMS_LISTED]],
+                "forms": [{"token": shown_token(token), "rule": rule} for token, rule, _ in ordered[:FORMS_LISTED]],
                 "forms_total": len(members),
             }
     absent = sorted(
@@ -3009,6 +3837,10 @@ def search_loaded(
     scanned: Optional[dict[str, Any]] = None
     if exhaustive and loaded.scan is not None:
         contents = [content_words(ranking.terms) for ranking in rankings]
+        concepts = []
+        for entry, words in zip(formulations, contents):
+            runs = concept_runs(entry["text"], loaded.concept_definitions)
+            concepts.append({word: frozenset(key for key, run in runs.items() if word in run) for word in words})
         scanned = exhaustive_scan(
             loaded.scan,
             rankings,
@@ -3016,7 +3848,7 @@ def search_loaded(
             loaded.concept_definitions,
             loaded.vocabulary,
             printed_claim_keys(results, block, loaded.path_prefix),
-            counted_reformulations(formulations, contents),
+            counted_reformulations(formulations, contents, concepts),
             exhaustive_budget,
         )
     return {

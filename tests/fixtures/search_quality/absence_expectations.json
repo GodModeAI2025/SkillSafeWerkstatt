@@ -47,7 +47,7 @@
           "reason": "no heuristic hits"
         }
       },
-      "complete_floor": 112,
+      "complete_floor": 110,
       "claims_returned_floor": 8
     },
     "B": {
@@ -75,8 +75,14 @@
         },
         "ne-04": {
           "complete": true,
-          "heuristic_hits": [],
-          "reason": "no heuristic hits"
+          "heuristic_hits": [
+            {
+              "path": "wiki/entities/tarif-lindenstrom-flex.md",
+              "kind": "paragraph",
+              "line": 83
+            }
+          ],
+          "reason": "Not an answer: the paragraph (Einordnung of the dynamic tariff LindenStrom Flex) says the tariff suits households that shift large loads into cheap hours, for example charging an electric car at home at night, and that a kilowatt hour can cost more in expensive hours; it names no public charging station and no charging price. Reformulation 2 (Elektroauto Laden Kosten) matched it through the ending rule (Elektroautos, a plural in -s after a vowel, recorded since the fourth search for false absences), the noun Laden and the verb kosten. Judged on reading the passage."
         },
         "ne-05": {
           "complete": true,
@@ -94,7 +100,7 @@
           "reason": "no heuristic hits"
         }
       },
-      "complete_floor": 113,
+      "complete_floor": 110,
       "claims_returned_floor": 8
     }
   },

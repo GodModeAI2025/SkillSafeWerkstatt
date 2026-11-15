@@ -35,8 +35,13 @@ the word forms), and their weight is applied after BM25 saturation (see bm25).
 Compound rules consider no token longer than MAX_COMPOUND letters, so an
 endless run of letters cannot make a search slow or deep.
 
-Before tokens exist, `repair_text` joins words that the layout split: soft
-hyphens, zero-width characters and hyphens at a line break.
+Before tokens exist, `repair_text` joins words that the layout or the markup
+split: HTML character references (decoded, so "K&uuml;ndigung" is
+"Kündigung" and "&shy;" a soft hyphen), soft hyphens, zero-width characters,
+a subscript or emphasis inside a word ("CO~2~", "CO<sub>2</sub>",
+"**Kündigungs**frist") and hyphens at a line break. A superscript is kept as
+pandoc writes it ("m^2^"); `join_superscripts` gives the joined spelling the
+search core indexes as well.
 
 Closed-class words (articles, pronouns, prepositions, conjunctions, auxiliary
 and modal verbs, question words, negation) match only literally. They are never
@@ -49,6 +54,7 @@ depend on set or dict order or on PYTHONHASHSEED.
 from __future__ import annotations
 
 import re
+from html import unescape as _unescape
 from typing import Dict, Iterable, List, Mapping, Optional, Tuple
 
 
@@ -111,6 +117,18 @@ _HYPHENS = {ord("‐"): "-", ord("‑"): "-"}
 _LINE_BREAK = re.compile(r"-[ \t]*\r?\n[ \t]*(?=[^\W\d_])")
 #: Words after a line-end hyphen that show a suspended compound ("Netz- und Messentgelte").
 _SUSPENDED = re.compile(r"(?:und|oder|bzw|sowie|bis|and|or)\b", re.IGNORECASE)
+#: An HTML character reference with its semicolon, as CommonMark decodes it in text: named, decimal or hexadecimal.
+_ENTITY = re.compile(r"&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});")
+#: An HTML subscript tag, opening or closing: pandoc's GFM writes "CO<sub>2</sub>".
+_SUB_TAG = re.compile(r"</?sub\b[^>]*>", re.IGNORECASE)
+#: An HTML superscript, written as pandoc's Markdown writes it (^...^) so that one spelling is indexed.
+_SUP_TAG = re.compile(r"<sup\b[^>]*>([^<]{0,64})</sup\s*>", re.IGNORECASE)
+#: Pandoc's subscript right after a letter or digit ("CO~2~"); never strikethrough (~~).
+_SUBSCRIPT = re.compile(r"(?<=[^\W_])~([^\s~]{1,16})~(?!~)")
+#: Pandoc's superscript right after a letter or digit ("m^2^", "Kündigungsfrist^1^").
+_SUPERSCRIPT = re.compile(r"(?<=[^\W_])\^([^\s^]{1,16})\^")
+#: Emphasis around letters or digits only, with * (CommonMark allows no emphasis with _ inside a word).
+_EMPHASIS = re.compile(r"(?<!\*)(\*{1,3})([^\W_]+)\1(?!\*)")
 
 #: Closed word classes, written as people write them; `closed_class` normalises them.
 CLOSED_CLASS_DE = """
@@ -151,15 +169,59 @@ def _join_line_break(match: "re.Match[str]") -> str:
     return "-" if following[:1].isupper() else ""
 
 
-def repair_text(text: str) -> str:
-    """Undo layout artefacts that split a word: soft hyphens, zero-width characters, line-break hyphens.
+def _join_emphasis(match: "re.Match[str]") -> str:
+    # Only emphasis inside a word is removed ("**Kündigungs**frist"); "**Hinweis**" stays as written.
+    start, end = match.span()
+    text = match.string
+    if (start and text[start - 1].isalnum()) or (end < len(text) and text[end].isalnum()):
+        return match.group(2)
+    return match.group(0)
 
-    Never drops a letter. Text without such artefacts comes back unchanged.
+
+def repair_markup(text: str) -> str:
+    """Join a word that inline markup split: a subscript, an HTML superscript, emphasis inside the word (pure).
+
+    "CO~2~" and "CO<sub>2</sub>" become "CO2", as normalisation already makes
+    of "CO₂". "m<sup>2</sup>" becomes pandoc's "m^2^", whose joined spelling
+    `join_superscripts` gives, while the word stays apart from a footnote
+    mark. Emphasis inside a word ("**Kündigungs**frist", pandoc's output for
+    a partly bold Word compound) is removed when only letters or digits
+    stand between its delimiters; "Kund*innen und Kolleg*innen" stays.
     """
+    if "<s" in text or "<S" in text or "</s" in text or "</S" in text:
+        text = _SUB_TAG.sub("", text)
+        text = _SUP_TAG.sub(lambda match: "^" + match.group(1) + "^", text)
+    if "~" in text:
+        text = _SUBSCRIPT.sub(r"\1", text)
+    if "*" in text:
+        text = _EMPHASIS.sub(_join_emphasis, text)
+    return text
+
+
+def join_superscripts(text: str) -> str:
+    """The text with every superscript glued to the word before it: "m^2^" becomes "m2" (pure)."""
+    return _SUPERSCRIPT.sub(r"\1", text) if "^" in text else text
+
+
+def repair_text(text: str) -> str:
+    """Undo layout and markup artefacts that split a word.
+
+    In order: HTML character references are decoded (CommonMark decodes them
+    in text, so "K&uuml;ndigung", "K&#252;ndigung" and "Kündigung" are one
+    word, "&nbsp;" a space and "&shy;" a soft hyphen); soft hyphens and
+    zero-width characters are removed; inline markup is joined
+    (`repair_markup`); and a hyphen at a line break inside a word is joined.
+    Never drops a letter of the text; text without such artefacts comes back
+    unchanged.
+    """
+    if "&" in text:
+        text = _ENTITY.sub(lambda match: _unescape(match.group(0)), text)
     if _HAS_INVISIBLE.search(text):
         text = text.translate(_INVISIBLE)
     if "‐" in text or "‑" in text:
         text = text.translate(_HYPHENS)
+    if "<" in text or "~" in text or "*" in text:
+        text = repair_markup(text)
     if "-" in text and "\n" in text:
         text = _LINE_BREAK.sub(_join_line_break, text)
     return text

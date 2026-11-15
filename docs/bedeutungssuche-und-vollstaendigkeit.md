@@ -634,6 +634,75 @@ abschneidet und mindestens vier Buchstaben stehen lässt. Die Anweisungstexte sa
 pauschal, Plurale würden gefunden. Nur die vollständige Prüfung findet diese Formen, als
 ausgewiesene Heuristik `ending`; das Ranking bleibt dabei.
 
+*Nachtrag aus Stufe 4 (dritte Suche nach falschen Fehlanzeigen).* Die vollständige Prüfung liest
+seither auch Pandocs Gitter-, Mehrzeilen- und einfache Tabellen als Tabellen, wie eine
+Pipe-Tabelle: eine Tabellenzeile über mehrere Textzeilen oder zwischen Leerzeilen bleibt eine
+Zeile, und die Kopfzeile steht vorn und wird bei einem Schnitt mitgegeben. Vorher wurde jede
+Zeile einer Mehrzeilen-Tabelle, Pandocs Standard für eine Word-Tabelle, zu einem eigenen Absatz
+ohne Kopfzeile; eine Frage nach Spalte und Zeilenschlüssel („Kündigungsfrist" und
+„LindenWärme WP") traf die antwortende Zeile nie, und die Prüfung meldete trotzdem
+`complete: true`. Drei weitere ausgewiesene Heuristiken gelten nur in der Prüfung, nicht im
+Ranking: `verb_ending` für die Verbformen eines regelmäßigen Verbs mit vierbuchstabigem Stamm
+(„senkt" und „senken", „zahlt" und „zahlen", „prüft" und „geprüft"; die Verbregel der Wortformen
+lässt mindestens fünf Buchstaben stehen), `suspended_compound` für ein Kompositum mit
+Ergänzungsstrich („Grund- und Leistungspreis" enthält „Grundpreis", „Vertragsbeginn und -ende"
+enthält „Vertragsende") und `footnote_mark` für eine angeklebte Fußnotenziffer
+(„Kündigungsfrist2", so schreibt MarkItDown ein `<sup>2</sup>`). Eine hochgestellte Ziffer
+(„Kündigungsfrist²") trennt die Prüfung vom Wort; das zusammengeschriebene Token bleibt
+daneben, damit „Fix12" sich weiter selbst findet. Umformulierungen zählen seither so, wie die
+Prüfung Wörter abgleicht, und unabhängig von ihrer Reihenfolge: Eine Umformulierung zählt
+nicht, wenn sie alle Inhaltswörter der Frage oder irgendeiner anderen Umformulierung enthält.
+Schreibung, Beugung, Verbform, die Formen unter `ending` und `verb_ending`, die zusammen- oder
+getrennt geschriebene Form eines Wortes mit Bindestrich und die Begriffe einer Begriffswelt, die
+dieselben Wörter schon auslösen, gelten dabei als dasselbe Wort; von Umformulierungen, die
+einander enthalten, zählt nur die erste. Vorher hing es an der Reihenfolge der `--also`, ob eine
+engere Umformulierung zählte, und „Kinder" zu „Kind", „gekündigt" zu „kündigt" oder ein Alias
+derselben Begriffswelt zählten als neue Suche, obwohl die Prüfung dieselben Passagen traf. Auf
+dem Test-Wiki sank dadurch die Zahl der vollständigen Prüfungen von 112 und 113 auf je 110
+(Satz A und B): ex-01 und ty-01 in beiden Sätzen und cl-06 in Satz B haben als Umformulierungen
+vor allem Begriffe der Begriffswelt `netzentgelt` oder Erweiterungen einer anderen
+Umformulierung. `absence_expectations.json` wurde nur in diesen beiden Untergrenzen bewusst neu
+aufgezeichnet; die heuristischen Treffer der sieben Fragen zu fehlenden Themen, die Sichtbarkeit
+der Pflichtseiten und die beiden anderen Tore blieben unverändert, und das Ranking ebenso.
+
+*Nachtrag aus Stufe 4 (vierte Suche nach falschen Fehlanzeigen).* Die Textreparatur vor den
+Tokens gilt für Ranking und Prüfung gleich und kennt seither auch Markup und HTML-Zeichenreferenzen.
+Zeichenreferenzen mit Semikolon werden zu ihren Zeichen, wie CommonMark sie im Text darstellt
+(„K&uuml;ndigungsfrist" ist „Kündigungsfrist", „&shy;" ein weiches Trennzeichen); vorher zerfiel das
+Wort in „k", „uuml" und „ndigungsfrist", und dieselbe Tabelle wurde als rohes HTML gefunden, als
+Pipe-Tabelle nicht. Ein Tiefgestelltes wird an das Wort gezogen („CO~2~" und „CO<sub>2</sub>", so
+schreibt Pandoc ein tiefgestelltes Zeichen aus Word, sind wie „CO₂" schon immer „CO2"), eine
+Hervorhebung mitten im Wort fällt weg („**Kündigungs**frist"), und ein Hochgestelltes in Markdown
+zählt getrennt und zusammengeschrieben („m^2^" gibt „m", „2" und „m2"). Vorher war „CO2-Preis" für
+eine mit Pandoc umgewandelte Word-Datei unauffindbar, `absent_terms` nannte das Wort, und die
+Prüfung meldete `complete: true`. Drei Heuristiken der Prüfung wurden erweitert, eine kam hinzu, alle
+nur in der Prüfung: `ending` vergleicht seither einen gemeinsamen Stamm (das Wort selbst oder das
+Wort ohne eine Endung, jetzt auch -em, -s, -se, -sen und -nen) und findet so die Kasusendungen „-er"
+und „-em" eines Adjektivs ohne Adjektivsuffix („intelligentem" zu „intelligenten", „fester" zu
+„festen") und Plurale wie „Autos", „Ergebnisse" und „Kundinnen"; dafür trifft es auch „Lager" zu
+„Lage". `verb_ending` findet Partizip und zu-Infinitiv trennbarer Verben („abgeschaltet" und
+„abzuschalten" zu „abschalten"), die die Wortformen nicht kennen, weil sie „ge-" nur am Wortanfang
+erkennen. Die neue Heuristik `short_part` findet ein Wort aus zwei oder drei Buchstaben, für das die
+Kompositumregeln (Teile ab vier Buchstaben) nicht gelten, als ersten Teil eines Wortes, dessen Rest
+ein Wort der durchsuchten Dateien ist („Gas" in „Gaskunden"), und als letzten Teil nach mindestens
+drei Buchstaben („Gas" in „Erdgas"). `hyphen_part` lässt einen Teil aus einem Buchstaben bei seinem
+Nachbarn, sodass „E-Mail-Adresse" und „E-Mail Adresse" einander finden und „E-Mail" in
+„E-Mail-Newsletter" steht, „E-Mobilität" aber nie für „Mobilität" allein. Vorher gab ein Wort mit
+einem einbuchstabigen Teil gar keine getrennte Schreibweise. Schließlich muss eine Passage weitere
+Funktionswörter nicht mehr enthalten: Präpositionen wie „per", „pro", „je", „laut" und „gemäß",
+Fragewörter wie „wofür" und „wieviel", Partikeln wie „noch", „eigentlich" und „nur" und das
+Gradwort einer Frage mit „wie" („hoch", „viel", „lange", „oft", „teuer", „schnell"). Vorher traf
+„Rechnung per SMS" den Satz „Die SMS-Rechnung kommt jeden Monat" nie, und „Wie hoch ist der
+CO2-Preis?" verlangte „hoch" in jeder Passage. Alle sieben Befunde dieser Suche endeten vorher mit
+`complete: true` und ohne den antwortenden Satz unter den Ergebnissen oder Treffern; jeder hat einen
+Regressionstest in `tests/test_absence_check.py` (Klasse `MarkupAndWordClasses`). Auf dem Test-Wiki
+blieben beide Ranking-Tore unverändert, ebenso die Untergrenzen des dritten Tors (je 110
+vollständige Prüfungen, je 8 gedruckte späte Claims). `absence_expectations.json` wurde bewusst
+neu aufgezeichnet, weil ne-04 („Ladesäule öffentliches Laden Preise") in Satz B einen heuristischen
+Treffer bekam: einen Absatz über den dynamischen Tarif Flex mit dem nächtlichen Laden eines
+Elektroautos zu Hause, gefunden über „Elektroautos" (`ending`). Er beantwortet die Frage nicht, und
+so steht es als Begründung in der Datei.
+
 **Die fünf Konstruktionsregeln** sind je durch einen Test in `tests/test_wordforms.py`
 festgenagelt:
 

@@ -347,6 +347,111 @@ class Segmentation(unittest.TestCase):
         self.assertIn(("wiki/d.md", "paragraph", 11), hit_list(context))
         self.assertNotIn(("wiki/d.md", "paragraph", 14), hit_list(context))
 
+    # pandoc 3.1.3 output of a Word table (python-docx), unchanged: `pandoc multi.docx -t markdown`.
+    MULTILINE = "\n".join([
+        "  -----------------------------------------------------------------------",
+        "  Gestein                 Abbaugebiet             Mindestlagerzeit",
+        "  ----------------------- ----------------------- -----------------------",
+        "  Basalt Nord             Eifel                   Zwei Wochen",
+        "",
+        "  Granit Süd              Fichtelgebirge          Ein Monat",
+        "",
+        "  Gneis West              Schwarzwald             Drei Wochen nach dem",
+        "                                                  Abbau, danach monatlich",
+        "",
+        "  Quarzit Ost             Taunus                  Sechs Monate zum Ende",
+        "                                                  der Trocknung, danach",
+        "                                                  ein Monat",
+        "  -----------------------------------------------------------------------",
+    ])
+    # The same tool for a cell with two paragraphs: a grid table (`pandoc grid.docx -t markdown`).
+    GRID = "\n".join([
+        "+-----------------------------------+-----------------------------------+",
+        "| Gestein                           | Mindestlagerzeit                  |",
+        "+===================================+===================================+",
+        "| Basalt Nord                       | Zwei Wochen.                      |",
+        "+-----------------------------------+-----------------------------------+",
+        "| Quarzit Ost                       | Sechs Monate zum Ende der         |",
+        "|                                   | Trocknung.                        |",
+        "|                                   |                                   |",
+        "|                                   | Danach ein Monat zum Monatsende.  |",
+        "+-----------------------------------+-----------------------------------+",
+    ])
+    # pandoc's simple table, for short cells (`pandoc -f gfm -t markdown`), and one without a header.
+    SIMPLE = "\n".join([
+        "  Gestein       Mindestlagerzeit",
+        "  ------------- ------------------",
+        "  Basalt Nord   Zwei Wochen",
+        "  Quarzit Ost   Sechs Monate",
+    ])
+    HEADERLESS = "\n".join([
+        "  ------------- ------------------",
+        "  Basalt Nord   Zwei Wochen",
+        "",
+        "  Quarzit Ost   Sechs Monate zum",
+        "                Ende",
+        "  ------------- ------------------",
+    ])
+
+    def test_pandoc_grid_multiline_and_simple_tables_are_read_as_tables(self) -> None:
+        """Regression: a multiline or grid table from pandoc was one paragraph per row, without its header row.
+
+        A table passage starts at the line of its header row (for a grid or multiline table, below the top border).
+        """
+        body = "## Lager\n\nDie Übersicht.\n\n" + self.MULTILINE + "\n\nDanach ein Absatz.\n"
+        found = passages(page("Blatt", body, "source"), "sources/blatt.md")
+        self.assertEqual(outline(found)[1:], [
+            ("heading", 7, "", "Lager"),
+            ("paragraph", 9, "", "Die Übersicht."),
+            ("paragraph", 12, "", "| Gestein | Abbaugebiet | Mindestlagerzeit | | Basalt Nord | Eifel | Zwei Wochen | "
+             "| Granit Süd | Fichtelgebirge | Ein Monat | | Gneis West | Schwarzwald | Drei Wochen nach dem Abbau, danach "
+             "monatlich | | Quarzit Ost | Taunus | Sechs Monate zum Ende der Trocknung, danach ein Monat |"),
+            ("paragraph", 26, "", "Danach ein Absatz."),
+        ])
+        self.assertEqual(found[3].section, ("Lager",))
+        grid = passages(page("Blatt", "## Lager\n\n" + self.GRID + "\n", "source"), "sources/blatt.md")
+        self.assertEqual(outline(grid)[2:], [
+            ("paragraph", 10, "", "| Gestein | Mindestlagerzeit | | Basalt Nord | Zwei Wochen. | "
+             "| Quarzit Ost | Sechs Monate zum Ende der Trocknung. Danach ein Monat zum Monatsende. |"),
+        ])
+        simple = passages(page("Blatt", self.SIMPLE + "\n\n" + self.HEADERLESS + "\n", "source"), "sources/blatt.md")
+        self.assertEqual(outline(simple)[1:], [
+            ("paragraph", 7, "", "| Gestein | Mindestlagerzeit | | Basalt Nord | Zwei Wochen | | Quarzit Ost | Sechs Monate |"),
+            ("paragraph", 13, "", "| Basalt Nord | Zwei Wochen | | Quarzit Ost | Sechs Monate zum Ende |"),
+        ])
+        # A long multiline table is cut at a row, and every chunk carries the header row.
+        rows = [f"  {f'Position {number:02d} mit Text':<24} {'Basalt':<18} {number} Wochen" for number in range(1, 60)]
+        rows.append(f"  {'Quarzit Ost':<24} {'Taunus':<18} Sechs Monate")
+        long_table = "\n".join([
+            "  ----------------------------------------------------------",
+            "  Gestein                  Abbaugebiet        Mindestlagerzeit",
+            "  ------------------------ ------------------ ----------------",
+            "\n\n".join(rows),
+            "  ----------------------------------------------------------",
+        ])
+        chunks = [item for item in passages(page("Blatt", "## Lager\n\n" + long_table, "source")) if item.text.startswith("|")]
+        self.assertGreater(len(chunks), 1)
+        head = "| Gestein | Abbaugebiet | Mindestlagerzeit |"
+        self.assertEqual(chunks[0].opens, ("Lager", head))
+        self.assertTrue(all(item.section == ("Lager", head) for item in chunks[1:]))
+        self.assertTrue(chunks[-1].text.endswith("| Quarzit Ost | Taunus | Sechs Monate |"))
+        # A horizontal rule, a paragraph above a setext underline and a list stay what they were.
+        other = passages(page("T", "Absatz.\n\n-----\n\nTitel\n-----\n\n- Punkt\n- Zweiter"))
+        self.assertEqual([(item.kind, item.text) for item in other[1:]], [
+            ("paragraph", "Absatz."), ("heading", "Titel"), ("paragraph", "- Punkt"), ("paragraph", "- Zweiter"),
+        ])
+        files = {
+            "sources/multi.md": page("Blatt Eins", "## Lager\n\n" + self.MULTILINE + "\n", "source"),
+            "sources/grid.md": page("Blatt Zwei", "## Lager\n\n" + self.GRID + "\n", "source"),
+            "sources/simple.md": page("Blatt Drei", "## Lager\n\n" + self.SIMPLE + "\n", "source"),
+        }
+        with Tree(files) as root:
+            report = exhaustive(root, "Welche Mindestlagerzeit gilt für Quarzit Ost?", TWO)
+        self.assertEqual(sorted(hit_list(report)), [
+            ("sources/grid.md", "paragraph", 10), ("sources/multi.md", "paragraph", 10), ("sources/simple.md", "paragraph", 9),
+        ])
+        self.assertTrue(report["absence_check"]["complete"])
+
     def test_lines_are_split_on_newline_only(self) -> None:
         text = page("T", "Erste Zeile\fmit Formfeed\n\f\nZweite Zeile\n\n## Titel\n\n" + claim("clm-1", "Schluss.") + "\nNach dem Claim.")
         found = passages(text)
@@ -842,6 +947,303 @@ class Matching(unittest.TestCase):
         self.assertEqual(terms["gneis"]["passages"]["wiki"], 1)
         self.assertIn(("wiki/c.md", "paragraph", 7), hit_list(both))
 
+    def test_a_footnote_mark_glued_to_a_word_still_holds_the_word(self) -> None:
+        """Regression: MarkItDown writes <sup>2</sup> as "Mindestlagerzeit2" and NFKD turns "²" into "2", so the word was lost."""
+        files = {
+            # MarkItDown output of an HTML table whose header cell carries <sup>2</sup>.
+            "sources/m.md": page("Blatt", "## Lager\n\n| Gestein | Mindestlagerzeit2 |\n| --- | --- |\n"
+                                 "| Basalt Nord | Zwei Wochen |\n\n2 In Textform.", "source"),
+            "wiki/s.md": page("Seite", "## Granit Süd\n\nDie Mindestlagerzeit² beträgt drei Wochen."),
+            "wiki/f.md": page("Tarif", "Der Tarif Fix12 gilt im Lager."),
+        }
+        found = passages(files["wiki/s.md"])
+        self.assertTrue({"mindestlagerzeit2", "mindestlagerzeit", "2"} <= found[-1].tokens)
+        with Tree(files) as root:
+            marked = exhaustive(root, "Welche Mindestlagerzeit hat Basalt Nord?", TWO)
+            superscript = exhaustive(root, "Mindestlagerzeit Granit", TWO)
+            name = exhaustive(root, "Fix12 Lager", TWO)
+        [hit] = [hit for entry in marked["exhaustive_hits"] if entry["path"] == "sources/m.md" for hit in entry["hits"]]
+        self.assertEqual((hit["line"], hit["strength"]), (9, "heuristic"))
+        self.assertIn({"term": "mindestlagerzeit", "token": "mindestlagerzeit2", "rule": "footnote_mark", "in": "text"}, hit["matched"])
+        terms = {entry["term"]: entry for entry in marked["absence_check"]["terms"]}
+        self.assertIn({"token": "mindestlagerzeit2", "rule": "footnote_mark"}, terms["mindestlagerzeit"]["forms"])
+        # A superscript digit is no part of the word: the word itself is written.
+        [hit] = [hit for entry in superscript["exhaustive_hits"] if entry["path"] == "wiki/s.md" for hit in entry["hits"]]
+        self.assertEqual(hit["strength"], "word_form")
+        # The joined token stays, so a name that ends in digits still matches itself, and "fix" is never split off.
+        self.assertEqual(hit_list(name), [("wiki/f.md", "paragraph", 7)])
+        self.assertEqual(name["exhaustive_hits"][0]["hits"][0]["strength"], "word_form")
+        with Tree(files) as root:
+            loaded = search_core.load(root, include_sources=True, exhaustive=True)
+        self.assertNotIn("fix", loaded.scan.footnote_marks())
+
+    def test_verb_forms_of_a_four_letter_stem_match_as_the_verb_ending_heuristic(self) -> None:
+        """Regression: "senkt" never met "senken", nor "zahlen" "zahlt", nor "prüft" "geprüft", and the word was listed as absent."""
+        files = {
+            "wiki/a.md": page("Seite A", "Der Steinbruch muss die Abgabe zum Monatsersten senken."),
+            "wiki/b.md": page("Seite B", "Der Pächter zahlt die Abgabe für den Basalt."),
+            "wiki/c.md": page("Seite C", "Die Aufsicht hat den Granit geprüft."),
+            "wiki/d.md": page("Seite D", "Die Zahl der Pächter steigt."),
+        }
+        with Tree(files) as root:
+            lowers = exhaustive(root, "Senkt der Steinbruch die Abgabe?", TWO)
+            pays = exhaustive(root, "Wann muss der Pächter zahlen?", TWO)
+            checks = exhaustive(root, "Prüft die Aufsicht den Granit?", TWO)
+            number = exhaustive(root, "Zahl Pächter Abgabe", TWO)
+        for report, path, term, token in (
+            (lowers, "wiki/a.md", "senkt", "senken"), (pays, "wiki/b.md", "zahlen", "zahlt"), (checks, "wiki/c.md", "pruft", "gepruft"),
+        ):
+            with self.subTest(term=term):
+                [hit] = [hit for entry in report["exhaustive_hits"] if entry["path"] == path for hit in entry["hits"]]
+                self.assertEqual(hit["strength"], "heuristic")
+                self.assertIn({"term": term, "token": token, "rule": "verb_ending", "in": "text"}, hit["matched"])
+                self.assertNotIn(term, report["absence_check"]["absent_terms"])
+                terms = {entry["term"]: entry for entry in report["absence_check"]["terms"]}
+                self.assertIn({"token": token, "rule": "verb_ending"}, terms[term]["forms"])
+        # The word forms do not know these pairs, and the noun "Zahl" never meets the verb "zahlt".
+        self.assertFalse(search_core.wordforms.same_word("senkt", "senken"))
+        self.assertNotIn(("wiki/b.md", "paragraph", 7), hit_list(number))
+        self.assertEqual(search_core.verb_variants("zahl"), set())
+        self.assertIn("senken", search_core.verb_variants("senkt"))
+
+    def test_a_compound_with_a_suspension_hyphen_holds_each_full_compound(self) -> None:
+        """Regression: "Grund- und Leistungspreis" never held "Grundpreis", nor "Vertragsbeginn und -ende" "Vertragsende"."""
+        files = {
+            "wiki/a.md": page("Seite A", "Basalt- und Granitblöcke liegen am Hang."),
+            "wiki/d.md": page("Seite D", claim("clm-d", "Basalt- und Granitblöcke liegen am Nordhang, nicht am Hang.")),
+            "wiki/b.md": page("Seite B", "Abbaubeginn und -ende stehen im Plan."),
+            "wiki/c.md": page("Seite C", "Gneis-, Quarzit- und Schieferhalden liegen im Tal."),
+        }
+        found = passages(files["wiki/b.md"])
+        self.assertIn(search_core.SUSPENDED_MARK + "abbauende", found[-1].tokens)
+        self.assertEqual(found[-1].text, "Abbaubeginn und -ende stehen im Plan.")
+        with Tree(files) as root:
+            front = exhaustive(root, "Basaltblöcke Hang", TWO)
+            back = exhaustive(root, "Abbauende Plan", TWO)
+            chain = exhaustive(root, "Gneishalden Tal", TWO)
+        for report, path, line, term, token in (
+            (front, "wiki/a.md", 7, "basaltblocke", "basaltblocke"), (back, "wiki/b.md", 7, "abbauende", "abbauende"),
+            (chain, "wiki/c.md", 7, "gneishalden", "gneishalden"),
+        ):
+            with self.subTest(term=term):
+                self.assertIn((path, "paragraph", line), hit_list(report))
+                [hit] = [hit for entry in report["exhaustive_hits"] if entry["path"] == path for hit in entry["hits"]]
+                self.assertEqual(hit["strength"], "heuristic")
+                self.assertIn({"term": term, "token": token, "rule": "suspended_compound", "in": "text"}, hit["matched"])
+                self.assertNotIn(term, report["absence_check"]["absent_terms"])
+                terms = {entry["term"]: entry for entry in report["absence_check"]["terms"]}
+                self.assertIn({"token": token, "rule": "suspended_compound"}, terms[term]["forms"])
+                # The mark that keeps a joined form apart from written tokens is never printed.
+                self.assertNotIn(search_core.SUSPENDED_MARK, json.dumps(report["absence_check"], ensure_ascii=False))
+        # A claim holds the joined forms as well.
+        self.assertIn(("wiki/d.md", "claim", 7), hit_list(front))
+        self.assertEqual(
+            {form for form in search_core.suspended_forms("ein- bzw. auszug") if form.endswith("zug")},
+            {"~einuszug", "~einszug", "~einzug"},
+        )
+        self.assertIn("~gasversorgung", search_core.suspended_forms("strom-/gas-/wasserversorgung"))
+        self.assertIn("~stromversorgung", search_core.suspended_forms("strom-/gas-/wasserversorgung"))
+        self.assertIn("~vertragsdauer", search_core.suspended_forms("vertragsbeginn, -dauer und -ende"))
+        self.assertIn("~vertragsende", search_core.suspended_forms("vertragsbeginn, -dauer und -ende"))
+        # A hyphenated written part stays whole: "E-Mail- und Telefonkontakt" holds "E-Mail-Kontakt".
+        self.assertIn("~e-mailkontakt", search_core.suspended_forms("e-mail- und telefonkontakt"))
+        self.assertIn("~e-mail-passwort", search_core.suspended_forms("e-mail-adresse und -passwort"))
+        # A dash between words, a list item and a hyphenated word are no suspended compounds.
+        self.assertEqual(search_core.suspended_forms("kosten - und mehr; - gneis; e-mobilität und gas"), set())
+
+
+class MarkupAndWordClasses(unittest.TestCase):
+    """Fourth search for false absences: markup inside words, character references, word classes and short parts."""
+
+    def hit_on(self, report: dict, path: str) -> dict:
+        [hit] = [hit for entry in report["exhaustive_hits"] if entry["path"] == path for hit in entry["hits"]]
+        return hit
+
+    def test_a_subscript_or_superscript_in_markup_keeps_the_word_whole(self) -> None:
+        """Regression: pandoc's "CO~2~-Preis" and "CO<sub>2</sub>-Preis" were "co", "2", "preis", so "CO2-Preis" was absent."""
+        self.assertEqual(search_core.tokens("CO~2~-Preis", forms=True), ["co2-preis"])
+        self.assertEqual(search_core.tokens("CO<sub>2</sub>-Preis", forms=True), ["co2-preis"])
+        self.assertEqual(search_core.tokens("CO₂-Preis", forms=True), ["co2-preis"])
+        files = {
+            "sources/d.md": page("Erdgas", "## Preise\n\nDer CO~2~-Preis beträgt 55 Euro je Tonne CO~2~.", "source"),
+            "sources/g.md": page("Erdgas GFM", "## Preise\n\nDer CO<sub>2</sub>-Preis gilt für Erdgas.", "source"),
+            "wiki/m.md": page("Fläche", "Der Basalt kostet 12 Euro je m^2^.\n\nDer Granit kostet 14 Euro je m<sup>2</sup>."),
+            "wiki/k.md": page("Frist", "Die **Kündigungs**frist für Basalt beträgt einen Monat."),
+        }
+        with Tree(files) as root:
+            price = exhaustive(root, "Wie hoch ist der CO2-Preis?", ("CO2-Abgabe", "CO2-Bepreisung"))
+            area = exhaustive(root, "Basalt m²", TWO)
+            bold = exhaustive(root, "Kündigungsfrist Basalt", TWO)
+        self.assertEqual(price["absence_check"]["formulations"][0]["content_words"], ["co2-preis"])
+        self.assertNotIn("co2-preis", price["absence_check"]["absent_terms"])
+        for path in ("sources/d.md", "sources/g.md"):
+            with self.subTest(path=path):
+                self.assertEqual(self.hit_on(price, path)["strength"], "word_form")
+                # The ranking reads the same tokens.
+                self.assertIn(path, [result["path"] for result in price["results"]])
+        self.assertEqual(self.hit_on(price, "sources/d.md")["text"], "Der CO2-Preis beträgt 55 Euro je Tonne CO2.")
+        # A superscript is read joined ("m2") and apart, so "m²" meets "m^2^" and "m<sup>2</sup>".
+        self.assertIn(("wiki/m.md", "paragraph", 7), hit_list(area))
+        self.assertEqual(self.hit_on(bold, "wiki/k.md")["strength"], "word_form")
+
+    def test_character_references_are_read_as_their_characters(self) -> None:
+        """Regression: "K&uuml;ndigungsfrist" in a pipe table was "k", "uuml", "ndigungsfrist"; the same raw HTML table was found."""
+        header = "| Gestein | K&uuml;ndigungsfrist |\n| --- | --- |\n"
+        files = {
+            "sources/p.md": page("Blatt P", "## Lager\n\n" + header + "| Basalt S&uuml;d | Drei Monate |\n| Gneis | Ein Monat |", "source"),
+            "sources/h.md": page("Blatt H", "## Lager\n\n<table><tr><th>Gestein</th><th>K&uuml;ndigungsfrist</th></tr>"
+                                 "<tr><td>Basalt S&uuml;d</td><td>Drei Monate</td></tr></table>", "source"),
+            "wiki/s.md": page("Seite", "Die Kündigungs&shy;frist für Granit&nbsp;Nord beträgt zwei Wochen."),
+        }
+        with Tree(files) as root:
+            report = exhaustive(root, "Welche Kündigungsfrist gilt für Basalt Süd?", TWO)
+            shy = exhaustive(root, "Kündigungsfrist Granit Nord", TWO)
+        for path in ("sources/p.md", "sources/h.md"):
+            with self.subTest(path=path):
+                hit = self.hit_on(report, path)
+                self.assertEqual(hit["strength"], "word_form")
+                self.assertIn("Basalt Süd", hit["text"])
+        self.assertEqual(self.hit_on(shy, "wiki/s.md")["strength"], "word_form")
+
+    def test_the_participle_and_the_infinitive_with_zu_of_a_separable_verb_match_as_verb_ending(self) -> None:
+        """Regression: "abschalten" never met "abgeschaltet" or "abzuschalten", nor "auszahlen" "ausgezahlt", and the check was complete."""
+        files = {
+            "wiki/a.md": page("Seite A", "Im Winter wird der Brecher vom Pächter nicht abgeschaltet."),
+            "wiki/b.md": page("Seite B", "Ein Guthaben ist vom Pächter binnen zwei Wochen auszuzahlen."),
+            "wiki/c.md": page("Seite C", "Der Pächter darf den Brecher im Winter abschalten."),
+        }
+        with Tree(files) as root:
+            infinitive = exhaustive(root, "Darf der Pächter im Winter den Brecher abschalten?", TWO)
+            participle = exhaustive(root, "Brecher abgeschaltet Winter", TWO)
+            zu = exhaustive(root, "Muss der Pächter ein Guthaben auszahlen?", TWO)
+        for report, path, term, token in (
+            (infinitive, "wiki/a.md", "abschalten", "abgeschaltet"), (participle, "wiki/c.md", "abgeschaltet", "abschalten"),
+            (zu, "wiki/b.md", "auszahlen", "auszuzahlen"),
+        ):
+            with self.subTest(term=term):
+                hit = self.hit_on(report, path)
+                self.assertEqual(hit["strength"], "heuristic")
+                self.assertIn({"term": term, "token": token, "rule": "verb_ending", "in": "text"}, hit["matched"])
+                self.assertNotIn(term, report["absence_check"]["absent_terms"])
+        for left, right in (("abschalten", "abzuschalten"), ("anpassen", "angepasst"), ("einbauen", "eingebaut"),
+                            ("mitteilen", "mitgeteilt"), ("umstellen", "umgestellt"), ("angeben", "angegeben")):
+            with self.subTest(pair=(left, right)):
+                self.assertTrue(search_core.same_scan_word(left, right))
+                self.assertTrue(search_core.same_scan_word(right, left))
+        # The word forms do not know these pairs, and a reformulation in another form of the verb does not count.
+        self.assertFalse(search_core.wordforms.same_word("abschalten", "abgeschaltet"))
+        three = [{"origin": "query"}, {"origin": "also"}, {"origin": "also"}]
+        self.assertEqual(search_core.counted_reformulations(three, [["brecher", "abschalten"], ["brecher", "abgeschaltet"], ["quarzit"]]),
+                         [False, False, True])
+
+    def test_an_adjective_case_ending_and_more_plurals_match_as_ending(self) -> None:
+        """Regression: "intelligenten" never met "intelligentem", "festen" never "fester", "Auto" never "Autos"."""
+        files = {
+            "wiki/a.md": page("Seite A", "Bei intelligentem Messgerät ist der Abschlag so hoch wie im Vormonat."),
+            "wiki/b.md": page("Seite B", "Ein fester Zins gilt für Basalt."),
+            "wiki/c.md": page("Seite C", "Die Autos stehen am Granit."),
+            "wiki/d.md": page("Seite D", "Alle Ergebnisse der Kundinnen liegen am Gneis."),
+            "wiki/e.md": page("Seite E", "Ein intelligentes Messgerät. Ein fester Zins. Ein Auto. Ein Ergebnis. Eine Kundin."),
+        }
+        with Tree(files) as root:
+            adjective = exhaustive(root, "Wie hoch ist der Abschlag bei einem intelligenten Messgerät?", TWO)
+            fixed = exhaustive(root, "festen Zins Basalt", TWO)
+            cars = exhaustive(root, "Auto Granit", TWO)
+            results = exhaustive(root, "Ergebnis Kundin Gneis", TWO)
+        for report, path, term, token in (
+            (adjective, "wiki/a.md", "intelligenten", "intelligentem"), (fixed, "wiki/b.md", "festen", "fester"),
+            (cars, "wiki/c.md", "auto", "autos"), (results, "wiki/d.md", "ergebnis", "ergebnisse"),
+            (results, "wiki/d.md", "kundin", "kundinnen"),
+        ):
+            with self.subTest(term=term):
+                hit = self.hit_on(report, path)
+                self.assertEqual(hit["strength"], "heuristic")
+                self.assertIn({"term": term, "token": token, "rule": "ending", "in": "text"}, hit["matched"])
+        self.assertTrue(search_core.same_scan_word("intelligentes", "intelligenter"))
+        self.assertFalse(search_core.wordforms.same_word("intelligenten", "intelligentem"))
+        self.assertEqual(search_core.ending_bases("intelligenten"), {"intelligenten", "intelligente", "intelligent"})
+        self.assertEqual(search_core.ending_bases("ab"), set())
+
+    def test_a_word_of_two_or_three_letters_matches_inside_a_compound_as_short_part(self) -> None:
+        """Regression: "Gas" never met "Gaskunden" or "Erdgas", because compound parts need four letters."""
+        files = {
+            "wiki/a.md": page("Seite A", "Die Stadtwerke liefern nur an Stromkunden; Gaskunden verweisen sie an den Versorger."),
+            "wiki/b.md": page("Seite B", "Die Stadtwerke liefern kein Erdgas."),
+            "wiki/c.md": page("Seite C", "Die Stadtwerke liefern Strom an Kunden. Ein Gastgeber liefert Essen."),
+            "wiki/d.md": page("Seite D", "Siehe [[wiki/concepts/erdgas]]. Die Stadtwerke liefern hier."),
+        }
+        with Tree(files) as root:
+            report = exhaustive(root, "Liefern die Stadtwerke auch Gas?", ("Gastarif", "Erdgas Lieferung"))
+        check = report["absence_check"]
+        self.assertEqual(check["formulations"][0]["content_words"], ["liefern", "stadtwerke", "gas"])
+        self.assertNotIn("gas", check["absent_terms"])
+        for path, token in (("wiki/a.md", "gaskunden"), ("wiki/b.md", "erdgas")):
+            with self.subTest(path=path):
+                hit = self.hit_on(report, path)
+                self.assertEqual(hit["strength"], "heuristic")
+                self.assertIn({"term": "gas", "token": token, "rule": "short_part", "in": "text"}, hit["matched"])
+        # "Gastgeber" is no compound of "Gas" with a word of the wiki, and a link target is no text.
+        pages = {entry["path"] for entry in report["exhaustive_hits"]}
+        self.assertNotIn("wiki/c.md", pages)
+        self.assertNotIn("wiki/d.md", pages)
+        terms = {entry["term"]: entry for entry in check["terms"] if entry["origin"] == "query"}
+        self.assertIn({"token": "gaskunden", "rule": "short_part"}, terms["gas"]["forms"])
+        # The rule is for two and three letters only; longer words are the compound rules' business.
+        with Tree(files) as root:
+            loaded = search_core.load(root, include_sources=True, exhaustive=True)
+        self.assertEqual(loaded.scan.short_parts("kunden"), frozenset())
+        self.assertEqual(loaded.scan.short_parts("an"), frozenset())
+
+    def test_a_one_letter_part_of_a_hyphenated_word_stays_with_its_neighbour(self) -> None:
+        """Regression: "E-Mail-Adresse" never met "E-Mail Adresse", nor "E-Mail" "E-Mail-Newsletter", in either direction."""
+        self.assertEqual(search_core.hyphen_units("e-mail-adresse"), ("e-mail", "adresse"))
+        self.assertEqual(search_core.hyphen_units("e-auto-tarif"), ("e-auto", "tarif"))
+        self.assertEqual(search_core.hyphen_units("e-mobilitat"), ())
+        self.assertEqual(search_core.hyphen_groups(["vitamin", "c"]), ["vitamin-c"])
+        files = {
+            "wiki/a.md": page("Seite A", "Ihre E-Mail Adresse für Basalt ändern Sie im Portal."),
+            "wiki/b.md": page("Seite B", "Den E-Mail-Newsletter zum Granit bestellen Sie ab."),
+            "wiki/c.md": page("Seite C", "Für den E-Auto-Tarif am Gneis gilt ein fester Preis."),
+            "wiki/d.md": page("Seite D", "Die Mobilität am Quarzit wächst."),
+        }
+        with Tree(files) as root:
+            apart = exhaustive(root, "E-Mail-Adresse Basalt", TWO)
+            inside = exhaustive(root, "E-Mail Granit", TWO)
+            joined = exhaustive(root, "E-Auto Tarif Gneis", TWO)
+            mobility = exhaustive(root, "E-Mobilität Quarzit", TWO)
+        for report, path in ((apart, "wiki/a.md"), (inside, "wiki/b.md"), (joined, "wiki/c.md")):
+            with self.subTest(path=path):
+                self.assertEqual(self.hit_on(report, path)["strength"], "heuristic")
+                content = report["absence_check"]["formulations"][0]["content_words"]
+                self.assertEqual(set(content) & set(report["absence_check"]["absent_terms"]), set())
+        self.assertIn({"term": "e-mail", "token": "e-mail-newsletter", "rule": "hyphen_part", "in": "text"},
+                      self.hit_on(inside, "wiki/b.md")["matched"])
+        # "E-Mobilität" never stands for "Mobilität" alone.
+        self.assertEqual(mobility["exhaustive_hits"], [])
+        self.assertIn("e-mobilitat", mobility["absence_check"]["absent_terms"])
+        # Counting follows: "E-Mail Adresse" holds "E-Mail-Adresse".
+        three = [{"origin": "query"}, {"origin": "also"}, {"origin": "also"}]
+        self.assertEqual(search_core.counted_reformulations(three, [["e-mail-adresse"], ["e-mail", "adresse"], ["quarzit"]]),
+                         [False, False, True])
+
+    def test_prepositions_particles_and_the_degree_word_of_a_question_are_not_required(self) -> None:
+        """Regression: "per", "pro" and "je" had to stand in every hit, so "Rechnung per SMS" missed "Die SMS-Rechnung kommt"."""
+        self.assertTrue({"per", "pro", "je", "laut", "gemass", "wofur", "wieviel", "bzw", "noch", "nur", "hoch", "viel"}
+                        <= search_core.SCAN_FUNCTION_WORDS)
+        files = {
+            "wiki/a.md": page("Seite A", "Die SMS-Rechnung zum Basalt kommt jeden Monat."),
+            "wiki/b.md": page("Seite B", "Der Grundpreis für Granit beträgt 9,90 Euro."),
+        }
+        with Tree(files) as root:
+            sms = exhaustive(root, "Rechnung per SMS Basalt", TWO)
+            price = exhaustive(root, "Wie hoch ist der Grundpreis pro Monat für Granit eigentlich?", TWO)
+        self.assertEqual(sms["absence_check"]["formulations"][0]["content_words"], ["rechnung", "sms", "basalt"])
+        self.assertIn(("wiki/a.md", "paragraph", 7), hit_list(sms))
+        self.assertEqual({"rechnung", "sms", "basalt"} & set(sms["absence_check"]["absent_terms"]), set())
+        self.assertEqual(price["absence_check"]["formulations"][0]["content_words"], ["grundpreis", "monat", "granit"])
+        # The ranking still searches every word.
+        self.assertIn("per", [item["term"] for item in sms["coverage"]["query_terms"]])
+
 
 class OrderBudgetDedupe(unittest.TestCase):
     def test_pages_are_ordered_by_history_corroboration_question_strength_scope_and_path(self) -> None:
@@ -1056,6 +1458,59 @@ class AbsenceCheck(unittest.TestCase):
         self.assertEqual(
             search_core.counted_reformulations(formulations[:3], [[], ["basalt"], ["granit", "halde"]]), [False, True, True]
         )
+
+    def test_a_reformulation_counts_only_with_words_the_scan_does_not_already_match(self) -> None:
+        """Regression: spellings, -er plurals, verb forms and aliases the scan matches as the same words counted as new searches."""
+        three = [{"origin": "query"}, {"origin": "also"}, {"origin": "also"}]
+        counted = search_core.counted_reformulations
+        # A joined or re-hyphenated spelling of a hyphenated word is the same word.
+        self.assertEqual(counted(three, [["sms-warndienst", "kosten"], ["smswarndienst", "kosten"], ["sms-warn-dienst", "kosten"]]),
+                         [False, False, False])
+        # An -er plural or a form of a short stem is the same word for the `ending` rule.
+        self.assertEqual(counted(three, [["eintrittspreis", "kind", "bad"], ["eintrittspreis", "kinder", "bad"],
+                                         ["eintrittspreis", "kind", "bader"]]), [False, False, False])
+        # Verb forms are the same word, through the `verb` word form and the `verb_ending` rule.
+        self.assertEqual(counted(three, [["lange", "vertrag", "kundigen"], ["vertrag", "kundigt", "frist"],
+                                         ["vertrage", "gekundigt", "frist"]]), [False, True, False])
+        self.assertEqual(counted(three, [["quarzit"], ["basalt", "senkt"], ["basalte", "senken"]]), [False, True, False])
+        # Terms of one concept the question already triggers are the same word.
+        concepts = [{"netzgebuhr": frozenset({"netzentgelt"})}, {"netzentgelt": frozenset({"netzentgelt"})},
+                    {"netznutzungsentgelt": frozenset({"netzentgelt"})}]
+        words = [["netzgebuhr", "hohe"], ["netzentgelt", "hohe"], ["netznutzungsentgelt", "hohe"]]
+        self.assertEqual(counted(three, words, concepts), [False, False, False])
+        self.assertEqual(counted(three, words), [False, True, True])
+        self.assertTrue(search_core.same_scan_word("senkt", "senken"))
+        # "Lage" and "Lager" share the base "lag" as "neue" and "neuer" share "neu": a rule cannot tell an
+        # adjective's case ending from a noun's -er, so the scan matches both pairs and counts neither as new.
+        self.assertTrue(search_core.same_scan_word("lage", "lager"))
+        self.assertTrue(search_core.same_scan_word("neue", "neuer"))
+        self.assertFalse(search_core.same_scan_word("zahl", "zahlt"))
+        self.assertFalse(search_core.same_scan_word("lage", "lagerung"))
+        files = {**self.FILES, "schema/CONCEPTS.md": CONCEPTS}
+        with Tree(files) as root:
+            loaded = search_core.load(root, include_sources=True, exhaustive=True)
+            alias = search_core.search_loaded(loaded, "Quarzgestein Lager", also=["Quarzit Lager", "Fels aus Quarz Lager"], exhaustive=True)
+            own = search_core.search_loaded(loaded, "Quarzgestein Lager", also=["Quarzit Halde", "Basalt Granit"], exhaustive=True)
+        self.assertEqual((alias["absence_check"]["reformulations_counted"], alias["absence_check"]["reasons"]),
+                         (0, ["too_few_reformulations"]))
+        self.assertEqual(own["absence_check"]["reformulations_counted"], 2)
+
+    def test_the_order_of_the_reformulations_never_changes_the_count(self) -> None:
+        """Regression: a narrower reformulation written before its shorter form counted, and the check became complete."""
+        three = [{"origin": "query"}, {"origin": "also"}, {"origin": "also"}]
+        words = [["gastarif", "kundigungsfrist"], ["gasvertrag", "kundigung", "frist"], ["gasvertrag"]]
+        self.assertEqual(search_core.counted_reformulations(three, words), [False, False, True])
+        self.assertEqual(search_core.counted_reformulations(three, [words[0], words[2], words[1]]), [False, True, False])
+        # Of reformulations with the same words, only the first counts, wherever they stand.
+        self.assertEqual(search_core.counted_reformulations(three + [{"origin": "also"}], [
+            ["quarzit"], ["basalt", "halde"], ["granit"], ["halden", "basalt"],
+        ]), [False, True, True, False])
+        with Tree(self.FILES) as root:
+            loaded = search_core.load(root, include_sources=True, exhaustive=True)
+            for also in (["Basalt Halde Granit", "Basalt"], ["Basalt", "Basalt Halde Granit"]):
+                with self.subTest(also=also):
+                    check = search_core.search_loaded(loaded, "Quarzit Lager", also=also, exhaustive=True)["absence_check"]
+                    self.assertEqual((check["reformulations_counted"], check["reasons"]), (1, ["too_few_reformulations"]))
 
     def test_reasons_and_next_steps_come_from_the_closed_vocabulary_in_order(self) -> None:
         self.assertEqual(
@@ -1344,7 +1799,9 @@ class Instructions(unittest.TestCase):
         everywhere = (
             ABSENCE_RULE, "--exhaustive", "absence_check", "search_record.line", "exhaustive_hits", "next_steps",
             "absent_terms", "100,000 characters", "at least two reformulations", "read_results_without_claims",
-            "hyphen_part", "`ending`", "plural in -er", "not its snippet",
+            "hyphen_part", "`ending`", "plural in -er", "not its snippet", "`verb_ending`", "`suspended_compound`",
+            "`footnote_mark`", "`short_part`", "abzuschalten", "intelligentem", "Kundinnen", "E-Mail Adresse", "CO~2~",
+            "K&uuml;ndigung", "four letters",
         )
         texts = {label: path.read_text(encoding="utf-8") for label, path in self.TEXTS.items()}
         for label, text in texts.items():
@@ -1370,6 +1827,15 @@ class Instructions(unittest.TestCase):
                 self.assertIn(key, text, f"{label}: {key}")
             self.assertIn("never only add", text)
             self.assertIn("Never change the question", text)
+            # The counting rule is the scan's, independent of order; the table forms the scan reads are named.
+            self.assertIn("wherever that one stands", text)
+            self.assertIn("their order never changes the count", text)
+            self.assertIn("grid, multiline, and simple tables", text)
+            self.assertNotIn("which counts", text)
+            # The words a passage need not hold are named, prepositions and the degree word of a question included.
+            self.assertIn('("per", "pro", "je", "laut", and "gemäß" included)', text)
+            self.assertIn('("hoch", "viel", "lange", "oft", "teuer", or "schnell")', text)
+            self.assertIn('"E-Mobilität" never stands for "Mobilität"', text)
 
     def test_eval_11_is_unchanged_and_the_absence_evals_exist(self) -> None:
         evals = {item["id"]: item for item in json.loads((REPO / "query-llm-wiki" / "evals" / "evals.json").read_text(encoding="utf-8"))["evals"]}

@@ -104,6 +104,33 @@ class StepA_Normalisation(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(wordforms.repair_text(text), text)
 
+    def test_markup_and_character_references_inside_words_are_repaired(self) -> None:
+        """Regression: "CO~2~-Preis", "K&uuml;ndigungsfrist" and "**Kündigungs**frist" fell apart into several tokens."""
+        # A subscript is joined, in pandoc's Markdown, in HTML and as the Unicode character.
+        for text in ("CO~2~-Preis", "CO<sub>2</sub>-Preis", "CO₂-Preis", "CO2-Preis"):
+            with self.subTest(text=text):
+                self.assertEqual(search_core.tokens(text, forms=True), ["co2-preis"])
+        # A superscript is read apart from the word and joined to it, so the footnote mark stays apart too.
+        self.assertEqual(wordforms.repair_text("m<sup>2</sup>"), "m^2^")
+        self.assertEqual(search_core.tokens("je m^2^", False, True), ["je", "m", "2", "m2"])
+        self.assertEqual(search_core.tokens("Kündigungsfrist<sup>1</sup>", False, True), ["kundigungsfrist", "1", "kundigungsfrist1"])
+        # Emphasis inside a word is removed; emphasis around a word, a gender star and strikethrough stay.
+        self.assertEqual(search_core.tokens("**Kündigungs**frist", forms=True), ["kundigungsfrist"])
+        self.assertEqual(search_core.tokens("Strom*preis*erhöhung", forms=True), ["strompreiserhohung"])
+        for text in ("**Hinweis:** Text", "Kund*innen und Kolleg*innen", "Bürger*innen/Kund*innen", "~~alt~~ neu", "Kosten 2~3"):
+            with self.subTest(text=text):
+                self.assertEqual(wordforms.repair_text(text), text)
+        # Character references with their semicolon are decoded, as CommonMark does in text.
+        self.assertEqual(search_core.tokens("K&uuml;ndigungsfrist LindenW&auml;rme K&#252;ndigung K&#xFC;ndigung", forms=True),
+                         ["kundigungsfrist", "lindenwarme", "kundigung", "kundigung"])
+        self.assertEqual(search_core.tokens("Kündigungs&shy;frist", forms=True), ["kundigungsfrist"])
+        self.assertEqual(search_core.tokens("12&nbsp;Monate", forms=True), ["12", "monate"])
+        for text in ("AT&T", "Strom & Gas", "a=1&para=2", "&uuml ohne Semikolon"):
+            with self.subTest(text=text):
+                self.assertEqual(wordforms.repair_text(text), text)
+        # The literal search keeps its old tokens.
+        self.assertEqual(search_core.tokens("K&uuml;ndigung"), ["uuml", "ndigung"])
+
     def test_the_stopword_list_is_compared_in_its_normalised_form(self) -> None:
         self.assertEqual(search_core.tokens("Frist für Kündigung", forms=True), ["frist", "kundigung"])
         # The literal search keeps its old behaviour, where "für" never matched.
