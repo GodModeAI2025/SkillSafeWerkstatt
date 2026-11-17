@@ -294,9 +294,10 @@ class ExportedSkillRuns(unittest.TestCase):
             "List every reformulation that was searched", "references/knowledge/schema/WIKI_PROFILE.md",
             "--exhaustive", "absence_check", "search_record.line", "references/knowledge/meta/questions.md",
             "State that the wiki contains nothing on a question, or on part of it, only when a search for this answer "
-            "reported `absence_check.complete: true` and no returned result or exhaustive hit answers it; otherwise "
-            "state that nothing was found with the searched words in this release version, and quote "
-            "`search_record.line` in both cases.",
+            "reported `absence_check.complete: true` and no returned result or exhaustive hit answers it, and say "
+            "that this holds for the formulations you searched; otherwise state that nothing was found with the "
+            "searched words in this release version. In both cases list the searched formulations and quote "
+            "`search_record.line`.",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)

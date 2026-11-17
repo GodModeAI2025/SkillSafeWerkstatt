@@ -132,7 +132,9 @@ def read_questions(target: Path) -> list[dict[str, Any]]:
     if not path.is_file():
         return []
     try:
-        text = path.read_text(encoding="utf-8")
+        # "utf-8-sig" drops one byte order mark at the start, as Windows
+        # editors and PowerShell 5.1 write one when the file is merged by hand.
+        text = path.read_text(encoding="utf-8-sig")
     except UnicodeError as exc:
         raise SystemExit(f"{RELATIVE}: not UTF-8 text: {exc}") from exc
     records: list[dict[str, Any]] = []

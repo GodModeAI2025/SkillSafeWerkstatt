@@ -305,6 +305,18 @@ class Recording(unittest.TestCase):
                 self.assertTrue(self.fw.refused("add", "--question", "Abschlag", "--claim-id", self.fw.advance,
                                                 "--author", "user", "--user-supplied-wording").startswith(f"{RELATIVE}:3: "))
 
+    def test_a_byte_order_mark_and_crlf_from_a_manual_merge_are_read(self) -> None:
+        """Regression: a file merged by hand on Windows (BOM + CRLF) stopped every subcommand with "invalid JSON"."""
+        good = self.fw.add(QUESTION, self.fw.cancel)["question"]
+        path = self.fw.wiki.path / RELATIVE
+        path.write_bytes(b"\xef\xbb\xbf" + path.read_bytes().replace(b"\n", b"\r\n"))
+        self.assertEqual(findability_questions.read_questions(self.fw.wiki.path), [good])
+        self.assertEqual(self.fw.ok("check")["questions"], 1)
+        second = self.fw.add("Abschlag", self.fw.advance)["question"]
+        # The helper writes the file back without a byte order mark.
+        self.assertFalse(path.read_bytes().startswith(b"\xef\xbb\xbf"))
+        self.assertEqual(self.fw.records(), [good, second])
+
     def test_a_conflict_copy_of_the_questions_file_stops_the_helper(self) -> None:
         self.fw.add(QUESTION, self.fw.cancel)
         history = self.fw.wiki.path / "meta/history/manual/findability-questions-DESKTOP-AB12C.jsonl"

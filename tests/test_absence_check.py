@@ -46,9 +46,9 @@ from wiki_filters import validate_selector  # noqa: E402
 PREFIX = "references/knowledge/"
 ABSENCE_RULE = (
     "State that the wiki contains nothing on a question, or on part of it, only when a search for this answer "
-    "reported `absence_check.complete: true` and no returned result or exhaustive hit answers it; otherwise state "
-    "that nothing was found with the searched words in this release version, and quote `search_record.line` in "
-    "both cases."
+    "reported `absence_check.complete: true` and no returned result or exhaustive hit answers it, and say that "
+    "this holds for the formulations you searched; otherwise state that nothing was found with the searched words "
+    "in this release version. In both cases list the searched formulations and quote `search_record.line`."
 )
 CONCEPTS = (
     "# Concepts\n\n## gestein-quarz\n- preferred: Quarzit\n- aliases: Quarzgestein | Fels aus Quarz\n"
@@ -529,7 +529,9 @@ class Segmentation(unittest.TestCase):
         self.assertEqual(found[1].identifiers, frozenset({
             "clm-00000000000000aa", "src-0123456789abcdef", "src-fedcba9876543210", "clm-00000000000000bb",
         }))
-        self.assertEqual(found[1].tokens, found[1].identifiers | {"die", "harte", "ist", "hoch"})
+        # "hoch" ends the clause and may be a separable particle, so "Härte" is paired with it as a possible
+        # split verb; the marked form stands only for "hochharte" and meets no real term.
+        self.assertEqual(found[1].tokens, found[1].identifiers | {"die", "harte", "ist", "hoch", "+harte+hoch"})
         self.assertEqual(found[1].text, "Die Härte ist hoch.")
 
     def test_a_claim_over_several_lines_repairs_a_hyphen_at_a_line_end(self) -> None:
@@ -972,7 +974,8 @@ class Matching(unittest.TestCase):
         # The word forms do not know these pairs, and the noun "Zahl" never meets the verb "zahlt".
         self.assertFalse(search_core.wordforms.same_word("senkt", "senken", search_core.CLOSED_CLASS))
         self.assertNotIn(("wiki/b.md", "paragraph", 7), hit_list(number))
-        self.assertEqual(search_core.verb_variants("zahl"), set())
+        # A stem of three letters gives no German verb form; only the English forms of the spelling are tried.
+        self.assertEqual(search_core.verb_variants("zahl"), {"zahled", "zahling"})
         self.assertIn("senken", search_core.verb_variants("senkt"))
 
     def test_a_compound_with_a_suspension_hyphen_holds_each_full_compound(self) -> None:
@@ -1212,6 +1215,218 @@ class MarkupAndWordClasses(unittest.TestCase):
         self.assertEqual(price["absence_check"]["formulations"][0]["content_words"], ["grundpreis", "monat", "granit"])
         # The ranking still searches every word.
         self.assertIn("per", [item["term"] for item in sms["coverage"]["query_terms"]])
+
+
+def pandoc_row(*cells: str, width: int = 24) -> str:
+    """One line of a pandoc multiline table: each cell padded to `width` display columns, as pandoc lines them up."""
+    padded = [cell + " " * (width - sum(search_core.display_width(character) for character in cell)) for cell in cells]
+    return ("  " + " ".join(padded)).rstrip()
+
+
+class StructureAndLanguage(unittest.TestCase):
+    """Final review: display width in pandoc tables, wrapped numbers, block quotes, split verbs, English, degrees, gender."""
+
+    def hit_on(self, report: dict, path: str) -> dict:
+        [hit] = [hit for entry in report["exhaustive_hits"] if entry["path"] == path for hit in entry["hits"]]
+        return hit
+
+    def test_pandoc_table_columns_are_cut_by_display_width(self) -> None:
+        """Regression: "✅" takes two columns, so "Bonus | ✅ | Neukundenbonus" was read as "| Bonus | ✅ N | eukundenbonus"."""
+        self.assertEqual([search_core.display_width(character) for character in "a✅中̈­​✔"], [1, 2, 2, 0, 0, 0, 1])
+        rule = "  " + " ".join(["-" * 24] * 3)
+        table = "\n".join([
+            "  " + "-" * 74,
+            pandoc_row("Leistung", "Speicher", "Basalt Nord"),
+            rule,
+            pandoc_row("Bonus", "✅", "Neukundenbonus von 50"),
+            pandoc_row("", "", "Euro"),
+            "",
+            pandoc_row("Mühle", "nein", "Granitgrus aus dem Bruch"),
+            "",
+            pandoc_row("Ab­bau", "中", "Quarzit im Tagebau"),
+            "  " + "-" * 74,
+        ])
+        [found] = [item for item in passages(page("Blatt", "## Lager\n\n" + table, "source")) if item.text.startswith("|")]
+        self.assertEqual(found.text, "| Leistung | Speicher | Basalt Nord | | Bonus | ✅ | Neukundenbonus von 50 Euro | "
+                                     "| Mu\u0308hle | nein | Granitgrus aus dem Bruch | | Abbau | 中 | Quarzit im Tagebau |")
+        self.assertTrue({"neukundenbonus", "muhle", "granitgrus", "abbau", "quarzit"} <= found.tokens)
+        with PageTree({"sources/t.md": page("Blatt", "## Lager\n\n" + table, "source")}) as root:
+            report = exhaustive(root, "Neukundenbonus Basalt Nord", TWO)
+        self.assertEqual(self.hit_on(report, "sources/t.md")["strength"], "word_form")
+        self.assertNotIn("neukundenbonus", report["absence_check"]["absent_terms"])
+
+    def test_a_wrapped_number_line_continues_its_paragraph(self) -> None:
+        """Regression: "ab dem\\n15. Januar" and pandoc's "mit Modul\\n2. Ein Heizstab" opened a list item mid-sentence."""
+        body = "\n".join([
+            "Für den Tarif Basalt gilt für Verträge mit einem Lieferbeginn ab dem",
+            "15. Januar 2027 eine Kündigungsfrist von drei Monaten.",
+            "",
+            "Der Kunde wählt beim Netzbetreiber die Steuerung mit Modul",
+            "2. Ein Heizstab am selben Zähler ist nur als Notheizung zulässig.",
+            "",
+            "Folgende Unterlagen:",
+            "1. Ausweis",
+            "2. Zählerstand",
+            "",
+            "**Wichtig**",
+            "- Granit",
+            "",
+            "- Ein Punkt mit Lieferbeginn ab dem",
+            "  15. März",
+            "- Ein zweiter Punkt",
+        ])
+        found = [(item.line, item.text, item.section) for item in passages(page("Blatt", body))[1:]]
+        self.assertEqual(found, [
+            (7, "Für den Tarif Basalt gilt für Verträge mit einem Lieferbeginn ab dem 15. Januar 2027 eine "
+                "Kündigungsfrist von drei Monaten.", ()),
+            (10, "Der Kunde wählt beim Netzbetreiber die Steuerung mit Modul 2. Ein Heizstab am selben Zähler ist nur "
+                "als Notheizung zulässig.", ()),
+            # After a colon or a bold label line a list still starts; a number at the start of a paragraph still opens an item.
+            (13, "Folgende Unterlagen:", ()),
+            (14, "1. Ausweis", ("Folgende Unterlagen:",)),
+            (15, "2. Zählerstand", ("Folgende Unterlagen:",)),
+            (17, "**Wichtig**", ()),
+            (18, "- Granit", ("**Wichtig**",)),
+            # Inside a list item, a deeper number other than 1 continues the item; a sibling marker starts the next one.
+            (20, "- Ein Punkt mit Lieferbeginn ab dem 15. März", ("**Wichtig**",)),
+            (22, "- Ein zweiter Punkt", ("**Wichtig**",)),
+        ])
+        with PageTree({"sources/e.md": page("Bedingungen", body, "source")}) as root:
+            report = exhaustive(root, "Welche Kündigungsfrist gilt für den Tarif Basalt?", TWO)
+        self.assertIn(("sources/e.md", "paragraph", 7), hit_list(report))
+
+    def test_a_block_quote_is_read_like_its_text(self) -> None:
+        """Regression: pandoc writes indented Word paragraphs as a quote, and the scan read it as one paragraph without labels."""
+        clauses = [f"> ({number}) Der Vertrag über Basalt regelt im Punkt {number} weitere Einzelheiten der Lieferung, "
+                   "die hier ausführlich beschrieben werden, damit der Absatz lang genug ist." for number in range(1, 13)]
+        clauses.append("> (13) Die Kündigungsfrist beträgt drei Monate zum Ende der Erstlaufzeit.")
+        quote = "\n>\n".join(["> **Für Quarzit gilt:**", *clauses, "> ## Lager", "> | Gestein | Frist |\n> |---|---|\n> | Gneis | Ein Monat |"])
+        self.assertGreater(len(quote), search_core.PASSAGE_MAX_CHARS)
+        self.assertEqual(search_core.unquoted("> > Text"), "Text")
+        self.assertEqual(search_core.unquoted(">>Text"), "Text")
+        self.assertEqual(search_core.unquoted("a > b"), "a > b")
+        found = passages(page("Blatt", "## Bedingungen\n\n" + quote + "\n"))
+        last = [item for item in found if item.text.startswith("(13)")]
+        self.assertEqual([(item.text, item.section) for item in last],
+                         [("(13) Die Kündigungsfrist beträgt drei Monate zum Ende der Erstlaufzeit.",
+                           ("Bedingungen", "**Für Quarzit gilt:**"))])
+        self.assertIn(("heading", "Lager"), [(item.kind, item.text) for item in found])
+        self.assertIn("| Gestein | Frist | |---|---| | Gneis | Ein Monat |", [item.text for item in found])
+        with PageTree({"sources/q.md": page("Bedingungen", "## Bedingungen\n\n" + quote + "\n", "source")}) as root:
+            report = exhaustive(root, "Welche Kündigungsfrist gilt für Quarzit?", TWO)
+        # The label inside the quote is context, so the last clause is a hit although "Quarzit" stands only in the label.
+        texts = [hit["text"] for entry in report["exhaustive_hits"] for hit in entry["hits"]]
+        self.assertIn("(13) Die Kündigungsfrist beträgt drei Monate zum Ende der Erstlaufzeit.", texts)
+
+    def test_a_separable_verb_split_in_a_main_clause_matches_its_joined_forms(self) -> None:
+        """Regression: "lehnt ... ab" never met "ablehnen", "passt ... an" never "angepasst", nor "Wann schaltet ... ab?" "abschalten"."""
+        self.assertEqual(search_core.split_verb_tokens("der pachter lehnt den antrag mit einem code ab."),
+                         {"+lehnt+ab", "+code+ab"})
+        self.assertEqual(search_core.split_verb_tokens("am 1. januar passt der pachter den zins an, wenn er steigt."),
+                         {"+passt+an"})
+        # A particle that does not end its clause is a preposition, and a verb of the sentence before is not paired.
+        self.assertEqual(search_core.split_verb_tokens("der pachter lehnt sich an die wand."), set())
+        self.assertEqual(search_core.split_verb_tokens("der pachter lehnt. den zins rechnet er ab."), {"+rechnet+ab"})
+        self.assertEqual(search_core.shown_token("+lehnt+ab"), "lehnt … ab")
+        # The verb is looked for at most SPLIT_LOOKBACK_CHARS back, so a text that is one endless line stays linear.
+        far = "passt " + "x " * search_core.SPLIT_LOOKBACK_CHARS + "an."
+        self.assertEqual(search_core.split_verb_tokens(far), set())
+        self.assertEqual(search_core.split_verb_tokens("ab, " * 50000), set())
+        files = {
+            "wiki/a.md": page("Seite A", "Der Pächter lehnt den Antrag auf Basalt mit einem Code ab."),
+            "wiki/b.md": page("Seite B", "Nach einer Änderung passt der Pächter den Zins für Granit automatisch an und informiert."),
+            "wiki/c.md": page("Seite C", "Der Pächter darf den Brecher im Winter abschalten."),
+            "wiki/d.md": page("Seite D", "Gneis kann binnen zwei Wochen zurückgeschickt werden."),
+        }
+        with PageTree(files) as root:
+            reject = exhaustive(root, "Darf der Pächter den Antrag auf Basalt ablehnen?", TWO)
+            adjust = exhaustive(root, "Wird der Zins für Granit angepasst?", TWO)
+            switch = exhaustive(root, "Wann schaltet der Pächter den Brecher ab?", TWO)
+            back = exhaustive(root, "Schicke ich Gneis zurück?", TWO)
+        for report, path, term, token in (
+            (reject, "wiki/a.md", "ablehnen", "lehnt … ab"), (adjust, "wiki/b.md", "angepasst", "passt … an"),
+            (switch, "wiki/c.md", "schaltet", "abschalten"), (back, "wiki/d.md", "schicke", "zuruckgeschickt"),
+            (back, "wiki/d.md", "zuruck", "zuruckgeschickt"),
+        ):
+            with self.subTest(term=term):
+                hit = self.hit_on(report, path)
+                self.assertEqual(hit["strength"], "heuristic")
+                self.assertIn({"term": term, "token": token, "rule": "split_verb", "in": "text"}, hit["matched"])
+                self.assertNotIn(term, report["absence_check"]["absent_terms"])
+                terms = {entry["term"]: entry for entry in report["absence_check"]["terms"]}
+                self.assertIn({"token": token, "rule": "split_verb"}, terms[term]["forms"])
+
+    def test_english_verb_forms_and_the_degree_word_of_a_how_question(self) -> None:
+        """Regression: "cancel" never met "cancelled", "apply" never "applied", and "How long ...?" required "long"."""
+        self.assertTrue({"cancelled", "cancelling", "canceled"} <= search_core.verb_variants("cancel"))
+        self.assertIn("cancel", search_core.verb_variants("cancelled"))
+        self.assertIn("applied", search_core.verb_variants("apply"))
+        self.assertIn("charge", search_core.verb_variants("charging"))
+        self.assertIn("billed", search_core.verb_variants("bill"))
+        self.assertTrue(search_core.same_scan_word("renewed", "renew"))
+        files = {
+            "wiki/a.md": page("Page A", "Basalt subscriptions can be cancelled online at any time."),
+            "wiki/b.md": page("Page B", "The granite discount was applied to new customers."),
+            "wiki/c.md": page("Page C", "The gneiss notice period is 30 days."),
+        }
+        with PageTree(files) as root:
+            cancel = exhaustive(root, "Can I cancel a basalt subscription online?", TWO)
+            apply = exhaustive(root, "Does the granite discount apply to new customers?", TWO)
+            notice = exhaustive(root, "How long is the gneiss notice period?", TWO)
+        for report, path, term, token in (
+            (cancel, "wiki/a.md", "cancel", "cancelled"), (apply, "wiki/b.md", "apply", "applied"),
+        ):
+            with self.subTest(term=term):
+                hit = self.hit_on(report, path)
+                self.assertIn({"term": term, "token": token, "rule": "verb_ending", "in": "text"}, hit["matched"])
+                self.assertNotIn(term, report["absence_check"]["absent_terms"])
+        self.assertEqual(notice["absence_check"]["formulations"][0]["content_words"], ["gneiss", "notice", "period"])
+        self.assertIn(("wiki/c.md", "paragraph", 7), hit_list(notice))
+
+    def test_superlatives_and_comparatives_match_as_ending(self) -> None:
+        """Regression: "günstiger" never met "günstigste", nor "schneller" "am schnellsten", nor "cheaper" "cheapest"."""
+        self.assertIn("gunstig", search_core.ending_bases("gunstigsten"))
+        self.assertIn("niedrig", search_core.ending_bases("niedrigeren"))
+        self.assertNotIn("pol", search_core.ending_bases("polster"))
+        for left, right in (("gunstig", "gunstigste"), ("gunstiger", "gunstigsten"), ("schneller", "schnellsten"),
+                            ("spat", "spatestens"), ("cheaper", "cheapest")):
+            with self.subTest(pair=(left, right)):
+                self.assertTrue(search_core.same_scan_word(left, right))
+                self.assertTrue(search_core.same_scan_word(right, left))
+        files = {
+            "wiki/a.md": page("Seite A", "Basalt ist der günstigste Stein im Bruch."),
+            "wiki/b.md": page("Page B", "The granite plan is the cheapest."),
+        }
+        with PageTree(files) as root:
+            cheaper = exhaustive(root, "Ist Basalt günstiger?", TWO)
+            english = exhaustive(root, "Which granite plan is cheaper?", TWO)
+        for report, path, term, token in (
+            (cheaper, "wiki/a.md", "gunstiger", "gunstigste"), (english, "wiki/b.md", "cheaper", "cheapest"),
+        ):
+            with self.subTest(term=term):
+                hit = self.hit_on(report, path)
+                self.assertIn({"term": term, "token": token, "rule": "ending", "in": "text"}, hit["matched"])
+                self.assertNotIn(term, report["absence_check"]["absent_terms"])
+
+    def test_gender_forms_match_the_generic_word(self) -> None:
+        """Regression: "MieterInnen" never met "Mieter", and "Mieter*innen" in a question required the word "innen"."""
+        self.assertIn("innen", search_core.SCAN_FUNCTION_WORDS)
+        self.assertIn("kund", search_core.ending_bases("kundinnen"))
+        self.assertTrue(search_core.same_scan_word("kunden", "kundinnen"))
+        files = {
+            "wiki/a.md": page("Seite A", "MieterInnen haben am Basalt ein Sonderkündigungsrecht."),
+            "wiki/b.md": page("Seite B", "Kunden erhalten am Granit eine Gutschrift."),
+        }
+        with PageTree(files) as root:
+            binnen = exhaustive(root, "Haben Mieter am Basalt ein Sonderkündigungsrecht?", TWO)
+            star = exhaustive(root, "Erhalten Kund*innen am Granit eine Gutschrift?", TWO)
+            capital = exhaustive(root, "Erhalten KundInnen am Granit eine Gutschrift?", TWO)
+        self.assertIn({"term": "mieter", "token": "mieterinnen", "rule": "ending", "in": "text"},
+                      self.hit_on(binnen, "wiki/a.md")["matched"])
+        self.assertEqual(star["absence_check"]["formulations"][0]["content_words"], ["erhalten", "kund", "granit", "gutschrift"])
+        self.assertIn(("wiki/b.md", "paragraph", 7), hit_list(star))
+        self.assertIn({"term": "kundinnen", "token": "kunden", "rule": "ending", "in": "text"},
+                      self.hit_on(capital, "wiki/b.md")["matched"])
 
 
 class OrderBudgetDedupe(unittest.TestCase):
@@ -1748,7 +1963,7 @@ class Instructions(unittest.TestCase):
             "absent_terms", "100,000 characters", "at least two reformulations", "read_results_without_claims",
             "hyphen_part", "`ending`", "plural in -er", "not its snippet", "`verb_ending`", "`suspended_compound`",
             "`footnote_mark`", "`short_part`", "abzuschalten", "intelligentem", "Kundinnen", "E-Mail Adresse", "CO~2~",
-            "K&uuml;ndigung", "four letters",
+            "K&uuml;ndigung", "four letters", "`split_verb`", "lehnt ... ab", "cancelled", "KundInnen", "günstigste",
         )
         texts = {label: path.read_text(encoding="utf-8") for label, path in self.TEXTS.items()}
         for label, text in texts.items():
@@ -1782,6 +1997,8 @@ class Instructions(unittest.TestCase):
             # The words a passage need not hold are named, prepositions and the degree word of a question included.
             self.assertIn('("per", "pro", "je", "laut", and "gemäß" included)', text)
             self.assertIn('("hoch", "viel", "lange", "oft", "teuer", or "schnell")', text)
+            self.assertIn('"how" ("long", "much", "many", "often", "far", "high", "expensive", or "fast")', text)
+            self.assertIn('the feminine suffix "innen"', text)
             self.assertIn('"E-Mobilität" never stands for "Mobilität"', text)
 
     def test_eval_11_is_unchanged_and_the_absence_evals_exist(self) -> None:

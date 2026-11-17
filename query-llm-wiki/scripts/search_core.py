@@ -42,8 +42,9 @@ scans every passage of the ranked files except navigation (page headers,
 headings, claims, paragraphs, list items, tables, open questions) for all
 content words of all formulations, in the members the ranking resolved plus
 what only the scan sees: hyphen parts (`hyphen_part`), endings the word forms
-do not cover (`ending`), the identifiers of claim and page metadata, and words
-only its segmentation repairs. The hits come back under `exhaustive_hits`, cut
+do not cover (`ending`), separable verbs split in a main clause (`split_verb`),
+the identifiers of claim and page metadata, and words only its segmentation
+repairs. The hits come back under `exhaustive_hits`, cut
 to a fixed budget of printed characters. The scan only adds keys: everything else equals the same
 call with `include_sources`. Nothing is indexed or cached on disk.
 """
@@ -253,6 +254,8 @@ FENCE = re.compile(r"^ {0,3}(```|~~~)")
 SCAN_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 #: A list item starts a passage of its own.
 LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d{1,9}[.)])\s+")
+#: The markers of a block quote at the start of a line: up to three spaces, then one or more ">", each with an optional space.
+QUOTE_PREFIX = re.compile(r" {0,3}(?:>[ \t]?)+")
 #: A possible sentence end inside a line: ., ! or ?, closing quotes or brackets, whitespace, the next word.
 SENTENCE_GAP = re.compile(r"[.!?][\"'»«“”’‘)\]]*(\s+)(?=(\S))")
 #: Characters that may close a sentence after its final punctuation.
@@ -284,24 +287,47 @@ HYPHEN_PART_RULE = "hyphen_part"
 #: and in -nen ("Kundinnen"), the forms of a stem shorter than four letters
 #: ("Tag", "Tage", "Tagen"), and the case endings -er and -em of an adjective
 #: that no adjective suffix marks ("intelligentem" and "intelligenten",
-#: "fester" and "festen"). It is a heuristic: "Zahl" also meets "Zähler", so a
-#: hit through it is checked in the text.
+#: "fester" and "festen"). A base of at least DEGREE_MIN_STEM letters is also
+#: the word without one of DEGREE_ENDINGS, so the comparative and the
+#: superlative meet the adjective and each other ("günstig", "günstigeren",
+#: "günstigste", "am schnellsten", "spätestens"; English "cheaper" and
+#: "cheapest"), or without one of FEMININE_ENDINGS, so a feminine form meets
+#: the generic one ("Kundin", "Kundinnen" and the Binnen-I "KundInnen" for
+#: "Kunde" and "Kunden", "Mitarbeiterinnen" for "Mitarbeiter"). It is a
+#: heuristic: "Zahl" also meets "Zähler", so a hit through it is checked in the text.
 ENDING_RULE = "ending"
 #: The endings the rule removes from a term and from a scanned token to find their base.
 INFLECTION_ENDINGS = ("e", "en", "n", "er", "ern", "es", "em", "s", "se", "sen", "nen")
 #: The shortest stem the rule may leave or extend.
 ENDING_MIN_STEM = 3
+#: The comparative with an inflection ending and the superlative, German and English, that the rule removes and adds.
+DEGREE_ENDINGS = (
+    "ere", "eren", "erer", "erem", "eres",
+    *(stem + ending for stem in ("st", "est") for ending in ("e", "en", "er", "em", "es", "ens")),
+    "est",
+)
+#: The feminine suffix, singular and plural, that the rule removes and adds.
+FEMININE_ENDINGS = ("in", "innen")
+#: The shortest base a degree or feminine ending may leave or extend ("Polster" is no superlative of "Pol").
+DEGREE_MIN_STEM = 4
 #: The scan's rule for a token that is another verb form of the term where the
 #: word forms cannot see it: a regular verb whose stem has four letters
 #: ("senkt" and "senken", "zahlte" and "zahlen", "prüft" and "geprüft"). One
 #: of VERB_ENDINGS is removed from the term, another one added, or the stem
-#: is put into a participle (ge-...-t). It is a heuristic: "Markt" also meets
-#: "Marken", so a hit through it is checked in the text.
+#: is put into a participle (ge-...-t). The rule also takes the regular forms
+#: of an English verb for each other: -ed, -d after e, -ied for y, -ing and a
+#: doubled final consonant ("cancel" and "cancelled", "apply" and "applied",
+#: "charge" and "charging", "bill" and "billed"). It is a heuristic: "Markt"
+#: also meets "Marken", so a hit through it is checked in the text.
 VERB_ENDING_RULE = "verb_ending"
 #: The verb endings the rule removes from a term and adds to its stem.
 VERB_ENDINGS = ("e", "en", "n", "t", "et", "te", "ten", "ete", "eten", "st", "est")
 #: The shortest stem the verb rule may leave or extend.
 VERB_MIN_STEM = 4
+#: The shortest base of an English verb form ("use" and "used").
+ENGLISH_MIN_BASE = 3
+#: Vowels, for the doubled consonant of an English verb form ("stop" and "stopped").
+VOWELS = "aeiou"
 #: The particles of separable verbs, which put ge- and zu- between particle and
 #: stem ("abschalten", "abgeschaltet", "abzuschalten"). The verb rule also takes
 #: a token for a form of such a verb, normalised; the longer particles come first.
@@ -318,6 +344,35 @@ SEPARABLE_PARTICLES = tuple(sorted(
 ))
 #: The shortest stem after a separable particle ("einbauen" and "eingebaut" share "bau").
 SEPARABLE_MIN_STEM = 3
+#: The scan's rule for a separable verb split in a main clause, the finite
+#: verb first and the particle at the end of the clause: a passage that writes
+#: "lehnt ... ab" or "passt ... an" holds "ablehnen" or "angepasst", and a
+#: question that asks "Wann schaltet ... ab?" matches "abschalten",
+#: "abgeschaltet" and "schaltet ... ab" for "schaltet" (and for the particle,
+#: when it is a content word such as "zurück"). The scan pairs a particle that
+#: ends a clause (before , . ; : ! ?, the end of the text or a conjunction)
+#: with every word of its sentence before it that may be a finite verb; it is
+#: a heuristic, so a hit through it is checked in the text.
+SPLIT_VERB_RULE = "split_verb"
+#: The mark that starts a split form in the scan's tokens ("+lehnt+ab"); TOKEN
+#: never matches it, and the report prints the form as "lehnt … ab".
+SPLIT_MARK = "+"
+#: The separable particles as a set, for the clause end.
+PARTICLE_SET = frozenset(SEPARABLE_PARTICLES)
+#: How far before a particle the scan looks for its verb, in characters: far
+#: enough for a long legal sentence, and a bound on the work for a text that
+#: is one endless line.
+SPLIT_LOOKBACK_CHARS = 500
+#: A word that may be the finite verb of a split separable verb: at least
+#: SEPARABLE_MIN_STEM letters, ending in one of VERB_ENDINGS (each ends in e, n or t).
+VERB_CANDIDATE = re.compile(r"(?<![^\W\d_])[^\W\d_]{%d,}[ent](?![^\W\d_])" % (SEPARABLE_MIN_STEM - 1))
+#: Each separable particle as a whole word of a normalised text.
+PARTICLE_WORDS = {particle: re.compile(r"(?<![\w-])" + particle + r"(?![\w-])") for particle in SEPARABLE_PARTICLES}
+#: What follows a word that ends a clause: closing quotes or brackets, then a
+#: punctuation mark, the end of the text, or a conjunction.
+CLAUSE_END = re.compile(
+    r"[\"'»«“”’‘)\]]*(?:[ \t\n]*(?:[.,;:!?]|\Z)|[ \t\n]+(?:und|oder|aber|sondern|denn|bzw|sowie)(?![^\W_]))"
+)
 #: The scan's rule for a word of two or three letters inside a longer word,
 #: which the compound rules (parts of four letters or more) never consider: as
 #: the first part, when the rest, after a linking element, is one or more
@@ -1793,6 +1848,96 @@ def suspended_forms(text: str) -> set[str]:
     return found
 
 
+def _sentence_start(text: str, end: int, floor: int = 0) -> int:
+    """Where the sentence that holds `text[end]` starts in a normalised text, at `floor` at the earliest (pure).
+
+    A sentence ends at !, ?, ; or :, and at a full stop before whitespace or
+    the end of the text, except after a number ("1. januar"), a single letter
+    or an abbreviation ("abs.", "nr.").
+    """
+    while True:
+        found = max(text.rfind(mark, floor, end) for mark in ".!?;:")
+        if found < 0:
+            return floor
+        if text[found] != ".":
+            return found + 1
+        if text[found + 1:found + 2].isspace():
+            start = found
+            while start > floor and not text[start - 1].isspace():
+                start -= 1
+            bare = text[start:found].lstrip(WORD_OPENERS)
+            if len(bare) >= 2 and "." not in bare and not bare[-1].isdigit() and bare not in SENTENCE_ABBREVIATIONS:
+                return found + 1
+        end = found
+
+
+def separable_splits(
+    text: str, excluded: frozenset, words: Optional[Iterable[str]] = None
+) -> list[tuple[str, list[str]]]:
+    """Each separable particle that ends a clause of a normalised text, with the words before it that may be its verb (pure).
+
+    A particle ends a clause before a punctuation mark, a conjunction or the
+    end of the text, after any closing quotes or brackets ("lehnt sie mit
+    einem antwortcode ab."). Its verb is a word of the same sentence before
+    it, of at least SEPARABLE_MIN_STEM letters, outside `excluded`, that ends
+    in one of VERB_ENDINGS, as a finite verb does ("lehnt", "passen",
+    "schaltet"), at most SPLIT_LOOKBACK_CHARS characters before the particle.
+    Each word is listed once per particle, in text order, and
+    the particles in text order. `words`, the text's tokens when the caller
+    has them, only spares finding which particles occur.
+    """
+    present = PARTICLE_SET.intersection(LETTERS.findall(text) if words is None else words)
+    if not present:
+        return []
+    ends: list[tuple[int, str]] = []
+    for particle in present:
+        for match in PARTICLE_WORDS[particle].finditer(text):
+            if CLAUSE_END.match(text, match.end()) is not None:
+                ends.append((match.start(), particle))
+    if not ends:
+        return []
+    # The possible verbs are found once; each particle takes those of its sentence.
+    spots = [(match.start(), match.group(0)) for match in VERB_CANDIDATE.finditer(text)]
+    found: list[tuple[str, list[str]]] = []
+    # The window [floor, start) only moves forward, so two pointers bound it.
+    low = high = 0
+    for start, particle in sorted(ends):
+        floor = max(0, start - SPLIT_LOOKBACK_CHARS)
+        while low < len(spots) and spots[low][0] < floor:
+            low += 1
+        high = max(high, low)
+        while high < len(spots) and spots[high][0] < start:
+            high += 1
+        if low == high:
+            continue
+        sentence = _sentence_start(text, start, floor)
+        first = low
+        while first < high and spots[first][0] < sentence:
+            first += 1
+        verbs: list[str] = []
+        for _, word in spots[first:high]:
+            if word not in excluded and word not in verbs:
+                verbs.append(word)
+        if verbs:
+            found.append((particle, verbs))
+    return found
+
+
+def split_verb_tokens(text: str, words: Optional[Iterable[str]] = None) -> set[str]:
+    """The marked split forms of the separable verbs a normalised text writes in a main clause (pure).
+
+    "der netzbetreiber lehnt sie ab." gives "+lehnt+ab" (and the same for
+    every other word before the particle that may be a finite verb). They
+    stand for the joined forms ("ablehnt"), which `ScanIndex.split_forms`
+    looks up for a term. `words` are the text's tokens when the caller has them.
+    """
+    return {
+        SPLIT_MARK + verb + SPLIT_MARK + particle
+        for particle, verbs in separable_splits(text, CLOSED_CLASS, words)
+        for verb in verbs
+    }
+
+
 def scan_words(repaired: str) -> frozenset:
     """The tokens the scan indexes for an already repaired text (pure).
 
@@ -1804,7 +1949,8 @@ def scan_words(repaired: str) -> frozenset:
     token stays; plus, where a superscript in pandoc's markup follows a word
     ("m^2^", "Kündigungsfrist^1^"), the joined token (`superscript_tokens`),
     while the word and the mark stay apart; plus the marked joined forms of
-    compounds written with a suspension hyphen (`suspended_forms`).
+    compounds written with a suspension hyphen (`suspended_forms`); plus the
+    marked split forms of separable verbs (`split_verb_tokens`).
     """
     apart: list[str] = []
     text = normalized(repaired)
@@ -1822,6 +1968,10 @@ def scan_words(repaired: str) -> frozenset:
         joined = suspended_forms(text)
         if joined:
             found = found.union(joined)
+    if not found.isdisjoint(PARTICLE_SET):
+        split = split_verb_tokens(text, found)
+        if split:
+            found = found.union(split)
     return found
 
 
@@ -1956,8 +2106,47 @@ def _blank_or_marker(line: str) -> bool:
     return not stripped or (stripped.startswith("<!--") and not PAGE_MARKER.sub("", stripped).strip())
 
 
+def unquoted(line: str) -> str:
+    """A line without the block-quote markers at its start ("> ", "> > ", ">>"), otherwise the line itself (pure)."""
+    if ">" not in line[:4]:
+        return line
+    match = QUOTE_PREFIX.match(line)
+    return line[match.end():] if match else line
+
+
+def display_width(character: str) -> int:
+    """The columns a character takes where pandoc lines up a table (pure).
+
+    Two for an East Asian wide or full-width character (the emoji ✅ and ❌,
+    CJK), none for a combining mark, an enclosing mark or a format character
+    (an NFD umlaut's U+0308, the soft hyphen, a zero-width space), one for
+    every other character.
+    """
+    if unicodedata.category(character) in ("Mn", "Me", "Cf"):
+        return 0
+    return 2 if unicodedata.east_asian_width(character) in ("W", "F") else 1
+
+
 def _column_cells(line: str, bounds: list[Optional[int]]) -> list[str]:
-    """The cells of one line of a simple or multiline table, cut where the column rule's runs start."""
+    """The cells of one line of a simple or multiline table, cut where the column rule's runs start.
+
+    The bounds are display columns, as pandoc lines the columns up: a wide
+    character takes two, a mark or format character none, and a character of
+    no width stays in the cell of the character before it.
+    """
+    if not line.isascii():
+        cuts: list[Optional[int]] = [0]
+        inner = bounds[1:-1]
+        column = 0
+        for index, character in enumerate(line):
+            width = display_width(character)
+            if not width:
+                continue
+            while len(cuts) <= len(inner) and column >= inner[len(cuts) - 1]:
+                cuts.append(index)
+            column += width
+        cuts.extend([len(line)] * (len(inner) + 1 - len(cuts)))
+        bounds = [*cuts, None]
     return [line[bounds[column]:bounds[column + 1]].strip() for column in range(len(bounds) - 1)]
 
 
@@ -2157,7 +2346,13 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
     stripped from every line, so a CRLF file yields the same passages.
 
     Only a blank line or a structural line (heading, list item, table, fence,
-    claim block, HTML table, heading or summary) ends a paragraph. A page or
+    claim block, HTML table, heading or summary) ends a paragraph. A line with
+    a list marker inside a plain paragraph continues it ("ab dem\\n15. Januar"),
+    unless the paragraph ends with a colon or is a bold label line, and a
+    number other than 1 indented below a list item continues the item.
+    Block-quote markers come off every line first, so a quote is read like
+    its text: a ">" line ends a paragraph, and a label, heading, list or table
+    inside a quote counts. A page or
     slide marker does not: it only sets the locator of what follows, so a
     sentence broken across a page stays one passage, with the locator range
     of both pages, and a hyphen at the line end before the marker is joined.
@@ -2395,6 +2590,23 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
         for _, value in markers:
             locator = value
 
+    def continues(line: str, left: str) -> bool:
+        # A line with a list marker continues the open text instead of starting
+        # an item where a hard-wrapped extraction or pandoc's line wrapping put
+        # a number or a dash at the start of a line ("ab dem\n15. Januar",
+        # "mit Modul\n2. Ein Heizstab"): inside a plain paragraph, unless the
+        # paragraph ends with a colon or is a bold label line; inside a list
+        # item, only a number other than 1 indented deeper than the item's marker.
+        if not lines or table:
+            return False
+        if listed:
+            marker = left.split(None, 1)[0]
+            return marker[0].isdigit() and marker[:-1] != "1" and len(line) - len(left) > indent
+        last = lines[-1].rstrip()
+        if last.endswith(":"):
+            return False
+        return not (len(lines) == 1 and BOLD_LABEL.match(" ".join(readable(last).split())) is not None)
+
     def handle(line: str, number: int) -> None:
         nonlocal fenced, locator, lines, length, listed, html_block
         line = line.rstrip()
@@ -2465,7 +2677,7 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
             finish()
             return
         first = left[0]
-        if (first in "-*+" or first.isdigit()) and LIST_ITEM.match(line):
+        if (first in "-*+" or first.isdigit()) and LIST_ITEM.match(line) and not continues(line, left):
             finish()
             enter(len(line) - len(left))
             listed = True
@@ -2497,10 +2709,19 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
     line_at = body_line
 
     def walk(segment: str, start: int) -> None:
-        segment_lines = segment.split("\n")
+        raw_lines = segment.split("\n")
+        # Block-quote markers come off before every structural test, so a ">"
+        # line ends a paragraph and a label, heading, list or table inside a
+        # quote counts (pandoc writes an indented Word paragraph as a quote).
+        segment_lines = [unquoted(line) for line in raw_lines]
         count = len(segment_lines)
         index = 0
         while index < count:
+            if html_block is not None:
+                # Inside a raw HTML table a line is passed on as written.
+                handle(raw_lines[index], start + index)
+                index += 1
+                continue
             line = segment_lines[index]
             if (
                 not fenced and html_block is None
@@ -2625,24 +2846,35 @@ def hyphen_units(word: str) -> tuple:
 
 
 def shown_token(token: str) -> str:
-    """A member token as a report prints it: a joined form of a suspended compound without its mark."""
-    return token[1:] if token[:1] == SUSPENDED_MARK else token
+    """A member token as a report prints it: a joined form of a suspended compound without its mark, a split verb as "lehnt … ab"."""
+    if token[:1] == SUSPENDED_MARK:
+        return token[1:]
+    if token[:1] == SPLIT_MARK:
+        verb, _, particle = token[1:].partition(SPLIT_MARK)
+        return f"{verb} … {particle}"
+    return token
 
 
 def ending_bases(spelling: str) -> set[str]:
     """The bases of a folded spelling: itself and itself without one of INFLECTION_ENDINGS (pure).
 
     A base keeps at least ENDING_MIN_STEM letters, and a spelling shorter than
-    that has none. Two words share a base when the `ending` rule matches them.
+    that has none. A base of at least DEGREE_MIN_STEM letters may also be the
+    spelling without one of DEGREE_ENDINGS ("gunstigsten" gives "gunstig") or
+    FEMININE_ENDINGS ("kundinnen" gives "kund"). Two words share a base when
+    the `ending` rule matches them.
     """
     if not spelling.isalpha() or len(spelling) < ENDING_MIN_STEM:
         return set()
     bases = {spelling}
-    bases.update(
-        spelling[: -len(ending)]
-        for ending in INFLECTION_ENDINGS
-        if spelling.endswith(ending) and len(spelling) - len(ending) >= ENDING_MIN_STEM
-    )
+    for endings, shortest in (
+        (INFLECTION_ENDINGS, ENDING_MIN_STEM), (DEGREE_ENDINGS, DEGREE_MIN_STEM), (FEMININE_ENDINGS, DEGREE_MIN_STEM),
+    ):
+        bases.update(
+            spelling[: -len(ending)]
+            for ending in endings
+            if spelling.endswith(ending) and len(spelling) - len(ending) >= shortest
+        )
     return bases
 
 
@@ -2650,11 +2882,17 @@ def ending_variants(spelling: str) -> set[str]:
     """The spellings that share a base with a folded spelling, as the `ending` rule compares (pure).
 
     Every base of `ending_bases` with nothing or one of INFLECTION_ENDINGS
-    after it: "intelligenten" gives "intelligentem" and "intelligenter"
-    (through "intelligent"), "tag" gives "tage", "auto" gives "autos". The
-    spelling itself is left out.
+    after it, and every base of at least DEGREE_MIN_STEM letters with one of
+    DEGREE_ENDINGS or FEMININE_ENDINGS: "intelligenten" gives "intelligentem"
+    and "intelligenter" (through "intelligent"), "tag" gives "tage", "auto"
+    gives "autos", "gunstiger" gives "gunstigste", "kunden" gives "kundin" and
+    "kundinnen". The spelling itself is left out.
     """
-    variants = {base + ending for base in ending_bases(spelling) for ending in ("", *INFLECTION_ENDINGS)}
+    variants: set[str] = set()
+    for base in ending_bases(spelling):
+        variants.update(base + ending for ending in ("", *INFLECTION_ENDINGS))
+        if len(base) >= DEGREE_MIN_STEM:
+            variants.update(base + ending for ending in (*DEGREE_ENDINGS, *FEMININE_ENDINGS))
     variants.discard(spelling)
     return variants
 
@@ -2718,7 +2956,9 @@ def verb_variants(spelling: str) -> set[str]:
     Every pair of `separable_stems` with each of VERB_ENDINGS after the stem,
     as a participle with ge- after the particle (-t, -et, -en), and as an
     infinitive with zu- after the particle: "abschalten" gives "abgeschaltet"
-    and "abzuschalten", "abgeschaltet" gives "abschalten".
+    and "abzuschalten", "abgeschaltet" gives "abschalten". Every base of
+    `english_bases` in the forms of `english_forms`: "cancelled" gives
+    "cancel" and "cancelling", "apply" gives "applied".
     """
     variants: set[str] = set()
     for stem in verb_stems(spelling):
@@ -2728,8 +2968,51 @@ def verb_variants(spelling: str) -> set[str]:
         variants.update(particle + stem + ending for ending in VERB_ENDINGS)
         variants.update(particle + "ge" + stem + ending for ending in ("t", "et", "en"))
         variants.update((particle + "zu" + stem + "en", particle + "zu" + stem + "n"))
+    for base in english_bases(spelling):
+        variants.update(english_forms(base))
     variants.discard(spelling)
     return variants
+
+
+def english_bases(spelling: str) -> set[str]:
+    """The bases a folded spelling may be a regular English verb form of, itself included (pure).
+
+    -ied and -ies give the base in -y ("applied", "applies": "apply"); -ed
+    and -ing give the base without them, with an e added, and with a doubled
+    final consonant undone ("cancelled": "cancell", "cancelle", "cancel";
+    "charging": "charg", "charge"). A base keeps ENGLISH_MIN_BASE letters.
+    """
+    if not spelling.isalpha():
+        return set()
+    bases = {spelling}
+    if spelling.endswith(("ied", "ies")):
+        bases.add(spelling[:-3] + "y")
+    for suffix in ("ed", "ing"):
+        if spelling.endswith(suffix):
+            base = spelling[: -len(suffix)]
+            bases.update((base, base + "e"))
+            if len(base) >= 2 and base[-1] == base[-2] and base[-1] not in VOWELS:
+                bases.add(base[:-1])
+    return {base for base in bases if len(base) >= ENGLISH_MIN_BASE}
+
+
+def english_forms(base: str) -> set[str]:
+    """The regular English verb forms of a base, the base included (pure).
+
+    The base, -ed and -ing; -d and -ing without the e after an e ("charge":
+    "charged", "charging"); -ied and -ies after a consonant and y ("apply":
+    "applied", "applies"); the final consonant doubled after one vowel
+    ("cancel": "cancelled", "cancelling"; "stop": "stopped").
+    """
+    forms = {base, base + "ed", base + "ing"}
+    last, before = base[-1], base[-2:-1]
+    if last == "e":
+        forms.update((base + "d", base[:-1] + "ing"))
+    elif last == "y" and before and before not in VOWELS:
+        forms.update((base[:-1] + "ied", base[:-1] + "ies"))
+    elif last not in VOWELS + "wxy" and before and before in VOWELS and base[-3:-2] not in VOWELS:
+        forms.update((base + last + "ed", base + last + "ing"))
+    return forms
 
 
 def scan_members(ranking: Ranking, scan: "ScanIndex", vocabulary: dict[str, int]) -> dict[Any, list[wordforms.Member]]:
@@ -2752,8 +3035,12 @@ def scan_members(ranking: Ranking, scan: "ScanIndex", vocabulary: dict[str, int]
       "krankenhaus", "tage" for "tag") is added under the heuristic rule
       `ending` (see `ScanIndex.ending_forms`);
     - every scanned token that is another verb form of a four-letter stem
-      ("senken" for "senkt", "zahlt" for "zahlen") is added under the
+      ("senken" for "senkt", "zahlt" for "zahlen"), of a separable verb or of
+      an English verb ("cancelled" for "cancel") is added under the
       heuristic rule `verb_ending` (see `ScanIndex.verb_forms`);
+    - every split form of a separable verb that a passage writes in a main
+      clause and that is a form of the term ("lehnt … ab" for "ablehnen") is
+      added under `split_verb` (see `ScanIndex.split_forms`);
     - every scanned token that glues a one- or two-digit footnote mark to the
       term's stem key ("kundigungsfrist2") is added under `footnote_mark`, and
       every marked joined form of a suspended compound with the term's stem
@@ -2785,6 +3072,7 @@ def scan_members(ranking: Ranking, scan: "ScanIndex", vocabulary: dict[str, int]
                 (parts.get(key, ()), HYPHEN_PART_RULE),
                 (scan.ending_forms(term), ENDING_RULE),
                 (scan.verb_forms(term), VERB_ENDING_RULE),
+                (scan.split_forms(term), SPLIT_VERB_RULE),
                 (footnotes.get(key, ()), FOOTNOTE_RULE),
                 (suspended.get(key, ()), SUSPENDED_RULE),
                 (scan.short_parts(term), SHORT_PART_RULE),
@@ -3001,6 +3289,7 @@ class ScanIndex:
         self._spellings: Optional[dict[str, frozenset]] = None
         self._footnotes: Optional[dict[str, frozenset]] = None
         self._suspended: Optional[dict[str, frozenset]] = None
+        self._split: Optional[dict[str, frozenset]] = None
         self._scan_only: Optional[tuple[Any, dict[str, frozenset]]] = None
         self._part_words: Optional[tuple[frozenset, list[tuple[str, str]]]] = None
         for relative, scope, text, document, selected in files:
@@ -3152,6 +3441,50 @@ class ScanIndex:
         if term in SCAN_EXCLUDED:
             return frozenset()
         return self._scanned(verb_variants(wordforms.spelling_key(term)), term)
+
+    def split_index(self) -> dict[str, frozenset]:
+        """Per joined form in folded spelling ("ablehnt"), the marked split forms that stand for it ("+lehnt+ab"), built once."""
+        if self._split is None:
+            joined: dict[str, set[str]] = {}
+            for token in self.own:
+                if token[:1] == SPLIT_MARK:
+                    verb, _, particle = token[1:].partition(SPLIT_MARK)
+                    joined.setdefault(wordforms.spelling_key(particle + verb), set()).add(token)
+            self._split = {key: frozenset(found) for key, found in joined.items()}
+        return self._split
+
+    def split_forms(self, term: str) -> frozenset:
+        """The split forms a passage writes of a separable verb whose joined form is `term` or another form of it.
+
+        "ablehnen" finds "+lehnt+ab" (joined "ablehnt") and "+lehnen+ab";
+        "angepasst" finds "+passt+an". Only a candidate that starts with one
+        of SEPARABLE_PARTICLES can stand for a split form.
+        """
+        if term in SCAN_EXCLUDED:
+            return frozenset()
+        index = self.split_index()
+        if not index:
+            return frozenset()
+        spelling = wordforms.spelling_key(term)
+        found: set[str] = set()
+        for candidate in (spelling, *verb_variants(spelling)):
+            found.update(index.get(candidate, ()))
+        return frozenset(found)
+
+    def joined_forms(self, particle: str, verb: str) -> frozenset:
+        """What a question's split verb ("schaltet … ab") matches: the joined forms written as text and the split forms of passages.
+
+        The candidates are the joined form ("abschaltet") and its other verb
+        forms ("abschalten", "abgeschaltet", "abzuschalten"), compared in
+        folded spelling.
+        """
+        spelling = wordforms.spelling_key(particle + verb)
+        candidates = {spelling, *verb_variants(spelling)}
+        found = set(self._scanned(candidates, ""))
+        index = self.split_index()
+        for candidate in candidates:
+            found.update(index.get(candidate, ()))
+        return frozenset(found)
 
     def _scanned(self, candidates: set[str], term: str) -> frozenset:
         """The scanned tokens that are one of the folded `candidates`, without `term` and the excluded words."""
@@ -3362,6 +3695,22 @@ class _Formulation:
         self.terms = ranking.terms
         self.members: dict[Any, list[wordforms.Member]] = scan_members(ranking, scan, vocabulary)
         self.content = content_words(ranking.terms)
+        # A separable verb the formulation splits ("Wann schaltet ... ab?")
+        # also matches its joined forms and the split forms of passages, for
+        # the verb and for a particle that is a content word ("zurück").
+        content = set(self.content)
+        weight = wordforms.WEIGHTS[SPLIT_VERB_RULE]
+        for particle, words in separable_splits(normalized(wordforms.repair_text(text)), SCAN_EXCLUDED):
+            for word in words:
+                if word not in content:
+                    continue
+                found = scan.joined_forms(particle, word)
+                for term in (word, particle):
+                    if term not in content:
+                        continue
+                    listed = self.members.setdefault(term, [])
+                    known = {token for token, _, _ in listed}
+                    listed.extend((token, SPLIT_VERB_RULE, weight) for token in sorted(found - known))
         self.runs = concept_runs(text, definitions)
         self.alternatives = alternatives(self.content, self.runs, definitions)
         self._keys: dict[tuple[Any, bool], frozenset] = {}

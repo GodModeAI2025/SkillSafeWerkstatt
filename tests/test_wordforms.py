@@ -164,6 +164,7 @@ class StepB_Inflection(unittest.TestCase):
         scan_rules = {
             search_core.HYPHEN_PART_RULE, search_core.ENDING_RULE, search_core.VERB_ENDING_RULE,
             search_core.FOOTNOTE_RULE, search_core.SUSPENDED_RULE, search_core.SHORT_PART_RULE,
+            search_core.SPLIT_VERB_RULE,
         }
         self.assertEqual(scan_rules, {rule for rule, (_weight, kind) in wordforms.RULES.items() if kind == "scan"})
         self.assertEqual({kind for _weight, kind in wordforms.RULES.values()}, {"word_form", "heuristic", "scan"})

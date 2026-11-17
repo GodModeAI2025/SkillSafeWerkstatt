@@ -81,6 +81,7 @@ RULES: Dict[str, Tuple[float, str]] = {
     "hyphen_part": (0.35, "scan"),
     "ending": (0.35, "scan"),
     "verb_ending": (0.35, "scan"),
+    "split_verb": (0.35, "scan"),
     "footnote_mark": (0.35, "scan"),
     "suspended_compound": (0.35, "scan"),
     "short_part": (0.35, "scan"),
@@ -174,10 +175,12 @@ our your their my than
 #: Prepositions, contractions, conjunctions, question words and particles the
 #: closed class lacks ("per", "pro", "je", "laut", "gemäß", "wofür",
 #: "wieviel", "bzw", "noch", "eigentlich", "nur"), the degree words of a
-#: question with "wie" ("Wie hoch ...?", "Wie viel ...?", "Wie lange ...?",
-#: "Wie oft ...?"), and the light verbs of a question ("Gibt es ...?", "Wie
-#: geht ...?", "Was gilt ...?", "Was passiert ...?"), which name no topic. A
-#: passage need not hold them; the scan only. The ranking and the precision
+#: question with "wie" or "how" ("Wie hoch ...?", "Wie viel ...?", "Wie lange
+#: ...?", "Wie oft ...?", "How long ...?", "How much ...?"), the light verbs
+#: of a question ("Gibt es ...?", "Wie geht ...?", "Was gilt ...?", "Was
+#: passiert ...?"), which name no topic, and the feminine suffix "innen" that
+#: a gender star, colon or underscore splits off ("Kund*innen", "Kund:innen").
+#: A passage need not hold them; the scan only. The ranking and the precision
 #: gate never use them.
 SCAN_FUNCTION_WORDS = """
 ab ans aufs außer binnen durchs fürs gegenüber hinter hinters innerhalb außerhalb neben samt statt
@@ -192,6 +195,8 @@ about after before between into over under via within without per regarding conc
 gibt gibts geben gab gegeben geht gehen ging gegangen gilt gelten galt gegolten passiert passieren
 funktioniert funktionieren steht stehen
 get gets got happen happens happened exist exists existed
+long much many often far high expensive fast frequently
+innen
 """
 
 #: The function-word tiers, from the narrowest to the widest: (tier, its own
