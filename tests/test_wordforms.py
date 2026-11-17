@@ -18,6 +18,10 @@ A review of the first implementation added tests for rules that could be
 broken without any test failing: the verb and -er rules, the navigation and
 unsearched-layer counts, group merging, concept triggering, and a bound on the
 length of a token the compound rules consider.
+
+Stufe 6 added the link variants of a compound (`compound_link`) and the closed
+irregular tables (`irregular`, `derived`), each with the false pairings its
+reviews found pinned as tests.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -259,6 +264,66 @@ class StepC_Compounds(unittest.TestCase):
         index = resolver("gas", "gastarif", "tarif")
         self.assertNotIn("gastarif", rules(index.resolve("gas")))
 
+    def test_a_query_word_with_another_linking_element_finds_the_compound(self) -> None:
+        """compound_link (Stufe 6): the same parts with another linking element, beside the head of the split."""
+        index = resolver("abschlag", "zahlung", "abschlagszahlung", "abschlagszahlungen")
+        self.assertEqual(
+            rules(index.resolve("abschlagzahlung")), {"abschlagszahlung": "compound_link", "zahlung": "query_part"},
+            "a variant is looked up by its spelling only, and the head stays beside it",
+        )
+        self.assertEqual(
+            rules(resolver("kirche", "turm", "kirchturm").resolve("kirchenturm")),
+            {"kirchturm": "compound_link", "turm": "query_part"},
+        )
+        # A disclosed false pairing: a look-alike that differs only in its linking element.
+        self.assertEqual(
+            rules(resolver("land", "mann", "landsmann").resolve("landmann")),
+            {"landsmann": "compound_link", "mann": "query_part"},
+        )
+        # A word that exists in a layer the search did not search gets no other spelling either.
+        self.assertEqual(rules(resolver("land", "mann", "landsmann").resolve("landmann", typos=False)), {"mann": "query_part"})
+        # Never when the query word occurs or has a word form, and never without real words on both sides.
+        self.assertEqual(resolver("land", "mann", "landmann", "landsmann").resolve("landmann"), [("landmann", "exact", 1.0)])
+        self.assertEqual(
+            rules(resolver("abschlag", "zahlung", "abschlagzahlungen", "abschlagszahlung").resolve("abschlagzahlung")),
+            {"abschlagzahlungen": "stem"},
+        )
+        self.assertNotIn("compound_link", rules(resolver("abschlagszahlung").resolve("abschlagzahlung")).values())
+        self.assertEqual(resolver("tag", "geld", "tagesgeld").resolve("taggeld"), [], "parts need four letters")
+        self.assertEqual(wordforms.RULES["compound_link"], (0.45, "heuristic"))
+
+    def test_a_link_variant_keeps_the_query_words_own_ending(self) -> None:
+        """Plural to plural, genitive to genitive (recall review of Stufe 6); singular to plural stays unfound."""
+        plural = resolver("abschlag", "zahlung", "abschlagszahlungen")
+        self.assertEqual(
+            rules(plural.resolve("abschlagzahlungen")), {"abschlagszahlungen": "compound_link", "zahlung": "query_part"}
+        )
+        self.assertEqual(
+            rules(resolver("kirche", "turm", "kirchturmen").resolve("kirchenturmen")),
+            {"kirchturmen": "compound_link", "turm": "query_part"},
+        )
+        self.assertEqual(
+            rules(resolver("kirche", "turm", "kirchturms").resolve("kirchenturms")),
+            {"kirchturms": "compound_link", "turm": "query_part"},
+        )
+        # No stem lookup: the singular never finds a plural-only variant.
+        self.assertEqual(rules(plural.resolve("abschlagzahlung")), {"zahlung": "query_part"})
+
+    def test_a_link_variant_never_comes_from_a_stem_cut(self) -> None:
+        """A stem cut would make "haupt|achs" into "Hauptsache" and "fahr|rinn" into "Fahrerinnen"."""
+        self.assertEqual(rules(resolver("haupt", "achse", "hauptsache").resolve("hauptachse")), {"achse": "query_part"})
+        self.assertEqual(rules(resolver("fahr", "rinne", "fahrerinnen").resolve("fahrrinne")), {"rinne": "query_part"})
+
+    def test_a_link_variant_is_never_tried_on_an_endless_word(self) -> None:
+        index = resolver("pumpe", "pumpen", "pumpens", "pumpenpumpen", "pumpespumpen")
+        # Long enough that an unbounded split would exhaust the recursion limit.
+        word = "pumpen" * 1000
+        self.assertGreater(len(word), wordforms.MAX_COMPOUND)
+        started = time.perf_counter()
+        self.assertEqual(index.link_variants(word), {})
+        index.resolve(word)
+        self.assertLess(time.perf_counter() - started, 1.0)
+
 
 class StepD_Typos(unittest.TestCase):
     def test_a_long_word_matching_nothing_else_is_corrected_by_one_edit(self) -> None:
@@ -416,6 +481,293 @@ class ConceptTerms(unittest.TestCase):
         self.assertFalse(wordforms.same_word("kundigt", "kundigen", search_core.CLOSED_CLASS))
 
 
+#: The gate-style negatives of the irregular-forms precision review: each
+#: question with two reformulations asks for a topic the pages do not hold,
+#: and one of its words is a noun or an acronym that a strong verb of the table
+#: would otherwise write the same way (Gewinne, Ausweise, Beiträge, Abläufe,
+#: KAM, Nachkommen, Messe).
+NEGATIVE_PAGES = {
+    "wiki/topics/solar.md": ("Solarstrom", "Solarstrom wird aus Sonnenlicht gewonnen und ins Netz eingespeist."),
+    "wiki/topics/kuendigung.md": ("Kündigungsfrist", "Die Kündigungsfrist liegt bei vier Wochen zum Monatsende."),
+    "wiki/topics/vertrag.md": ("Vertragsende", "Ist der Vertrag abgelaufen, gilt die Grundversorgung."),
+    "wiki/topics/service.md": ("Service", "Der Techniker kommt zu Gewerbekunden auch am Samstag."),
+    "wiki/topics/rechnung.md": ("Rechnung", "Die Mehrwertsteuer wird auf der Rechnung gesondert ausgewiesen."),
+    "wiki/topics/sanierung.md": ("Sanierung", "Die Dämmung hat zur Senkung der Heizkosten beigetragen."),
+    "wiki/topics/zahlung.md": (
+        "Zahlungsverzug", "Ist der Kunde seiner Zahlungspflicht nachgekommen, endet das Mahnverfahren.",
+    ),
+    "wiki/topics/zaehler.md": ("Zähler", "Der Zähler misst den Stromverbrauch im Haushalt."),
+}
+NEGATIVE_QUESTIONS = (
+    ("Gewinne mit Solarstrom", "Rendite Photovoltaikanlage", "Ertrag Solaranlage Steuer"),
+    ("Ausweise auf der Rechnung", "Personalausweis vorlegen", "Identitätsnachweis Kundenkonto"),
+    ("Beiträge Heizkosten", "Mitgliedsbeitrag Heizkostenzuschuss", "Zuschuss Heizung Verein"),
+    ("Welche Abläufe gelten beim Vertrag?", "Prozess Vertragsabschluss", "Ablaufplan Vertragsschluss"),
+    ("KAM für Gewerbekunden", "Key Account Manager Gewerbe", "Ansprechpartner Firmenkunden"),
+    ("Nachkommen und Zahlungspflicht", "Erben Stromschulden", "Erbschaft Energieschulden"),
+    ("Messe Stromverbrauch", "Fachmesse Energie", "Ausstellung Energieeffizienz"),
+)
+
+
+class IrregularForms(unittest.TestCase):
+    """The closed tables of strong verbs, their nouns and irregular comparison (Stufe 6)."""
+
+    def test_both_rules_are_disclosed_heuristics_of_one_weight(self) -> None:
+        self.assertEqual(wordforms.RULES["irregular"], (0.45, "heuristic"))
+        self.assertEqual(wordforms.RULES["derived"], (0.45, "heuristic"))
+        order = ("exact", "fold", "stem", "verb", "irregular", "derived", "compound_head", "compound_link",
+                 "compound_modifier", "query_part", "typo")
+        self.assertEqual(tuple(rule for rule in wordforms.RULES if rule in order), order)
+
+    def test_the_superlative_and_comparative_meet_the_positive_one_way(self) -> None:
+        found = rules(resolver("hoch", "hochste", "hoher", "hohere").resolve("hochste"))
+        self.assertEqual(found, {"hochste": "exact", "hoch": "irregular", "hoher": "irregular", "hohere": "irregular"})
+        self.assertEqual(rules(resolver("hochste").resolve("hoher")), {"hochste": "irregular"})
+        # "Wie hoch ...?" names no topic: the positive finds neither.
+        self.assertEqual(rules(resolver("hoch", "hochste", "hoher").resolve("hoch")), {"hoch": "exact"})
+        # "am besten" names no topic either ("Wie kündige ich am besten?"): the superlative of
+        # "gut" finds nothing, while "besser" still finds "beste".
+        for term in ("beste", "besten", "bester", "bestes", "bestem"):
+            with self.subTest(term=term):
+                self.assertEqual(resolver("gut", "gute", "besser").resolve(term), [])
+        self.assertEqual(rules(resolver("beste", "besten").resolve("besser")), {"beste": "irregular", "besten": "irregular"})
+        # English comparison runs one way as well.
+        self.assertEqual(rules(resolver("good", "better").resolve("best")), {"good": "irregular", "better": "irregular"})
+        self.assertEqual(resolver("better", "best").resolve("good"), [])
+
+    def test_am_besten_never_ranks_a_comparison_page(self) -> None:
+        """A how-to question that ends in "am besten" is no question about comparisons (precision review of Stufe 6)."""
+        pages = {
+            "wiki/topics/kuendigung.md": page("Kündigung", "Kündigen ist in Textform möglich, mit der Kundennummer."),
+            "wiki/comparisons/tarife.md": page(
+                "Festpreis und dynamischer Tarif", "Der Festpreistarif ist besser planbar. Der dynamische Tarif ist gut."
+            ),
+            "wiki/topics/wechsel.md": page("Lieferantenwechsel", "Der Wechsel des Lieferanten dauert drei Wochen."),
+        }
+        with PageTree(pages, index=None) as root:
+            for query, first in (
+                ("Wie kündige ich am besten?", "wiki/topics/kuendigung.md"),
+                ("Wie wechsle ich am besten den Lieferanten?", "wiki/topics/wechsel.md"),
+            ):
+                with self.subTest(query=query):
+                    report = search_core.search(root, query, limit=5)
+                    paths = [result["path"] for result in report["results"]]
+                    self.assertEqual(paths[:1], [first])
+                    self.assertNotIn("wiki/comparisons/tarife.md", paths)
+
+    def test_a_strong_participle_meets_its_verb_and_its_noun(self) -> None:
+        vocabulary = resolver("umziehen", "umzieht", "umzog", "umzug", "umzuge", "gezogen", "anzug", "bezug")
+        found = rules(vocabulary.resolve("umgezogene"))
+        self.assertEqual(found, {"umziehen": "irregular", "umzieht": "irregular", "umzog": "irregular",
+                                 "umzug": "derived", "umzuge": "derived"})
+        self.assertEqual(rules(vocabulary.resolve("umzug")),
+                         {"umzug": "exact", "umzuge": "stem", "umziehen": "derived", "umzieht": "derived", "umzog": "derived"})
+        # Both rules are query-word heuristics: concept expansions and unsearched layers get neither.
+        self.assertEqual(vocabulary.resolve("umgezogene", heuristics=False), [])
+
+    def test_short_strong_forms_meet_their_verb(self) -> None:
+        cases = {
+            "vergilt": {"vergelten", "vergalt", "vergolten"}, "zieht": {"ziehen", "gezogen"},
+            "bezogen": {"bezieht", "beziehen"}, "entschieden": {"entscheidet", "entscheiden"},
+            "gestiegene": {"steigt", "stieg"}, "uberwiesen": {"uberweisen"}, "abgelaufen": {"ablauft", "ablaufen"},
+            "einbezogen": {"einbeziehen"}, "anerkannt": {"anerkennen"}, "erhalt": {"erhielt", "enthalt"} - {"enthalt"},
+        }
+        for term, forms in cases.items():
+            with self.subTest(term=term):
+                found = rules(resolver(*forms).resolve(term))
+                self.assertEqual(found, {form: "irregular" for form in forms})
+
+    def test_nouns_and_homographs_outside_the_table_get_no_key(self) -> None:
+        """The table leaves out forms that are common nouns or other words once the umlaut is gone."""
+        for token in (
+            "abschnitt", "durchschnitt", "begriff", "begriffe", "zustand", "zustanden", "bestand", "anlagen",
+            "unterlagen", "vorlagen", "aufgabe", "aufgaben", "abgabe", "abschlag", "abschlage", "zuschlag",
+            "vertrag", "vertrage", "betrag", "betrug", "antrag", "auftrag", "verzug", "anzug", "aufzug",
+            "anspruch", "ubersicht", "vorsicht", "unterschied", "verschiedene", "angemessen", "verfahren",
+            "fall", "falle", "fallen", "fuhren", "fahrt", "verwandte", "wende", "anlasse", "weise", "gleiche",
+            "bitte", "sprachen", "hochstens", "hohe", "hohen", "mehr", "meisten", "nachste", "ablauf", "verlauf",
+            "verlaufe", "lost", "lose", "half",
+            # Excluded forms, the removed heißen row, prefixes that make a noun, and "guter" (Güter).
+            "messe", "scheine", "werft", "heisse", "heissen", "entgelte", "entgelten", "einkommen", "abkommen",
+            "guter", "gebet",
+            # No form shorter than MIN_PART letters (also abbreviations and names).
+            "lag", "kam", "bot", "las", "hob", "lud", "sah", "gab",
+            # The light verbs only with a prefix.
+            "gibt", "gilt", "kommt", "komme", "liegt", "steht", "sieht", "halt", "lasst",
+            # No first person in -e for a separable verb: these are plural nouns.
+            "ablaufe", "ausweise",
+            # Common other words: Schloss, and "geboten" of gebieten ("Eile ist geboten").
+            "schloss", "geboten", "gebotene", "gebotenen", "gebotener", "gebotenes", "gebotenem",
+        ):
+            with self.subTest(token=token):
+                self.assertEqual(wordforms.irregular_keys(token), ())
+        # The prefixed and plural forms stay.
+        for token in ("schlossen", "abschloss", "angeboten", "verboten", "geschlossen"):
+            with self.subTest(token=token):
+                self.assertNotEqual(wordforms.irregular_keys(token), ())
+        self.assertEqual(resolver("schloss", "schliessanlage").resolve("geschlossen"), [])
+        self.assertEqual(resolver("geboten").resolve("bietet"), [])
+
+    def test_the_zu_infinitive_of_a_composite_prefix_meets_its_verb(self) -> None:
+        for token, key in (
+            ("anzuerkennen", "aner|kenn"), ("beizubehalten", "beibe|halt"), ("einzubeziehen", "einbe|zieh"),
+            ("vorzubehalten", "vorbe|halt"),
+        ):
+            with self.subTest(token=token):
+                self.assertEqual(wordforms.irregular_keys(token), (key,))
+
+    def test_no_present_form_german_does_not_write(self) -> None:
+        """No -t or -st straight after a stem in t or d, no -st after ss; a changed vowel keeps its forms."""
+        for token in ("findt", "findst", "erhaltt", "biett", "vergeltst", "schliessst", "verlassst"):
+            with self.subTest(token=token):
+                self.assertEqual(wordforms.irregular_keys(token), ())
+        for token, key in (
+            ("findet", "|find"), ("findest", "|find"), ("schliesst", "|schliess"), ("erhaltst", "er|halt"),
+            ("ladt", "|lad"), ("ladst", "|lad"), ("einladt", "ein|lad"),
+        ):
+            with self.subTest(token=token):
+                self.assertEqual(wordforms.irregular_keys(token), (key,))
+
+    def test_the_scan_takes_irregular_forms_for_the_same_word(self) -> None:
+        self.assertTrue(search_core.same_scan_word("umgezogene", "umzug"))
+        self.assertTrue(search_core.same_scan_word("hochste", "hoch"))
+        self.assertTrue(search_core.same_scan_word("abgeschlossen", "abschluss"))
+        self.assertFalse(search_core.same_scan_word("umzug", "anzug"))
+        self.assertFalse(search_core.same_scan_word("abschnitt", "abschneiden"))
+
+    def test_a_search_finds_the_noun_page_for_a_participle_and_the_split_verb(self) -> None:
+        pages = {
+            "wiki/topics/umzug.md": page("Umzug", "Beim Umzug eines Kunden bleibt der Vertrag bestehen."),
+            "wiki/topics/kunden.md": page("Kunden", "Kunden und Verträge im Überblick."),
+            "wiki/topics/wohnung.md": page("Wohnung", "Der Kunde zieht in eine andere Stadt um. Der Vertrag bleibt."),
+            "wiki/topics/abschlag.md": page("Abschlag", "Der höchste Abschlag beträgt 200 Euro."),
+            "wiki/topics/zahl.md": page("Zahl", "Der Abschlag ist hoch."),
+        }
+        with PageTree(pages, index=None) as root:
+            report = search_core.search(root, "umgezogene Kunden", limit=10, exhaustive=True)
+            degree = search_core.search(root, "Abschlag höher", limit=10)
+        top = report["results"][0]
+        self.assertEqual(top["path"], "wiki/topics/umzug.md")
+        self.assertIn({"term": "umgezogene", "token": "umzug", "rule": "derived", "weight": wordforms.WEIGHTS["derived"]},
+                      top["match_rules"])
+        self.assertEqual(report["absence_check"]["absent_terms"], [])
+        rules_by_page = {
+            page_["path"]: {entry["rule"] for hit in page_["hits"] for entry in hit.get("matched") or []}
+            for page_ in report["exhaustive_hits"]
+        }
+        self.assertIn("derived", rules_by_page["wiki/topics/umzug.md"])
+        # "zieht ... um" is a split form of "umziehen", whose participle the question asked for.
+        self.assertIn("split_verb", rules_by_page["wiki/topics/wohnung.md"])
+        terms = {item["term"]: item for item in degree["coverage"]["query_terms"]}
+        self.assertEqual({form["token"]: form["rule"] for form in terms["hoher"]["forms"]},
+                         {"hochste": "irregular", "hoch": "irregular"})
+
+    def test_a_split_preterite_of_the_tables_is_found(self) -> None:
+        """"zog ... um", "schloss ... ab", "gab ... an": a strong preterite ends in none of e, n, t (recall review of Stufe 6)."""
+        self.assertIn("+zog+um", search_core.split_verb_tokens("die kundin zog im marz nach hamburg um."))
+        self.assertIn("+schloss+ab", search_core.split_verb_tokens("der kunde schloss den vertrag ab."))
+        # Only with a particle the tables join to that form: "mitzog" is no form of them.
+        self.assertNotIn("+zog+mit", search_core.split_verb_tokens("er zog den wagen mit."))
+        pages = {
+            "wiki/topics/hamburg.md": page("Hamburg", "Die Kundin zog im März nach Hamburg um."),
+            "wiki/topics/montag.md": page("Montag", "Der Kunde schloss den Liefervertrag am Montag online ab."),
+            "wiki/topics/telefon.md": page("Telefon", "Die Kundin gab den Zählerstand gestern telefonisch an."),
+            "wiki/topics/sonst.md": page("Sonstiges", "Hier steht nichts zur Sache."),
+        }
+        with PageTree(pages, index=None) as root:
+            loaded = search_core.load(root, include_sources=True, exhaustive=True)
+            for query, path in (
+                ("Umzug Hamburg", "wiki/topics/hamburg.md"),
+                ("umziehen Hamburg", "wiki/topics/hamburg.md"),
+                ("Abschluss Liefervertrag online", "wiki/topics/montag.md"),
+                ("abschließen Liefervertrag online", "wiki/topics/montag.md"),
+                ("Angabe Zählerstand telefonisch", "wiki/topics/telefon.md"),
+            ):
+                with self.subTest(query=query):
+                    report = search_core.search_loaded(loaded, query, limit=10, exhaustive=True)
+                    found = {
+                        entry["rule"]
+                        for page_ in report["exhaustive_hits"] if page_["path"] == path
+                        for hit in page_["hits"] for entry in hit.get("matched") or []
+                    }
+                    self.assertIn("split_verb", found)
+                    self.assertEqual(report["absence_check"]["absent_terms"], [])
+
+    def test_a_split_form_of_a_noun_is_never_a_verb_of_the_question(self) -> None:
+        """"Die Gabe kommt ... an." gives "+gabe+an" (joined "Angabe", a noun): never a split verb of "angegeben"."""
+        self.assertIn("+gabe+an", search_core.split_verb_tokens("die gabe kommt punktlich an."))
+        pages = {
+            "wiki/topics/bahn.md": page("Bahn", "Die Gabe kommt pünktlich an."),
+            "wiki/topics/sonst.md": page("Sonstiges", "Nichts."),
+        }
+        with PageTree(pages, index=None) as root:
+            report = search_core.search(root, "angegeben", limit=12, exhaustive=True)
+        found = {entry["rule"] for page_ in report["exhaustive_hits"] for hit in page_["hits"] for entry in hit.get("matched") or []}
+        self.assertNotIn("split_verb", found)
+        self.assertEqual(report["absence_check"]["absent_terms"], ["angegeben"])
+
+    def test_a_table_form_only_the_scan_repairs_is_found(self) -> None:
+        """A page break inside a hyphenated word: only the scan joins "umge-" and "zogen" (recall review of Stufe 6)."""
+        body = "Ist der Kunde nachweislich umge-\n<!-- page: 3 -->\nzogen, endet der Liefervertrag mit Frist."
+        pages = {
+            "wiki/topics/kuendigung.md": page("Sonderkündigung", body),
+            "wiki/topics/sonst.md": page("Sonstiges", "Die Hotline ist werktags erreichbar."),
+        }
+        with PageTree(pages, index=None) as root:
+            loaded = search_core.load(root, include_sources=True, exhaustive=True)
+            for query, term, rule in (
+                ("Umzug Liefervertrag endet", "umzug", "derived"),
+                ("umziehen Liefervertrag endet", "umziehen", "irregular"),
+            ):
+                with self.subTest(query=query):
+                    report = search_core.search_loaded(loaded, query, limit=10, exhaustive=True)
+                    found = {
+                        (entry["term"], entry["token"], entry["rule"])
+                        for page_ in report["exhaustive_hits"] for hit in page_["hits"] for entry in hit.get("matched") or []
+                    }
+                    self.assertIn((term, "umgezogen", rule), found)
+                    self.assertNotIn(term, report["absence_check"]["absent_terms"])
+
+    def test_a_split_verb_of_the_question_is_never_reported_on_its_noun(self) -> None:
+        """"ziehe ... um" is a split verb on "umgezogen", never on "Umzug": a noun is another word."""
+        pages = {
+            "wiki/topics/umzug.md": page("Umzug", "Beim Umzug eines Kunden bleibt der Vertrag bestehen."),
+            "wiki/topics/wohnung.md": page("Wohnung", "Der Kunde zieht in eine andere Stadt um. Der Vertrag bleibt."),
+            "wiki/topics/frist.md": page("Frist", "Wer umgezogen ist, meldet den neuen Zähler."),
+        }
+        with PageTree(pages, index=None) as root:
+            report = search_core.search(root, "Wann ziehe ich um", limit=10, exhaustive=True)
+        found = {
+            (page_["path"], entry["token"], entry["rule"])
+            for page_ in report["exhaustive_hits"] for hit in page_["hits"] for entry in hit.get("matched") or []
+        }
+        self.assertIn(("wiki/topics/frist.md", "umgezogen", "split_verb"), found)
+        self.assertEqual({entry for entry in found if entry[0] == "wiki/topics/umzug.md"}, set())
+
+    def test_gate_style_negatives_stay_complete_without_word_form_hits(self) -> None:
+        """Absent topics whose words a strong verb would write the same way: no word_form hit, the check stays complete."""
+        pages = {path: page(title, body) for path, (title, body) in NEGATIVE_PAGES.items()}
+        with PageTree(pages, index=None) as root:
+            loaded = search_core.load(root, include_sources=True, exhaustive=True)
+            for question, *also in NEGATIVE_QUESTIONS:
+                with self.subTest(question=question):
+                    report = search_core.search_loaded(loaded, question, also=also, limit=12, exhaustive=True)
+                    self.assertTrue(report["absence_check"]["complete"])
+                    strengths = [hit["strength"] for page_ in report["exhaustive_hits"] for hit in page_["hits"]]
+                    self.assertNotIn("word_form", strengths)
+
+    def test_an_adjective_that_looks_like_a_strong_verb_stays_absent(self) -> None:
+        """"heiße" is no form of "hieß": the heißen row is gone, so "heiße Speicher" stays absent."""
+        pages = {"wiki/topics/speicher.md": page("Speicher", "Der Speicher hieß früher Puffer.")}
+        with PageTree(pages, index=None) as root:
+            report = search_core.search(root, "heiße Speicher", limit=10, exhaustive=True)
+        self.assertEqual(report["absence_check"]["absent_terms"], ["heisse"])
+        rules_found = {
+            entry["rule"] for page_ in report["exhaustive_hits"] for hit in page_["hits"] for entry in hit.get("matched") or []
+        }
+        self.assertTrue(rules_found.isdisjoint({"irregular", "derived"}))
+
+
 class SearchBehaviour(unittest.TestCase):
     PAGES = {
         "wiki/concepts/tarif.md": page("Tarif", "Ein Tarif legt den Preis fest."),
@@ -484,7 +836,13 @@ class SearchBehaviour(unittest.TestCase):
         self.assertEqual(netz["match_rules"], [{"term": "netzentgeld", "token": "netzentgelt", "rule": "typo", "weight": 0.3}])
         self.assertEqual(coverage["boundary"], search_core.COVERAGE_BOUNDARY)
         self.assertIn("forms of the same word", coverage["boundary"])
-        self.assertIn("compound and typo matches", coverage["boundary"])
+        # The boundary names every class of heuristic match the coverage counts
+        # and what it never counts (Stufe 6: the closed table, the notations).
+        self.assertIn("compound, irregular-form, quantity and typo matches", coverage["boundary"])
+        self.assertIn("an irregular form outside the closed table", coverage["boundary"])
+        self.assertIn("a number in a notation the search does not convert", coverage["boundary"])
+        self.assertIn("an irregular form outside the closed table", search_core.ABSENCE_BOUNDARY)
+        self.assertIn("a number in words or in a unit the scan does not convert", search_core.ABSENCE_BOUNDARY)
 
     def test_a_word_only_in_unsearched_sources_is_reported_even_with_a_heuristic_match(self) -> None:
         """terms_only_in_unsearched counts the same word on both sides: a compound part or a typo

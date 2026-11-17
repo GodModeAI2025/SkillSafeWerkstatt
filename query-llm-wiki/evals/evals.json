@@ -171,7 +171,7 @@
       "files": [],
       "expectations": [
         "Steht ein Wort der Frage in form_only_terms, liest der Skill unter query_terms[].forms nach, welches Wort gezählt hat (hier netzentgelt mit Regel typo), bevor er antwortet.",
-        "Trägt nur eine Regel typo, compound_head, compound_modifier oder query_part das entscheidende Wort eines Treffers (match_rules), prüft der Skill im Seitentext, dass die Seite das gefragte Wort meint, bevor er sie zitiert.",
+        "Trägt nur eine heuristische Regel (irregular, derived, compound_head, compound_link, compound_modifier, query_part, typo oder quantity) das entscheidende Wort eines Treffers (match_rules), prüft der Skill im Seitentext, dass die Seite das gefragte Wort meint, bevor er sie zitiert.",
         "Die Antwort sagt ausdrücklich, dass der Treffer über die Korrektur von „Netzentgeld“ zu „Netzentgelt“ zustande kam; ein über einen Kompositumteil wie „Durchleitungsgebühr“ gefundener Treffer wird ebenso benannt.",
         "Wörter aus unmatched_terms führen zu einer zweiten Suche mit anderen Wörtern, und die Antwort nennt diese Wörter; die Zählwerte gelten nicht als Beleg, dass das Wiki zum Thema nichts enthält."
       ]

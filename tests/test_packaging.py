@@ -252,17 +252,19 @@ class ExportableLibraries(unittest.TestCase):
             imported |= local_imports(path) - local
         self.assertEqual(sorted(imported), sorted(exporter.EXPORTED_STDLIB))
 
-    def test_the_search_core_imports_no_verifier_and_no_writer(self) -> None:
-        """The shared core takes a release root and returns data; integrity checks stay in the wrappers."""
+    def test_the_shared_cores_import_no_verifier_and_no_writer(self) -> None:
+        """A shared core takes a release root and returns data; integrity checks stay in the wrappers."""
         for skill in SKILLS:
-            with self.subTest(skill=skill):
-                core = REPO / skill / "scripts" / "search_core.py"
-                self.assertEqual(
-                    local_imports(core)
-                    & {"verify_release", "verify_knowledge", "portable_io", "navigation", "source_coverage"},
-                    set(),
-                )
-                self.assertEqual(self.write_calls(core), [])
+            for name in ("search_core.py", "quality_core.py"):
+                with self.subTest(skill=skill, core=name):
+                    core = REPO / skill / "scripts" / name
+                    self.assertEqual(
+                        local_imports(core)
+                        & {"verify_release", "verify_knowledge", "identity_status", "portable_io", "navigation",
+                           "source_coverage"},
+                        set(),
+                    )
+                    self.assertEqual(self.write_calls(core), [])
 
 
 class SharedModuleParity(unittest.TestCase):
@@ -273,9 +275,12 @@ class SharedModuleParity(unittest.TestCase):
     # differently. frontmatter_contract.py and wiki_filters.py are in the
     # exported search's import closure too: exports copy the maintenance
     # skill's files, so the query skill's must not parse or filter otherwise.
+    # quality_core.py is the one quality assessment of the query skill and of
+    # every export; the export's separate copy had lost two disclosures.
     SHARED = (
         "sync_artifacts.py", "trust_contract.py", "freshness.py", "verify_release.py",
         "search_core.py", "bm25.py", "wordforms.py", "frontmatter_contract.py", "wiki_filters.py",
+        "quality_core.py",
     )
 
     def test_shared_modules_are_identical(self) -> None:

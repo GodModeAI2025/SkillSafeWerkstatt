@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "maintain-llm-wiki" / "scripts"))
 
 import freshness  # noqa: E402
-from harness import TempWiki  # noqa: E402
+from harness import TempWiki, run_json  # noqa: E402
 
 
 class ParseExpiry(unittest.TestCase):
@@ -121,6 +121,23 @@ class InTheWiki(unittest.TestCase):
                 "an expired page must still be findable; expiry is a disclosure, not a filter",
             )
             self.assertTrue(paths["wiki/overview.md"]["past_expiry"])
+
+    def test_the_exported_knowledge_skill_is_told_as_well(self) -> None:
+        """The export's quality helper shares the reader's core and discloses the expiry too."""
+        with TempWiki() as wiki:
+            self._with_expiry(wiki, "2020-01-01")
+            wiki.rebuild()
+            wiki.release("expiry-3")
+            wiki.maintain(
+                "export_wiki_skill.py",
+                "--target", str(wiki.path), "--output-dir", str(wiki.root / "out"), "--skill-name", "ablauf",
+            )
+            quality = run_json(wiki.root / "out" / "ablauf" / "scripts" / "assess_quality.py")["quality"]
+            reader = wiki.query_json("assess_quality.py", "--target", str(wiki.path))["quality"]
+            self.assertEqual(quality["freshness"]["expired"], 1)
+            self.assertEqual(quality["freshness"], reader["freshness"])
+            self.assertIn("pages_past_their_expiry", [item["code"] for item in quality["advisories"]])
+            self.assertEqual(quality["state"], reader["state"])
 
     def test_the_export_carries_the_expiry(self) -> None:
         with TempWiki() as wiki:

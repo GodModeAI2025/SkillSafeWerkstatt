@@ -2625,5 +2625,20 @@
       }
     }
   },
-  "accepted_regressions": []
+  "accepted_regressions": [
+    {
+      "set": "A",
+      "id": "pa-07",
+      "path": "wiki/topics/umzug.md",
+      "accepted_rank": 9,
+      "reason": "merged rank 1 -> 9: the page moved from the reformulation block into the question's own results (rank 21 -> 9); the block never repeats a page already in results"
+    },
+    {
+      "set": "B",
+      "id": "pa-07",
+      "path": "wiki/topics/umzug.md",
+      "accepted_rank": 9,
+      "reason": "merged rank 1 -> 9: the page moved from the reformulation block into the question's own results (rank 21 -> 9); the block never repeats a page already in results"
+    }
+  ]
 }

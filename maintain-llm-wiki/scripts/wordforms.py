@@ -20,18 +20,30 @@ Rules, from strongest to weakest:
 - verb: a verb form (-t, -et, ge-...-t), a weaker secondary key. -et counts
   only where German writes the extra e (meldet, rechnet), so "Planet",
   "Market" or "Internet" are no verb forms.
+- irregular: for a query word, a form of the same word from a closed table,
+  where no ending rule can see it: strong and mixed verbs ("umgezogene",
+  "umziehen", "umzog"; "vergilt", "vergalt", "vergolten") and comparison that
+  changes the word ("höchste" and "höher" find "hoch"). A disclosed
+  heuristic: a table form can also be another word with the same letters.
+- derived: for a query word, a noun of the same closed table and a form of its
+  verb ("Umzug" and "umgezogene", "Abschluss" and "abgeschlossen"). Another
+  word, so a disclosed heuristic with the weight of `irregular`.
 - compound_head, compound_modifier: a corpus word in which the term is the last
   part (head) or an earlier part (modifier), accepted only when every other
   part is itself a word of the searched files.
+- compound_link: for a query word with no word form, a corpus word made of the
+  same parts with another linking element between two of them
+  ("Abschlagzahlung" and "Abschlagszahlung", "Kirchenturm" and "Kirchturm").
 - query_part: the head of a query word that occurs nowhere, when the query word
   splits into words of the searched files.
 - typo: a corpus word one edit away from a long query word that matches nothing
   by any other rule.
 
-The first four are word forms: they are the same word. Compound parts and typo
-corrections are disclosed heuristics. They never set a term's rarity while a
-word form of it occurs anywhere (the search core then counts the rarity from
-the word forms), and their weight is applied after BM25 saturation (see bm25).
+The first four are word forms: they are the same word. Irregular forms,
+derived nouns, compound parts, link variants and typo corrections are
+disclosed heuristics. They never set a term's rarity while a word form of it
+occurs anywhere (the search core then counts the rarity from the word forms),
+and their weight is applied after BM25 saturation (see bm25).
 Compound rules consider no token longer than MAX_COMPOUND letters, so an
 endless run of letters cannot make a search slow or deep.
 
@@ -74,10 +86,19 @@ RULES: Dict[str, Tuple[float, str]] = {
     "fold": (0.9, "word_form"),
     "stem": (0.6, "word_form"),
     "verb": (0.5, "word_form"),
+    "irregular": (0.45, "heuristic"),
+    "derived": (0.45, "heuristic"),
     "compound_head": (0.45, "heuristic"),
+    "compound_link": (0.45, "heuristic"),
     "compound_modifier": (0.35, "heuristic"),
     "query_part": (0.35, "heuristic"),
     "typo": (0.3, "heuristic"),
+    # The same quantity in another notation (see search_core.QUANTITY_RULE).
+    # Heuristic, because recognising a number and its unit in a text can go
+    # wrong (a label, a calendar week, an English thousands comma), so a hit is
+    # checked in the text. The weight is that of a fold: once recognised, the
+    # value and the dimension are the same, only the notation differs.
+    "quantity": (0.9, "heuristic"),
     "hyphen_part": (0.35, "scan"),
     "ending": (0.35, "scan"),
     "verb_ending": (0.35, "scan"),
@@ -435,6 +456,343 @@ def verb_keys(stemmed: str) -> List[str]:
     return keys
 
 
+# -- irregular forms ---------------------------------------------------------
+#
+# A closed table, written as tokens arrive: lower case, ä ö ü as a o u, ß as ss.
+# Every form of one entry gets the same key. Two tokens with a common key are
+# forms of one word for the `irregular` rule (verb form with verb form, degree
+# with degree), or a noun of IRREGULAR_NOUNS and a form of its verb for the
+# `derived` rule. Nothing outside the table is ever paired, so a missing verb
+# only stays unfound. A form in the table can still be another word with the
+# same letters; that is why both rules are disclosed heuristics, checked in the
+# page text, and why the table leaves out every form listed below.
+
+#: Prefixes after which a participle has no ge- of its own ("bezogen",
+#: "entschieden", "verloren"), with the two-part prefixes of IRREGULAR_VERBS
+#: whose last part is one of them ("einbezogen", "anerkannt", "vorbehalten").
+INSEPARABLE_PREFIXES = frozenset((
+    "be", "emp", "ent", "er", "ge", "miss", "ver", "zer", "hinter", "wider", "aner", "beibe", "einbe", "vorbe",
+))
+#: Prefixes that are separable in one verb and inseparable in another ("umgezogen"
+#: and "umgangen", "untergebracht" and "unterbrochen"): both participles are listed.
+TWO_WAY_PREFIXES = ("durch", "uber", "um", "unter")
+#: Endings of a present stem: infinitive, first, second and third person.
+_PRESENT_ENDINGS = ("e", "en", "st", "t", "est", "et")
+#: Endings of a participle used as an adjective, and of a comparative.
+_ADJECTIVE_ENDINGS = ("", "e", "en", "er", "es", "em")
+#: Endings of a superlative. Not -ens: "höchstens", "bestens", "meistens" are adverbs of their own.
+_SUPERLATIVE_ENDINGS = ("e", "en", "er", "es", "em")
+#: Endings of a derived noun: plural and genitive (the umlaut is already gone: "Umzüge" is "umzuge").
+_NOUN_ENDINGS = ("", "e", "en", "n", "s", "es")
+
+#: German strong and mixed verbs: (present stem, present forms with a changed
+#: vowel, preterite forms, participle, prefixes). The prefixes name every
+#: prefixed verb the entry covers; "0" is the verb without a prefix. The forms
+#: themselves come from _verb_forms. A preterite form, a prefix or a whole verb
+#: is left out where it is also a common noun or another common word, so the
+#: table never takes it for the verb:
+#:
+#: - preterite "stand" and "standen" (Stand, Zustand, Bestand, Abstand,
+#:   Zuständen), "gaben" (Angaben,
+#:   Abgaben, Aufgaben), "lagen" (Anlagen, Unterlagen, Vorlagen, Umlagen),
+#:   "nahmen" (Ausnahmen, Einnahmen), "sprachen" (Sprachen), "griff"
+#:   (Begriff, Zugriff), "band" (Verband), "trug" with be- (Betrug), "boten",
+#:   "schienen", "wiesen", "mass" (Maß), "half" (English "half"); no
+#:   subjunctive in -e at all (Gabe, Lage, Sprache, Griffe, Stände);
+#: - prefixes: tragen without be-, ver-, an-, auf- (Betrag, Vertrag, Antrag,
+#:   Auftrag), schlagen only with vor- (Abschlag, Zuschlag, Anschlag),
+#:   scheiden without unter- and ver- (Unterschied, verschieden), messen
+#:   without an- (angemessen), lassen without an- (Anlässe), laufen without
+#:   ver- (Verläufe), wenden only with an- (Wende, verwandte), gelten without
+#:   ent- (Entgelt, Entgelte), kommen without ab- and ein- (Abkommen,
+#:   Einkommen), weisen and gleichen not without a prefix (Weise, gleich);
+#: - the light verbs geben, gelten, liegen, stehen, kommen, halten, lassen and
+#:   sehen only with a prefix: "gibt", "gilt", "liegt", "steht", "kommt",
+#:   "hält", "lässt" and "sieht" stand in almost any sentence of any page;
+#: - verbs: fallen (Fall, Fälle), schneiden (Abschnitt, Durchschnitt), fahren
+#:   ("führen" is "fuhren" once the umlaut is gone, Fahrt), bitten ("bitte"),
+#:   heißen ("heiße" and "heißen" are also the adjective: "heiße Speicher"),
+#:   and the light verbs gehen, tun, sein, haben, werden, wissen.
+IRREGULAR_VERBS: Tuple[Tuple[str, str, str, str, str], ...] = (
+    ("zieh", "", "zog zogen", "gezogen", "0 ab an auf aus be ein einbe ent heran hinzu nach um ver vor zu zuruck"),
+    ("schliess", "", "schloss schlossen", "geschlossen", "0 ab an auf aus be ein ent er ver zu zusammen"),
+    ("geb", "gibt", "gab", "gegeben", "ab an auf aus be bei ein er frei heraus nach uber um ver vor weiter wieder zu zuruck"),
+    ("nehm", "nimmt", "nahm", "genommen", "0 ab an auf aus ein ent mit teil uber vor weg zu zuruck"),
+    ("gelt", "gilt", "galt galten", "gegolten", "ab ver"),
+    ("lieg", "", "lag", "gelegen", "an bei unter vor"),
+    ("steh", "", "", "gestanden", "auf aus be bei ent fest ver zu"),
+    ("find", "", "fand fanden", "gefunden", "0 auf be emp heraus statt vor"),
+    ("bring", "", "brachte brachten", "gebracht", "0 an auf bei ein er mit unter ver vor zuruck"),
+    ("scheid", "", "schied schieden", "geschieden", "0 aus ent"),
+    ("komm", "", "kam kamen", "gekommen", "an auf aus be bei hinzu mit nach vor zu zuruck zusammen"),
+    ("lauf", "", "lief liefen", "gelaufen", "0 ab an aus durch ein um weiter zu"),
+    ("halt", "halt haltst", "hielt hielten", "gehalten", "ab an auf aus be beibe bei ein ent er fest uber unter ver vor vorbe zuruck"),
+    ("lass", "", "liess liessen", "gelassen", "ab auf aus durch ent er frei nach uber unter ver weg zu zuruck"),
+    ("trag", "", "trug trugen", "getragen", "0 bei ein nach uber vor"),
+    ("tret", "tritt", "trat traten", "getreten", "0 an auf aus bei ein ent uber ver zu zuruck"),
+    ("sprech", "spricht", "sprach", "gesprochen", "0 ab an aus be ent mit nach wider zu"),
+    ("brech", "bricht", "brach", "gebrochen", "0 ab auf aus ein unter zusammen"),
+    ("biet", "", "bot", "geboten", "0 an ver"),
+    ("schreib", "", "schrieb schrieben", "geschrieben", "0 ab an auf aus be ein gut nach um unter vor zu"),
+    ("steig", "", "stieg stiegen", "gestiegen", "0 an auf aus ein um"),
+    ("sink", "", "sank sanken", "gesunken", "0 ab"),
+    ("schieb", "", "schob schoben", "geschoben", "0 auf ver"),
+    ("weis", "", "wies", "gewiesen", "ab an aus be hin nach uber zu"),
+    ("mess", "misst", "", "gemessen", "0 ab aus be er nach ver"),
+    ("ruf", "", "rief riefen", "gerufen", "0 ab an auf aus ein zuruck wider"),
+    ("schlag", "", "schlug schlugen", "geschlagen", "0 vor"),
+    ("verlier", "", "verlor verloren", "verloren", "0"),
+    ("beginn", "", "begann begannen", "begonnen", "0"),
+    ("gewinn", "", "gewann gewannen", "gewonnen", "0"),
+    ("empfehl", "empfiehlt", "empfahl", "empfohlen", "0"),
+    ("bind", "", "", "gebunden", "0 an ein ver"),
+    ("les", "liest", "las lasen", "gelesen", "0 ab aus ein nach vor"),
+    ("seh", "sieht", "sah sahen", "gesehen", "ab an aus ein nach uber vor"),
+    ("helf", "hilft", "", "geholfen", "0"),
+    ("werf", "wirft", "warf", "geworfen", "0 ab ein ent vor"),
+    ("treib", "", "trieb trieben", "getrieben", "0 an be ver"),
+    ("schein", "", "schien", "geschienen", "0 er"),
+    ("bleib", "", "blieb blieben", "geblieben", "0 uber ver"),
+    ("kenn", "", "kannte kannten", "gekannt", "0 an aner er"),
+    ("nenn", "", "nannte nannten", "genannt", "0 be er"),
+    ("send", "", "sandte sandten", "gesandt", "0 ab ver zu"),
+    ("wend", "", "wandte wandten", "gewandt", "an"),
+    ("denk", "", "dachte dachten", "gedacht", "0 be nach"),
+    ("fang", "", "fing fingen", "gefangen", "0 an"),
+    ("gleich", "", "glich glichen", "geglichen", "aus ver"),
+    ("greif", "", "", "gegriffen", "0 ein zu"),
+    ("wachs", "", "wuchs", "gewachsen", "0 an zu"),
+    ("meid", "", "mied mieden", "gemieden", "ver"),
+    ("weich", "", "wich wichen", "gewichen", "ab aus"),
+    ("streich", "", "", "gestrichen", "0 durch"),
+    ("werb", "wirbt", "warb", "geworben", "0 be er"),
+    ("treff", "trifft", "traf trafen", "getroffen", "0 be ein zu"),
+    ("fliess", "", "floss flossen", "geflossen", "0 ab ein zu"),
+    ("heb", "", "hob hoben", "gehoben", "0 auf er"),
+    ("lad", "ladt ladst", "lud luden", "geladen", "0 auf ein ent"),
+    ("geling", "", "gelang", "gelungen", "0"),
+    ("vergess", "vergisst", "vergass", "vergessen", "0"),
+)
+
+#: Nouns that belong to a verb of IRREGULAR_VERBS by a changed vowel or a short
+#: stem, with the prefix and present stem of that verb: "Umzug" is a form of
+#: "umziehen" for the rule. Pairs whose meanings parted are left out: Anzug,
+#: Aufzug and Verzug (Zahlungsverzug) are no forms of anziehen, aufziehen and
+#: verziehen, nor Abgabe, Aufgabe, Anspruch, Abschlag, Vertrag, Übersicht,
+#: Vorsicht, Ablauf or Verlauf (a procedure, a history) forms of abgeben,
+#: aufgeben, ansprechen, abschlagen, vertragen, übersehen, vorsehen, ablaufen
+#: or verlaufen. A preterite that is a noun as well needs no line
+#: here ("Betrieb", "Anstieg", "Eintritt", "Erhalt" are listed forms already).
+IRREGULAR_NOUNS: Tuple[Tuple[str, str, str], ...] = (
+    ("umzug", "um", "zieh"), ("auszug", "aus", "zieh"), ("einzug", "ein", "zieh"), ("abzug", "ab", "zieh"),
+    ("bezug", "be", "zieh"), ("entzug", "ent", "zieh"), ("zuzug", "zu", "zieh"),
+    ("abschluss", "ab", "schliess"), ("anschluss", "an", "schliess"), ("ausschluss", "aus", "schliess"),
+    ("beschluss", "be", "schliess"), ("einschluss", "ein", "schliess"), ("entschluss", "ent", "schliess"),
+    ("verschluss", "ver", "schliess"), ("zusammenschluss", "zusammen", "schliess"),
+    ("angabe", "an", "geb"), ("ausgabe", "aus", "geb"), ("eingabe", "ein", "geb"), ("vergabe", "ver", "geb"),
+    ("ubergabe", "uber", "geb"), ("weitergabe", "weiter", "geb"), ("ruckgabe", "zuruck", "geb"),
+    ("freigabe", "frei", "geb"), ("vorgabe", "vor", "geb"),
+    ("annahme", "an", "nehm"), ("abnahme", "ab", "nehm"), ("aufnahme", "auf", "nehm"), ("ausnahme", "aus", "nehm"),
+    ("einnahme", "ein", "nehm"), ("entnahme", "ent", "nehm"), ("ubernahme", "uber", "nehm"),
+    ("zunahme", "zu", "nehm"), ("teilnahme", "teil", "nehm"), ("rucknahme", "zuruck", "nehm"),
+    ("angebot", "an", "biet"),
+    ("vorschrift", "vor", "schreib"), ("unterschrift", "unter", "schreib"), ("abschrift", "ab", "schreib"),
+    ("gutschrift", "gut", "schreib"),
+    ("widerspruch", "wider", "sprech"), ("absprache", "ab", "sprech"),
+    ("abbruch", "ab", "brech"), ("ausbruch", "aus", "brech"), ("einbruch", "ein", "brech"),
+    ("rucktritt", "zuruck", "tret"),
+    ("vergleich", "ver", "gleich"), ("ausgleich", "aus", "gleich"),
+    ("anfang", "an", "fang"),
+    ("anruf", "an", "ruf"), ("abruf", "ab", "ruf"), ("aufruf", "auf", "ruf"), ("widerruf", "wider", "ruf"),
+    ("vorschlag", "vor", "schlag"), ("beitrag", "bei", "trag"), ("eintrag", "ein", "trag"),
+    ("vortrag", "vor", "trag"), ("nachtrag", "nach", "trag"),
+    ("erlass", "er", "lass"), ("nachlass", "nach", "lass"),
+    ("beginn", "", "beginn"), ("gewinn", "", "gewinn"), ("verlust", "", "verlier"), ("hilfe", "", "helf"),
+    ("entwurf", "ent", "werf"), ("vorwurf", "vor", "werf"), ("einsicht", "ein", "seh"),
+    ("entscheid", "ent", "scheid"),
+)
+
+#: German comparison that is more than an ending: (positive forms, comparative
+#: stem, superlative stem). The pairing runs one way: "höchste" and "höher"
+#: find "hoch", but "hoch" finds neither, because a question asks "Wie hoch
+#: ...?" about any amount ("hoch" names no topic, as SCAN_FUNCTION_WORDS says).
+#: For the same reason "beste" and "besten" find nothing: "Wie kündige ich am
+#: besten?" names no topic either, while "besser" finds "gut" and "beste".
+#: English "good" is such a target too (IRREGULAR_TARGETS): "better" and
+#: "best" find it, it finds neither. "hohe" and "hohen" are left out: they are
+#: also "Höhe" and "Höhen"; so is "guter": it is also "Güter". "hoher" stays a
+#: comparative stem ("höher"), although it is also the positive "ein hoher
+#: Abschlag": either way it finds "hoch" and "höchste", which is right for both.
+#: viel/mehr/meist, nah/näher/nächst and gern/lieber/liebst are left out:
+#: "mehr" and "nächste" mostly mean something else ("nicht mehr", "nächstes
+#: Jahr"). A comparative or superlative with a plain ending ("länger",
+#: "größte") is no irregular form: after normalisation it is the positive with
+#: an ending.
+IRREGULAR_DEGREES: Tuple[Tuple[str, str, str], ...] = (
+    ("hoch hohes hohem", "hoher", "hochst"),
+    ("gut gute guten gutes gutem", "besser", "best"),
+)
+
+#: English irregular forms, one word per line, every form written out; the
+#: first word of a line is its key. The -ing forms are left out (regular, and
+#: often nouns: "meeting", "building"), and so is lose/lost: German "löst" and
+#: "löse" are "lost" and "lose" once the umlaut is gone. "good better best"
+#: pairs one way, like hoch and gut (see IRREGULAR_DEGREES).
+IRREGULAR_ENGLISH = """
+pay pays paid
+make makes made
+take takes took taken
+give gives gave given
+write writes wrote written
+send sends sent
+buy buys bought
+sell sells sold
+bring brings brought
+choose chooses chose chosen
+begin begins began begun
+know knows knew known
+keep keeps kept
+spend spends spent
+win wins won
+find finds found
+show shows showed shown
+tell tells told
+say says said
+speak speaks spoke spoken
+withdraw withdraws withdrew withdrawn
+understand understands understood
+forget forgets forgot forgotten
+good better best
+"""
+
+
+#: Forms left out although an entry generates them, because they are common
+#: nouns or other words of their own: Messe ("ich messe"), Scheine ("ich
+#: scheine"), Werft ("ihr werft"), Schloss ("schloss"), and "geboten", which is
+#: also the participle of gebieten ("Eile ist geboten"); "angeboten",
+#: "verboten", "schlossen" and "abschloss" stay.
+IRREGULAR_EXCLUDED = frozenset((
+    "messe", "scheine", "werft", "schloss", "geboten", "gebotene", "gebotenen", "gebotener", "gebotenes", "gebotenem",
+))
+#: The two parts of the composite prefixes, for their zu-infinitive
+#: ("anzuerkennen", "beizubehalten", "einzubeziehen", "vorzubehalten").
+_COMPOSITE_PREFIXES = {"aner": ("an", "er"), "beibe": ("bei", "be"), "einbe": ("ein", "be"), "vorbe": ("vor", "be")}
+
+
+def _present_endings(present: str, separable: bool) -> List[str]:
+    """The endings of _PRESENT_ENDINGS that German writes after `present`."""
+    return [
+        ending for ending in _PRESENT_ENDINGS
+        if not (separable and ending == "e")
+        and not (ending in ("t", "st") and present.endswith(("t", "d")))
+        and not (ending == "st" and present.endswith("ss"))
+    ]
+
+
+def _verb_forms(present: str, changed: str, preterite: str, participle: str, prefix: str) -> List[str]:
+    """Every form of one prefixed verb of IRREGULAR_VERBS ("" for the bare verb).
+
+    A separable verb gets no first person in -e: written joined it is rare
+    ("dass ich ablaufe") and mostly a plural noun (Abläufe, Beiträge, Anrufe).
+    No -t or -st follows a stem in t or d, and no -st one in ss: German writes
+    "findet", "bietest", "schließt" ("haltt", "findst", "schliessst" are no
+    words); a changed vowel that folds onto the stem ("hält", "hältst",
+    "lädt") is listed with the changed forms. No form is shorter than MIN_PART
+    letters ("lag", "kam", "bot" are also abbreviations and names).
+    """
+    separable = bool(prefix) and prefix not in INSEPARABLE_PREFIXES and prefix not in TWO_WAY_PREFIXES
+    forms = [prefix + present + ending for ending in _present_endings(present, separable)]
+    forms.extend(prefix + form for form in changed.split())
+    forms.extend(prefix + form for form in preterite.split())
+    inseparable = prefix in INSEPARABLE_PREFIXES
+    participles: List[str] = []
+    if not prefix or not inseparable:
+        participles.append(prefix + participle)
+    if prefix and (inseparable or prefix in TWO_WAY_PREFIXES) and participle.startswith("ge"):
+        participles.append(prefix + participle[2:])
+    if prefix and not inseparable:
+        forms.append(prefix + "zu" + present + "en")
+    if prefix in _COMPOSITE_PREFIXES:
+        first, second = _COMPOSITE_PREFIXES[prefix]
+        forms.append(first + "zu" + second + present + "en")
+    forms.extend(form + ending for form in participles for ending in _ADJECTIVE_ENDINGS)
+    return [form for form in forms if len(form) >= MIN_PART and form not in IRREGULAR_EXCLUDED]
+
+
+def _all_verb_forms() -> Iterable[Tuple[str, str]]:
+    """(form, key) for every form of every prefixed verb of IRREGULAR_VERBS."""
+    for present, changed, preterite, participle, prefixes in IRREGULAR_VERBS:
+        for prefix in prefixes.split():
+            prefix = "" if prefix == "0" else prefix
+            for form in _verb_forms(present, changed, preterite, participle, prefix):
+                yield form, prefix + "|" + present
+
+
+def _irregular_table() -> Dict[str, Tuple[str, ...]]:
+    """Every form of the irregular tables with the keys of the words it is a form of."""
+    keys: Dict[str, set] = {}
+
+    def add(form: str, key: str) -> None:
+        keys.setdefault(form, set()).add(key)
+
+    for form, key in _all_verb_forms():
+        add(form, key)
+    for noun, prefix, present in IRREGULAR_NOUNS:
+        for ending in _NOUN_ENDINGS:
+            add(noun + ending, prefix + "|" + present)
+    for positive, comparative, superlative in IRREGULAR_DEGREES:
+        key = "=" + positive.split()[0]
+        for form in positive.split():
+            add(form, key)
+        for ending in _ADJECTIVE_ENDINGS:
+            add(comparative + ending, key)
+        for ending in _SUPERLATIVE_ENDINGS:
+            add(superlative + ending, key)
+    for line in IRREGULAR_ENGLISH.strip().splitlines():
+        words = line.split()
+        for form in words:
+            add(form, "en:" + words[0])
+    return {form: tuple(sorted(found)) for form, found in sorted(keys.items())}
+
+
+#: Every form of the irregular tables (folded spelling) with the keys of its words.
+IRREGULAR_FORMS: Dict[str, Tuple[str, ...]] = _irregular_table()
+#: Every form of IRREGULAR_NOUNS that is no verb form as well ("Entscheiden" is the verb):
+#: a noun and a verb form with a common key pair under the `derived` rule.
+IRREGULAR_NOUN_FORMS = frozenset(
+    noun + ending for noun, _, _ in IRREGULAR_NOUNS for ending in _NOUN_ENDINGS
+) - frozenset(form for form, _ in _all_verb_forms())
+#: The positive forms of IRREGULAR_DEGREES and English "good": found by their comparative and superlative, finding
+#: neither; and the superlative of "gut" ("am besten" names no topic), found by "besser" and finding nothing.
+IRREGULAR_TARGETS = (
+    frozenset(form for positive, _, _ in IRREGULAR_DEGREES for form in positive.split())
+    | {"good"}
+    | {"best" + ending for ending in _SUPERLATIVE_ENDINGS}
+)
+
+
+def irregular_keys(spelling: str) -> Tuple[str, ...]:
+    """The keys of the words a folded spelling is a form of by the irregular tables; empty outside them."""
+    return IRREGULAR_FORMS.get(spelling, ())
+
+
+def _forms_by_key(forms: Mapping[str, Tuple[str, ...]]) -> Dict[str, Tuple[str, ...]]:
+    by_key: Dict[str, List[str]] = {}
+    for form, keys in forms.items():
+        for key in keys:
+            by_key.setdefault(key, []).append(form)
+    return {key: tuple(found) for key, found in sorted(by_key.items())}
+
+
+#: Every key of the irregular tables with its forms.
+IRREGULAR_BY_KEY: Dict[str, Tuple[str, ...]] = _forms_by_key(IRREGULAR_FORMS)
+
+
+def irregular_variants(spelling: str) -> frozenset:
+    """Every form of the irregular tables that shares a key with a folded spelling, the spelling included (pure)."""
+    return frozenset(form for key in irregular_keys(spelling) for form in IRREGULAR_BY_KEY[key])
+
+
 def edit_distance(left: str, right: str, limit: int) -> int:
     """Optimal string alignment distance (insert, delete, substitute, swap neighbours), capped at limit + 1."""
     if left == right:
@@ -486,6 +844,7 @@ class Resolver:
         self.by_spelling: Dict[str, List[str]] = {}
         self.by_stem: Dict[str, List[str]] = {}
         self.by_verb: Dict[str, List[str]] = {}
+        self.by_irregular: Dict[str, List[str]] = {}
         #: Valid compound parts (folded spelling and stem of every word) with their file count.
         self.words: Dict[str, int] = {}
         #: Alphabetic content words with their stem key, for the compound and typo rules.
@@ -508,6 +867,8 @@ class Resolver:
             self.by_stem.setdefault(key, []).append(token)
             for verb_key in verb_keys(key):
                 self.by_verb.setdefault(verb_key, []).append(token)
+            for irregular_key in irregular_keys(spelling):
+                self.by_irregular.setdefault(irregular_key, []).append(token)
             if compound_rules:
                 self.alpha.append((token, key, spelling))
 
@@ -540,6 +901,30 @@ class Resolver:
                     _add(members, token, "verb")
                 for token in self.by_verb.get(verb_key, ()):
                     _add(members, token, "verb")
+        return members
+
+    def irregular(self, term: str) -> Dict[str, Tuple[str, float]]:
+        """Tokens that share a key of the irregular tables with `term` on the same side: verb with verb, degree with degree."""
+        members: Dict[str, Tuple[str, float]] = {}
+        spelling = spelling_key(term)
+        if spelling in IRREGULAR_TARGETS:
+            return members
+        noun = spelling in IRREGULAR_NOUN_FORMS
+        for irregular_key in irregular_keys(spelling):
+            for token in self.by_irregular.get(irregular_key, ()):
+                if (spelling_key(token) in IRREGULAR_NOUN_FORMS) == noun:
+                    _add(members, token, "irregular")
+        return members
+
+    def derived(self, term: str) -> Dict[str, Tuple[str, float]]:
+        """Tokens that are a derived noun of the verb `term` is a form of, or a form of the verb of the noun `term`."""
+        members: Dict[str, Tuple[str, float]] = {}
+        spelling = spelling_key(term)
+        noun = spelling in IRREGULAR_NOUN_FORMS
+        for irregular_key in irregular_keys(spelling):
+            for token in self.by_irregular.get(irregular_key, ()):
+                if (spelling_key(token) in IRREGULAR_NOUN_FORMS) != noun:
+                    _add(members, token, "derived")
         return members
 
     # -- compounds ---------------------------------------------------------
@@ -615,6 +1000,45 @@ class Resolver:
                 _add(members, token, "compound_modifier")
         return members
 
+    def link_variants(self, term: str) -> Dict[str, Tuple[str, float]]:
+        """Corpus words made of the parts of `term` with another linking element between two of them.
+
+        The query word must split there into words of the vocabulary on both
+        sides; only the linking element changes ("", s, es, n, en, e). The
+        variant is looked up in its exact spelling, uninflected or with the
+        query word's own ending, never by its stem (a stem cut would make
+        "Hauptachse" into "Hauptsache"). So "Abschlagzahlung" finds
+        "Abschlagszahlung", "Abschlagzahlungen" finds "Abschlagszahlungen",
+        "Kirchenturm" finds "Kirchturm", but "Abschlagzahlung" never finds
+        "Abschlagszahlungen", and a word is never cut where its parts are not
+        words of the searched files.
+        """
+        members: Dict[str, Tuple[str, float]] = {}
+        if not term.isalpha() or term in self.closed:
+            return members
+        spelling = spelling_key(term)
+        key = stem(spelling)
+        if len(key) > MAX_COMPOUND:
+            return members
+        endings = ("", spelling[len(key):]) if spelling != key and spelling.startswith(key) else ("",)
+        memo: Dict[str, bool] = {}
+        for cut in range(MIN_PART, len(key) - MIN_PART + 1):
+            before = key[:cut]
+            if not self._sequence(before, memo):
+                continue
+            for link in LINKS:
+                after = key[cut + len(link):]
+                if not key.startswith(link, cut) or len(after) < MIN_PART or not self._sequence(after, memo):
+                    continue
+                for other in LINKS:
+                    if other == link:
+                        continue
+                    variant = before + other + after
+                    for ending in endings:
+                        for token in self.by_spelling.get(variant + ending, ()):
+                            _add(members, token, "compound_link")
+        return members
+
     def query_head(self, term: str) -> str:
         """The head of a query word that splits into words of the vocabulary, or "".
 
@@ -657,17 +1081,29 @@ class Resolver:
         """Every vocabulary token that counts for `term`, sorted by weight, then token.
 
         Word forms first. Only when `heuristics` is set (query words, not concept
-        expansions) compound parts follow; a query word that occurs nowhere may
-        then match the head of its split; and a long query word that still
-        matches nothing may match a word one edit away, unless `typos` is false
-        (the search core clears it for a word that exists in a layer it did not
-        search: a word that exists is no typo).
+        expansions) irregular forms, derived nouns and compound parts follow,
+        and for a query word without a word form its link variants; a query
+        word that still matches nothing, or only link variants, may then match
+        the head of its split (beside the variants, so a wrong variant never
+        hides the head); and a long query word that still matches nothing may
+        match a word one edit away. Link variants and typo corrections are both
+        skipped when `typos` is false (the search core clears it for a word
+        that exists in a layer it did not search: a word that exists is no typo,
+        and no other spelling of it either).
         """
         members = self.word_forms(term)
         if heuristics and term not in self.closed:
+            forms = bool(members)
+            for token, value in self.irregular(term).items():
+                members.setdefault(token, value)
+            for token, value in self.derived(term).items():
+                members.setdefault(token, value)
             for token, value in self.compounds(term, members).items():
                 members.setdefault(token, value)
-            if not members:
+            if not forms and typos:
+                for token, value in self.link_variants(term).items():
+                    members.setdefault(token, value)
+            if all(rule == "compound_link" for rule, _ in members.values()):
                 head = self.query_head(term)
                 if head:
                     for token in self.word_forms(head):

@@ -40,6 +40,9 @@ FIELD_WEIGHTS = {
     "headings": 5.0,
     "description": 4.0,
     "body": 1.0,
+    # The quantity tokens of a document (search_core.spelled_quantities); a
+    # field of its own, so the length of no other field changes.
+    "quantities": 1.0,
 }
 
 #: Modifiers for signals the corpus statistics cannot see.

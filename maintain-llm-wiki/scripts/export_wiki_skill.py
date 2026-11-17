@@ -53,6 +53,7 @@ EXPORTABLE_LIBRARIES = (
     "bm25.py",
     "freshness.py",
     "frontmatter_contract.py",
+    "quality_core.py",
     "search_core.py",
     "trust_contract.py",
     "wiki_filters.py",

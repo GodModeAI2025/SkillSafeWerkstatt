@@ -27,7 +27,7 @@ class TierDerivation(unittest.TestCase):
 
     def test_an_agent_confirmation_is_machine_confirmed(self) -> None:
         self.assertEqual(
-            tc.trust_tier({tc.VERIFIED_BY: "agent/claude-opus-5"}), tc.MACHINE_CONFIRMED
+            tc.trust_tier({tc.VERIFIED_BY: "agent/wiki-pflege"}), tc.MACHINE_CONFIRMED
         )
 
     def test_a_process_confirmation_is_machine_confirmed(self) -> None:
@@ -70,7 +70,7 @@ class Validation(unittest.TestCase):
         self.assertEqual(
             tc.validate(
                 {
-                    tc.GENERATED_BY: "agent/claude-opus-5",
+                    tc.GENERATED_BY: "agent/wiki-pflege",
                     tc.GENERATED_AT: "2026-09-06T09:00:00Z",
                     tc.VERIFIED_BY: "human:mzi",
                     tc.VERIFIED_AT: "2026-09-06T10:00:00Z",
@@ -141,7 +141,7 @@ class EndToEnd(unittest.TestCase):
 
     def test_a_machine_confirmation_needs_no_extra_flag(self) -> None:
         with TempWiki() as wiki:
-            _, result = self._mark(wiki, "agent/claude-opus-5", confirm=False)
+            _, result = self._mark(wiki, "agent/wiki-pflege", confirm=False)
             self.assertEqual(json.loads(result.stdout)["state"], "applied")
             counts = json.loads(wiki.lint().stdout)["stats"]["trust"]["counts"]
             self.assertEqual(counts[tc.MACHINE_CONFIRMED], 1)
@@ -267,13 +267,15 @@ class BackwardCompatibility(unittest.TestCase):
 
     def test_a_quality_status_without_a_trust_block_degrades_quietly(self) -> None:
         """An older release has no trust block; the reader must not fail on it."""
-        import assess_quality
+        import quality_core
 
-        for status in ({}, {"trust": None}, {"trust": {"counts": None}}):
+        for status, block in (
+            ({}, {}),
+            ({"trust": None}, {}),
+            ({"trust": {"counts": None}}, {"counts": None}),
+            ({"trust": {"counts": {"human-reviewed": True}, "pages": True}}, {"counts": {"human-reviewed": True}, "pages": True}),
+        ):
             with self.subTest(status=status):
-                trust = status.get("trust") if isinstance(status.get("trust"), dict) else {}
-                counts = trust.get("counts") if isinstance(trust.get("counts"), dict) else {}
-                self.assertEqual(assess_quality.safe_int(counts.get("human-reviewed")), 0)
-                self.assertEqual(assess_quality.safe_int(trust.get("pages")), 0)
+                self.assertEqual(quality_core.trust_disclosure(status), (block, []))
 if __name__ == "__main__":
     unittest.main(verbosity=2)

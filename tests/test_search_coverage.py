@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "query-llm-wiki" / "scripts"))
 
 import search_core  # noqa: E402
+import wordforms  # noqa: E402
 from harness import QUERY, TempWiki, Wiki, python_environment, run, run_json  # noqa: E402
 from test_lifecycle import SOURCE_MARKDOWN, add_cluster_and_concept  # noqa: E402
 
@@ -546,11 +547,81 @@ class ActionCatalogLists(unittest.TestCase):
         # matching rule and every output it has to read.
         description = actions["search"]["description"]
         for phrase in (
-            "compound and typo heuristics", "match_rules", "reformulation_results", "found_by",
+            "irregular-form, compound, quantity and typo heuristics", "match_rules", "reformulation_results", "found_by",
             "word forms, and unmatched terms", "exhaustive", "absence_check", "search_record", "100,000",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, description)
+
+
+class RuleNamesInTheInstructions(unittest.TestCase):
+    """Every rule a report can name is explained where an agent reads it (Stufe 6).
+
+    A rule added to wordforms.RULES without a word in the instruction texts would
+    reach an agent as an unknown name in `match_rules`, `forms` or a scan hit.
+    The heuristic and scan rules are checked in all three instruction texts, the
+    word forms in the two texts of the query skill (the knowledge-skill template
+    names the word forms in prose only).
+    """
+
+    REPO = Path(__file__).resolve().parent.parent
+    TEXTS = {
+        "query SKILL.md": REPO / "query-llm-wiki" / "SKILL.md",
+        "answer contract": REPO / "query-llm-wiki" / "references" / "answer-contract.md",
+        "knowledge-skill template": REPO / "maintain-llm-wiki" / "assets" / "knowledge-skill" / "SKILL.template.md",
+    }
+
+    def test_every_heuristic_and_scan_rule_is_named_in_backticks(self) -> None:
+        texts = {label: path.read_text(encoding="utf-8") for label, path in self.TEXTS.items()}
+        classes = {kind for _, kind in wordforms.RULES.values()}
+        self.assertEqual(classes, {"word_form", "heuristic", "scan"})
+        for rule, (_, kind) in wordforms.RULES.items():
+            labels = list(texts) if kind in ("heuristic", "scan") else ["query SKILL.md", "answer contract"]
+            for label in labels:
+                with self.subTest(rule=rule, text=label):
+                    self.assertIn(f"`{rule}`", texts[label])
+
+    @staticmethod
+    def between(text: str, start: str, end: str) -> str:
+        """The part of `text` from the one occurrence of `start` up to the next `end`."""
+        assert text.count(start) == 1, start
+        begin = text.index(start)
+        return text[begin:text.index(end, begin + len(start))]
+
+    def test_the_verify_lists_name_every_heuristic_rule(self) -> None:
+        """The list of rules to check in the page text before citing carries every heuristic, not only the rule list beside it."""
+        heuristics = [rule for rule, (_, kind) in wordforms.RULES.items() if kind == "heuristic"]
+        anchors = {
+            "query SKILL.md": "the decisive word of the question matched a page only through",
+            "knowledge-skill template": "the decisive word of the question matched a page only through",
+            "answer contract": "the decisive word of the question only as",
+        }
+        for label, anchor in anchors.items():
+            sentence = self.between(self.TEXTS[label].read_text(encoding="utf-8"), anchor, " check")
+            for rule in heuristics:
+                with self.subTest(text=label, rule=rule):
+                    self.assertIn(f"`{rule}`", sentence)
+
+    def test_the_heuristic_hit_sentence_names_the_table_link_and_quantity_rules(self) -> None:
+        """What a scan hit with `strength: heuristic` may have matched through, including the Stufe 6 rules."""
+        named = ("irregular", "derived", "compound_link", "quantity") + tuple(
+            rule for rule, (_, kind) in wordforms.RULES.items() if kind == "scan"
+        )
+        for label in ("answer contract", "knowledge-skill template"):
+            sentence = self.between(
+                self.TEXTS[label].read_text(encoding="utf-8"), "A hit with `strength: heuristic` matched", "Its `matched` list"
+            )
+            for rule in named:
+                with self.subTest(text=label, rule=rule):
+                    self.assertIn(f"`{rule}`", sentence)
+
+    def test_the_quantity_token_notation_is_explained(self) -> None:
+        contract = self.TEXTS["answer contract"].read_text(encoding="utf-8")
+        self.assertIn("`=<value><unit>`", contract)
+        self.assertEqual(search_core.QUANTITY_MARK, "=")
+        for label, path in self.TEXTS.items():
+            with self.subTest(text=label):
+                self.assertIn("`=2500kwh`", path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
