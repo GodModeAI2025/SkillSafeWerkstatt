@@ -410,7 +410,9 @@ def alias_review(
                 document = search_core.read_document(path, relative)
         except (FrontmatterError, ValueError, OSError):
             continue  # Already reported as a page error.
-        # The quantity tokens are left out too: they also hold those of the aliases.
+        # The quantity tokens are left out too: they also hold those of the aliases. This changes no
+        # result today (an alias word never starts with '=', so it never meets a quantity token); it
+        # only keeps the field from counting should the two ever meet.
         fields = document["fields"]
         own = set().union(*(words for field, words in fields.items() if field not in ("aliases", "quantities")))
         content.append((relative, document["data"], own))

@@ -292,6 +292,23 @@ class StepC_Compounds(unittest.TestCase):
         self.assertEqual(resolver("tag", "geld", "tagesgeld").resolve("taggeld"), [], "parts need four letters")
         self.assertEqual(wordforms.RULES["compound_link"], (0.45, "heuristic"))
 
+    def test_a_link_variant_keeps_the_query_words_own_ending(self) -> None:
+        """Plural to plural, genitive to genitive (recall review of Stufe 6); singular to plural stays unfound."""
+        plural = resolver("abschlag", "zahlung", "abschlagszahlungen")
+        self.assertEqual(
+            rules(plural.resolve("abschlagzahlungen")), {"abschlagszahlungen": "compound_link", "zahlung": "query_part"}
+        )
+        self.assertEqual(
+            rules(resolver("kirche", "turm", "kirchturmen").resolve("kirchenturmen")),
+            {"kirchturmen": "compound_link", "turm": "query_part"},
+        )
+        self.assertEqual(
+            rules(resolver("kirche", "turm", "kirchturms").resolve("kirchenturms")),
+            {"kirchturms": "compound_link", "turm": "query_part"},
+        )
+        # No stem lookup: the singular never finds a plural-only variant.
+        self.assertEqual(rules(plural.resolve("abschlagzahlung")), {"zahlung": "query_part"})
+
     def test_a_link_variant_never_comes_from_a_stem_cut(self) -> None:
         """A stem cut would make "haupt|achs" into "Hauptsache" and "fahr|rinn" into "Fahrerinnen"."""
         self.assertEqual(rules(resolver("haupt", "achse", "hauptsache").resolve("hauptachse")), {"achse": "query_part"})
@@ -299,7 +316,8 @@ class StepC_Compounds(unittest.TestCase):
 
     def test_a_link_variant_is_never_tried_on_an_endless_word(self) -> None:
         index = resolver("pumpe", "pumpen", "pumpens", "pumpenpumpen", "pumpespumpen")
-        word = "pumpen" * 11
+        # Long enough that an unbounded split would exhaust the recursion limit.
+        word = "pumpen" * 1000
         self.assertGreater(len(word), wordforms.MAX_COMPOUND)
         started = time.perf_counter()
         self.assertEqual(index.link_variants(word), {})
@@ -507,10 +525,35 @@ class IrregularForms(unittest.TestCase):
         self.assertEqual(rules(resolver("hochste").resolve("hoher")), {"hochste": "irregular"})
         # "Wie hoch ...?" names no topic: the positive finds neither.
         self.assertEqual(rules(resolver("hoch", "hochste", "hoher").resolve("hoch")), {"hoch": "exact"})
-        self.assertEqual(rules(resolver("gut", "besser").resolve("besten")), {"gut": "irregular", "besser": "irregular"})
+        # "am besten" names no topic either ("Wie kündige ich am besten?"): the superlative of
+        # "gut" finds nothing, while "besser" still finds "beste".
+        for term in ("beste", "besten", "bester", "bestes", "bestem"):
+            with self.subTest(term=term):
+                self.assertEqual(resolver("gut", "gute", "besser").resolve(term), [])
+        self.assertEqual(rules(resolver("beste", "besten").resolve("besser")), {"beste": "irregular", "besten": "irregular"})
         # English comparison runs one way as well.
         self.assertEqual(rules(resolver("good", "better").resolve("best")), {"good": "irregular", "better": "irregular"})
         self.assertEqual(resolver("better", "best").resolve("good"), [])
+
+    def test_am_besten_never_ranks_a_comparison_page(self) -> None:
+        """A how-to question that ends in "am besten" is no question about comparisons (precision review of Stufe 6)."""
+        pages = {
+            "wiki/topics/kuendigung.md": page("Kündigung", "Kündigen ist in Textform möglich, mit der Kundennummer."),
+            "wiki/comparisons/tarife.md": page(
+                "Festpreis und dynamischer Tarif", "Der Festpreistarif ist besser planbar. Der dynamische Tarif ist gut."
+            ),
+            "wiki/topics/wechsel.md": page("Lieferantenwechsel", "Der Wechsel des Lieferanten dauert drei Wochen."),
+        }
+        with PageTree(pages, index=None) as root:
+            for query, first in (
+                ("Wie kündige ich am besten?", "wiki/topics/kuendigung.md"),
+                ("Wie wechsle ich am besten den Lieferanten?", "wiki/topics/wechsel.md"),
+            ):
+                with self.subTest(query=query):
+                    report = search_core.search(root, query, limit=5)
+                    paths = [result["path"] for result in report["results"]]
+                    self.assertEqual(paths[:1], [first])
+                    self.assertNotIn("wiki/comparisons/tarife.md", paths)
 
     def test_a_strong_participle_meets_its_verb_and_its_noun(self) -> None:
         vocabulary = resolver("umziehen", "umzieht", "umzog", "umzug", "umzuge", "gezogen", "anzug", "bezug")
@@ -553,9 +596,25 @@ class IrregularForms(unittest.TestCase):
             "gibt", "gilt", "kommt", "komme", "liegt", "steht", "sieht", "halt", "lasst",
             # No first person in -e for a separable verb: these are plural nouns.
             "ablaufe", "ausweise",
+            # Common other words: Schloss, and "geboten" of gebieten ("Eile ist geboten").
+            "schloss", "geboten", "gebotene", "gebotenen", "gebotener", "gebotenes", "gebotenem",
         ):
             with self.subTest(token=token):
                 self.assertEqual(wordforms.irregular_keys(token), ())
+        # The prefixed and plural forms stay.
+        for token in ("schlossen", "abschloss", "angeboten", "verboten", "geschlossen"):
+            with self.subTest(token=token):
+                self.assertNotEqual(wordforms.irregular_keys(token), ())
+        self.assertEqual(resolver("schloss", "schliessanlage").resolve("geschlossen"), [])
+        self.assertEqual(resolver("geboten").resolve("bietet"), [])
+
+    def test_the_zu_infinitive_of_a_composite_prefix_meets_its_verb(self) -> None:
+        for token, key in (
+            ("anzuerkennen", "aner|kenn"), ("beizubehalten", "beibe|halt"), ("einzubeziehen", "einbe|zieh"),
+            ("vorzubehalten", "vorbe|halt"),
+        ):
+            with self.subTest(token=token):
+                self.assertEqual(wordforms.irregular_keys(token), (key,))
 
     def test_no_present_form_german_does_not_write(self) -> None:
         """No -t or -st straight after a stem in t or d, no -st after ss; a changed vowel keeps its forms."""
@@ -602,6 +661,72 @@ class IrregularForms(unittest.TestCase):
         terms = {item["term"]: item for item in degree["coverage"]["query_terms"]}
         self.assertEqual({form["token"]: form["rule"] for form in terms["hoher"]["forms"]},
                          {"hochste": "irregular", "hoch": "irregular"})
+
+    def test_a_split_preterite_of_the_tables_is_found(self) -> None:
+        """"zog ... um", "schloss ... ab", "gab ... an": a strong preterite ends in none of e, n, t (recall review of Stufe 6)."""
+        self.assertIn("+zog+um", search_core.split_verb_tokens("die kundin zog im marz nach hamburg um."))
+        self.assertIn("+schloss+ab", search_core.split_verb_tokens("der kunde schloss den vertrag ab."))
+        # Only with a particle the tables join to that form: "mitzog" is no form of them.
+        self.assertNotIn("+zog+mit", search_core.split_verb_tokens("er zog den wagen mit."))
+        pages = {
+            "wiki/topics/hamburg.md": page("Hamburg", "Die Kundin zog im März nach Hamburg um."),
+            "wiki/topics/montag.md": page("Montag", "Der Kunde schloss den Liefervertrag am Montag online ab."),
+            "wiki/topics/telefon.md": page("Telefon", "Die Kundin gab den Zählerstand gestern telefonisch an."),
+            "wiki/topics/sonst.md": page("Sonstiges", "Hier steht nichts zur Sache."),
+        }
+        with PageTree(pages, index=None) as root:
+            loaded = search_core.load(root, include_sources=True, exhaustive=True)
+            for query, path in (
+                ("Umzug Hamburg", "wiki/topics/hamburg.md"),
+                ("umziehen Hamburg", "wiki/topics/hamburg.md"),
+                ("Abschluss Liefervertrag online", "wiki/topics/montag.md"),
+                ("abschließen Liefervertrag online", "wiki/topics/montag.md"),
+                ("Angabe Zählerstand telefonisch", "wiki/topics/telefon.md"),
+            ):
+                with self.subTest(query=query):
+                    report = search_core.search_loaded(loaded, query, limit=10, exhaustive=True)
+                    found = {
+                        entry["rule"]
+                        for page_ in report["exhaustive_hits"] if page_["path"] == path
+                        for hit in page_["hits"] for entry in hit.get("matched") or []
+                    }
+                    self.assertIn("split_verb", found)
+                    self.assertEqual(report["absence_check"]["absent_terms"], [])
+
+    def test_a_split_form_of_a_noun_is_never_a_verb_of_the_question(self) -> None:
+        """"Die Gabe kommt ... an." gives "+gabe+an" (joined "Angabe", a noun): never a split verb of "angegeben"."""
+        self.assertIn("+gabe+an", search_core.split_verb_tokens("die gabe kommt punktlich an."))
+        pages = {
+            "wiki/topics/bahn.md": page("Bahn", "Die Gabe kommt pünktlich an."),
+            "wiki/topics/sonst.md": page("Sonstiges", "Nichts."),
+        }
+        with PageTree(pages, index=None) as root:
+            report = search_core.search(root, "angegeben", limit=12, exhaustive=True)
+        found = {entry["rule"] for page_ in report["exhaustive_hits"] for hit in page_["hits"] for entry in hit.get("matched") or []}
+        self.assertNotIn("split_verb", found)
+        self.assertEqual(report["absence_check"]["absent_terms"], ["angegeben"])
+
+    def test_a_table_form_only_the_scan_repairs_is_found(self) -> None:
+        """A page break inside a hyphenated word: only the scan joins "umge-" and "zogen" (recall review of Stufe 6)."""
+        body = "Ist der Kunde nachweislich umge-\n<!-- page: 3 -->\nzogen, endet der Liefervertrag mit Frist."
+        pages = {
+            "wiki/topics/kuendigung.md": page("Sonderkündigung", body),
+            "wiki/topics/sonst.md": page("Sonstiges", "Die Hotline ist werktags erreichbar."),
+        }
+        with PageTree(pages, index=None) as root:
+            loaded = search_core.load(root, include_sources=True, exhaustive=True)
+            for query, term, rule in (
+                ("Umzug Liefervertrag endet", "umzug", "derived"),
+                ("umziehen Liefervertrag endet", "umziehen", "irregular"),
+            ):
+                with self.subTest(query=query):
+                    report = search_core.search_loaded(loaded, query, limit=10, exhaustive=True)
+                    found = {
+                        (entry["term"], entry["token"], entry["rule"])
+                        for page_ in report["exhaustive_hits"] for hit in page_["hits"] for entry in hit.get("matched") or []
+                    }
+                    self.assertIn((term, "umgezogen", rule), found)
+                    self.assertNotIn(term, report["absence_check"]["absent_terms"])
 
     def test_a_split_verb_of_the_question_is_never_reported_on_its_noun(self) -> None:
         """"ziehe ... um" is a split verb on "umgezogen", never on "Umzug": a noun is another word."""

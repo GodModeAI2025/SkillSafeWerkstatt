@@ -106,6 +106,7 @@ QUANTITY_UNITS: dict[str, tuple[str, int]] = {
     "kilowattstunde": ("kwh", 0), "kilowattstunden": ("kwh", 0),
     "megawattstunde": ("kwh", 3), "megawattstunden": ("kwh", 3),
     "gigawattstunde": ("kwh", 6), "gigawattstunden": ("kwh", 6),
+    "terawattstunde": ("kwh", 9), "terawattstunden": ("kwh", 9),
     "w": ("kw", -3), "watt": ("kw", -3), "kw": ("kw", 0), "kilowatt": ("kw", 0),
     "mw": ("kw", 3), "megawatt": ("kw", 3), "gw": ("kw", 6), "gigawatt": ("kw", 6),
     "ct": ("eur", -2), "cent": ("eur", -2), "eur": ("eur", 0), "euro": ("eur", 0), "€": ("eur", 0),
@@ -144,24 +145,44 @@ NUMBER_WORD_VALUES = frozenset(NUMBER_WORDS.values())
 #: What follows a number: a unit symbol, glued or after spaces, or one word after
 #: white space (at most one line break). A hyphenated word ("4-Personen-Haushalt") is no follower.
 QUANTITY_FOLLOWER = r"(?:[ \t]*([%€])(?![\w-])|(?:[ \t]+(?:\n[ \t]*)?|\n[ \t]*)([^\W\d_]+)(?![\w-]))"
+#: The dash of a whole-euro amount ("75,- €", "75,-- EUR", "75,– €"), only before a money unit.
+EURO_DASH = r",(?:--?|–)(?=[ \t]*(?:€|eur|euro)(?![\w-]))"
 #: A number that may carry a quantity, with its follower: digits with an optional
-#: decimal comma, as a whole token. Not inside a date, version or identifier
-#: ("31.12.2025", "1.8.1", "Typ-2", "24/7", "12:30"), and not an ordinal ("1. April").
+#: decimal comma or whole-euro dash, as a whole token. Not inside a date, version or identifier
+#: ("31.12.2025", "1.8.1", "Typ-2", "24/7", "12:30"), not after a dash ("1–3"), and not an ordinal ("1. April").
 #: The first digit comes before the lookbehind, so the engine skips to digits fast.
-QUANTITY_DIGITS = re.compile(r"(\d(?<![\w.,'’/:⁄−+±=-]\d)\d{0,14})(?:,(\d{1,6}))?(?![\w-]|[.,]\d)" + QUANTITY_FOLLOWER)
+QUANTITY_DIGITS = re.compile(
+    r"(\d(?<![\w.,'’/:⁄−+±=–—-]\d)\d{0,14})(?:,(\d{1,6})|" + EURO_DASH + r")?(?![\w-]|[.,]\d)" + QUANTITY_FOLLOWER
+)
+#: A money amount with its unit before it ("€ 75", "EUR 25,00"), not "Euro" (the
+#: emission class "Euro 6"). Each unit comes before its lookbehind, so the engine searches for it as a literal.
+QUANTITY_PREFIXED = re.compile(
+    r"(?:€(?<![\w-]€)|eur(?<![\w-]eur))[ \t]*(\d\d{0,14})(?:,(\d{1,6})|,(?:--?|–))?(?![\w%€-]|[.,]\d)"
+)
+#: Scale words: a number before them names no count of them.
+SCALE_WORDS = frozenset({"hundert", "tausend", "tsd", "mio", "mrd", "million", "millionen", "milliarde", "milliarden"})
+#: A scale word right after a prefixed money amount ("€ 1,5 Mio."): the token would lose the factor.
+SCALE_AFTER = re.compile(r"[ \t]*(?:" + "|".join(sorted(SCALE_WORDS)) + r")(?![^\W\d_])")
 #: Each number word as a whole token with a follower, the same boundaries; run only
 #: for the words a text holds. The word comes before the lookbehind, so the engine searches for it as a literal.
 NUMBER_WORD_AT = {
-    word: re.compile(word + r"(?<![\w.,'’/:⁄−+±=-]" + word + r")(?![\w-]|[.,]\d)" + QUANTITY_FOLLOWER) for word in NUMBER_WORDS
+    word: re.compile(word + r"(?<![\w.,'’/:⁄−+±=–—-]" + word + r")(?![\w-]|[.,]\d)" + QUANTITY_FOLLOWER) for word in NUMBER_WORDS
 }
 #: A number, a number word or "komma" right before a number: the number is part of a larger one.
 NUMBER_BEFORE = re.compile(r"(?:\d|\b(?:" + "|".join(NUMBER_WORDS) + r"|komma))[ \t]+$")
 #: A sign right before a number ("minus 5 %", "−5 %", "Veränderung - 5 %"), or a
-#: range ("1 - 3 Monate"): the token would lose the sign or the range. A hyphen
+#: range with a hyphen ("1 - 3 Monate"): the token would lose the sign or the range. A hyphen
 #: that starts a line is a list marker and stays allowed ("- 14 Tage Frist").
 SIGN_BEFORE = re.compile(r"(?:\bminus|\bplus|[−+±]|\S[ \t]+-)[ \t]*$")
-#: Scale words: a number before them names no count of them.
-SCALE_WORDS = frozenset({"hundert", "tausend", "tsd", "mio", "mrd", "million", "millionen", "milliarde", "milliarden"})
+#: The first number of a range right before a number: with a dash ("1 – 3
+#: Monate"; a dash between words is a parenthesis and stays allowed: "Frist – wie
+#: üblich – drei Monate"), with "bis" ("2 bis 4 Wochen", "10 € bis 20 €"), or
+#: after "zwischen" with "und" ("zwischen 10 und 20 Prozent"). The second
+#: number would lose the range; a first number with its own unit keeps its token.
+RANGE_BEFORE = re.compile(
+    r"(?:(?:\d|\b(?:" + "|".join(NUMBER_WORDS) + r"))[ \t]*[–—]|(?:\d|[%€]|\b(?:" + "|".join(NUMBER_WORDS)
+    + r"))[ \t]+bis|\bzwischen[ \t]+\S+(?:[ \t]+\S+)?[ \t]+und)[ \t]*$"
+)
 #: A legal citation right before a number ("§ 3", "Abs. 5", "Nr. 2"): the number names a provision, not a count.
 CITATION_BEFORE = re.compile(r"(?:§|\babs\.|\babsatz|\bnr\.|\bnummer|\bart\.|\bartikel|\bziff\.|\bziffer|\bsatz)\s*$")
 #: A definition heading of schema/CONCEPTS.md or schema/CLUSTERS.md: level two with a stable lowercase ID.
@@ -440,8 +461,36 @@ PARTICLE_SET = frozenset(SEPARABLE_PARTICLES)
 #: is one endless line.
 SPLIT_LOOKBACK_CHARS = 500
 #: A word that may be the finite verb of a split separable verb: at least
-#: SEPARABLE_MIN_STEM letters, ending in one of VERB_ENDINGS (each ends in e, n or t).
+#: SEPARABLE_MIN_STEM letters, ending in one of VERB_ENDINGS (each ends in e, n
+#: or t), or a form of TABLE_SPLIT_VERBS.
 VERB_CANDIDATE = re.compile(r"(?<![^\W\d_])[^\W\d_]{%d,}[ent](?![^\W\d_])" % (SEPARABLE_MIN_STEM - 1))
+
+
+def _table_split_verbs() -> dict[str, frozenset]:
+    """The finite forms of the separable verbs of the irregular tables that end in none of e, n, t, with their particles.
+
+    A strong preterite or changed present ("zog", "schloss", "gab", "nahm")
+    is no VERB_CANDIDATE; it may still stand before its particle ("zog ...
+    um"). A form counts only for a particle that the tables join to it
+    ("umzog", "abschloss"), so "zog ... mit" stays no split verb.
+    """
+    found: dict[str, set[str]] = {}
+    for _present, changed, preterite, _participle, prefixes in wordforms.IRREGULAR_VERBS:
+        for prefix in prefixes.split():
+            if prefix not in PARTICLE_SET:
+                continue
+            for form in (*changed.split(), *preterite.split()):
+                if form[-1] not in "ent" and len(form) >= SEPARABLE_MIN_STEM and prefix + form in wordforms.IRREGULAR_FORMS:
+                    found.setdefault(form, set()).add(prefix)
+    return {form: frozenset(particles) for form, particles in sorted(found.items())}
+
+
+#: Per finite form of a separable verb of the irregular tables outside VERB_CANDIDATE, its particles.
+TABLE_SPLIT_VERBS = _table_split_verbs()
+#: Each form of TABLE_SPLIT_VERBS as a whole word, the longest first.
+TABLE_SPLIT_VERB = re.compile(
+    r"(?<![^\W\d_])(?:" + "|".join(sorted(TABLE_SPLIT_VERBS, key=lambda form: (-len(form), form))) + r")(?![^\W\d_])"
+)
 #: Each separable particle as a whole word of a normalised text.
 PARTICLE_WORDS = {particle: re.compile(r"(?<![\w-])" + particle + r"(?![\w-])") for particle in SEPARABLE_PARTICLES}
 #: What follows a word that ends a clause: closing quotes or brackets, then a
@@ -568,16 +617,21 @@ def spelled_quantities(spelled: str, words: Optional[Iterable[str]] = None) -> l
     its canonical unit ("2,5 mwh" and "2500 kwh" give "=2500kwh", "75,00 eur"
     and "75 €" give "=75eur"), or a number that a number word names followed
     by a count word of COUNT_UNITS ("drei monate" and "3 monaten" give
-    "=3monat", keyed by the unit the list names). A number that is only part
-    of a quantity gives none: after a citation, another number, a sign or a
-    range (CITATION_BEFORE, NUMBER_BEFORE, SIGN_BEFORE), or before a scale
-    word. The source tokens are the tokens the number and the unit word give
+    "=3monat", keyed by the unit the list names). A money amount may also
+    carry a whole-euro dash ("75,- €") or its unit before it ("€ 75", "eur
+    25,00"). A number that is only part of a quantity gives none: after a
+    citation, another number, a sign, or the first number of a range
+    (CITATION_BEFORE, NUMBER_BEFORE, SIGN_BEFORE, RANGE_BEFORE), or before a
+    scale word (a scale word is no unit; after a prefixed amount, SCALE_AFTER).
+    The source tokens are the tokens the number and the unit word give
     as written ("9", "84" and "ct" for "9,84 ct"); a symbol gives none. `words`, the text's tokens when the caller has them,
     saves looking for number words the text does not hold.
     """
     found: list[tuple[tuple[str, ...], str]] = []
     present = sorted(NUMBER_WORDS.keys() & (TOKEN.findall(spelled) if words is None else words))
     matches: list[tuple["re.Match[str]", Optional[str]]] = [(match, None) for match in QUANTITY_DIGITS.finditer(spelled)]
+    if "€" in spelled or "eur" in spelled:
+        matches.extend((match, QUANTITY_MARK) for match in QUANTITY_PREFIXED.finditer(spelled))
     if not matches and not present:
         return found
     for number_word in present:
@@ -589,6 +643,18 @@ def spelled_quantities(spelled: str, words: Optional[Iterable[str]] = None) -> l
             continue
         if SIGN_BEFORE.search(spelled, max(0, match.start() - 8), match.start()):
             continue
+        if RANGE_BEFORE.search(spelled, max(0, match.start() - 40), match.start()):
+            continue
+        if word == QUANTITY_MARK:
+            # A prefixed money amount: the unit is known, a scale word after it would be lost.
+            if SCALE_AFTER.match(spelled, match.end()):
+                continue
+            whole, fraction = match.groups()
+            mantissa, exponent = int(whole + (fraction or "")), -len(fraction or "")
+            numbers = (whole, fraction) if fraction else (whole,)
+            unit_word = ("eur",) if spelled.startswith("eur", match.start()) else ()
+            found.append((numbers + unit_word, QUANTITY_MARK + decimal_text(mantissa, exponent) + "eur"))
+            continue
         if word is None:
             whole, fraction, symbol, unit_word = match.groups()
             mantissa = int(whole + (fraction or ""))
@@ -598,8 +664,6 @@ def spelled_quantities(spelled: str, words: Optional[Iterable[str]] = None) -> l
             symbol, unit_word = match.groups()
             mantissa, exponent, numbers = NUMBER_WORDS[word], 0, (word,)
         unit = symbol or unit_word
-        if unit in SCALE_WORDS:
-            continue
         converted = QUANTITY_UNITS.get(unit)
         if converted is not None:
             canonical, shift = converted
@@ -2091,7 +2155,9 @@ def separable_splits(
     einem antwortcode ab."). Its verb is a word of the same sentence before
     it, of at least SEPARABLE_MIN_STEM letters, outside `excluded`, that ends
     in one of VERB_ENDINGS, as a finite verb does ("lehnt", "passen",
-    "schaltet"), at most SPLIT_LOOKBACK_CHARS characters before the particle.
+    "schaltet"), or that is a strong form of the irregular tables the particle
+    joins to ("zog ... um", "schloss ... ab"; TABLE_SPLIT_VERBS), at most
+    SPLIT_LOOKBACK_CHARS characters before the particle.
     Each word is listed once per particle, in text order, and
     the particles in text order. `words`, the text's tokens when the caller
     has them, only spares finding which particles occur.
@@ -2108,6 +2174,9 @@ def separable_splits(
         return []
     # The possible verbs are found once; each particle takes those of its sentence.
     spots = [(match.start(), match.group(0)) for match in VERB_CANDIDATE.finditer(text)]
+    table = [(match.start(), match.group(0)) for match in TABLE_SPLIT_VERB.finditer(text)]
+    if table:
+        spots = sorted(spots + table)
     found: list[tuple[str, list[str]]] = []
     # The window [floor, start) only moves forward, so two pointers bound it.
     low = high = 0
@@ -2126,7 +2195,7 @@ def separable_splits(
             first += 1
         verbs: list[str] = []
         for _, word in spots[first:high]:
-            if word not in excluded and word not in verbs:
+            if word not in excluded and word not in verbs and particle in TABLE_SPLIT_VERBS.get(word, PARTICLE_SET):
                 verbs.append(word)
         if verbs:
             found.append((particle, verbs))
@@ -3239,7 +3308,9 @@ def scan_members(ranking: Ranking, scan: "ScanIndex", vocabulary: dict[str, int]
       `exact`, `fold` or `stem`; that happens for an identifier from claim
       metadata or the frontmatter, which the ranking never reads, and for a
       word only the scan's segmentation repairs (a hyphen at a line end
-      before a page marker, a number in a table cell);
+      before a page marker, a number in a table cell); for a query word, such
+      a token that the irregular tables pair with it gets `irregular` or
+      `derived`, as in the ranking (see `ScanIndex.scan_only_table_forms`);
     - every joined token written as text that holds the term as a
       hyphen-separated part of the same stem key ("sms" in "sms-warndienst")
       is added under the heuristic rule `hyphen_part`, which the ranking does
@@ -3277,7 +3348,10 @@ def scan_members(ranking: Ranking, scan: "ScanIndex", vocabulary: dict[str, int]
         listed = list(ranking.members.get(term, ()))
         if term not in SCAN_EXCLUDED:
             known = {token for token, _, _ in listed}
-            for token, rule in scan.scan_only_forms(term, vocabulary):
+            scan_only = scan.scan_only_forms(term, vocabulary)
+            if item["origin"] == "query":
+                scan_only += scan.scan_only_table_forms(term, vocabulary)
+            for token, rule in scan_only:
                 if token not in known:
                     member = (token, rule, wordforms.WEIGHTS[rule])
                     if rule == "exact":
@@ -3337,9 +3411,11 @@ def _linked_words(rest: str, words: frozenset, memo: dict[str, bool]) -> bool:
 
 
 def same_scan_word(left: str, right: str) -> bool:
-    """Whether the scan matches two content words as forms of each other (pure).
+    """Whether the reformulation count takes two content words for one word (pure).
 
-    True for the same word in another spelling or inflection (`exact`, `fold`
+    It decides when a reformulation repeats a word of the question
+    (`counted_reformulations`), not what the scan matches. True for the same
+    word in another spelling or inflection (`exact`, `fold`
     and `stem`: one stem key, so also a hyphenated word written joined or
     hyphenated elsewhere), a verb form of the word forms (`verb`: a shared
     verb key), a shared key in the irregular tables (`irregular`: "umzog" and
@@ -3348,8 +3424,10 @@ def same_scan_word(left: str, right: str) -> bool:
     "Tag", "intelligentem" and "intelligenten"), and another verb form of a
     four-letter stem or of a separable verb (`verb_ending`: "senkt" and
     "senken", "abgeschaltet" and "abschalten"). The irregular check is
-    symmetric, unlike the ranking ("hoch" also meets "höchste" here): a wider
-    match only gives the scan more passages to check, never a false absence.
+    symmetric and so wider than the matching of ranking and scan, which pair
+    the comparison table one way ("gut" never meets "beste" there, and "hoch"
+    meets "höchste" only through `ending`): a wider check only discards a
+    reformulation as a repetition, which never makes an absence complete.
     """
     if left == right:
         return True
@@ -3519,6 +3597,7 @@ class ScanIndex:
         self._suspended: Optional[dict[str, frozenset]] = None
         self._split: Optional[dict[str, frozenset]] = None
         self._scan_only: Optional[tuple[Any, dict[str, frozenset]]] = None
+        self._scan_only_table: Optional[tuple[Any, wordforms.Resolver]] = None
         self._part_words: Optional[tuple[frozenset, list[tuple[str, str]]]] = None
         for relative, scope, text, document, selected in files:
             if scan_navigation(relative):
@@ -3832,6 +3911,30 @@ class ScanIndex:
             (token, "exact" if token == term else "fold" if wordforms.spelling_key(token) == spelling else "stem")
             for token in sorted(found)
         ]
+
+    def scan_only_table_forms(self, term: str, vocabulary: dict[str, int]) -> list[tuple[str, str]]:
+        """Scanned tokens the ranking's vocabulary lacks that the irregular tables pair with `term`, with the rule.
+
+        A word that only the scan's segmentation repairs ("umge-", a page
+        marker, "zogen" give "umgezogen") is no word of the ranking, whose
+        resolver therefore never pairs it. Here it is paired the same way, by
+        a resolver over those tokens: `irregular` on the same side, `derived`
+        between a noun and its verb. Only for query words, like in the ranking.
+        """
+        if not wordforms.irregular_keys(wordforms.spelling_key(term)):
+            return []
+        if self._scan_only_table is None or self._scan_only_table[0] is not vocabulary:
+            only = {
+                token: 1
+                for token in self.own
+                if token not in vocabulary and token not in SCAN_EXCLUDED and token.isalpha()
+                and wordforms.irregular_keys(wordforms.spelling_key(token))
+            }
+            self._scan_only_table = (vocabulary, wordforms.Resolver(only, CLOSED_CLASS, heuristics=False))
+        resolver = self._scan_only_table[1]
+        found = [(token, "irregular") for token in sorted(resolver.irregular(term))]
+        found.extend((token, "derived") for token in sorted(resolver.derived(term)))
+        return found
 
     def unit_members(self, unit: str) -> list[wordforms.Member]:
         """The members of one part of a hyphenated search word written apart: its stem key alone or as a part."""

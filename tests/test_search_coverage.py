@@ -581,6 +581,40 @@ class RuleNamesInTheInstructions(unittest.TestCase):
                 with self.subTest(rule=rule, text=label):
                     self.assertIn(f"`{rule}`", texts[label])
 
+    @staticmethod
+    def between(text: str, start: str, end: str) -> str:
+        """The part of `text` from the one occurrence of `start` up to the next `end`."""
+        assert text.count(start) == 1, start
+        begin = text.index(start)
+        return text[begin:text.index(end, begin + len(start))]
+
+    def test_the_verify_lists_name_every_heuristic_rule(self) -> None:
+        """The list of rules to check in the page text before citing carries every heuristic, not only the rule list beside it."""
+        heuristics = [rule for rule, (_, kind) in wordforms.RULES.items() if kind == "heuristic"]
+        anchors = {
+            "query SKILL.md": "the decisive word of the question matched a page only through",
+            "knowledge-skill template": "the decisive word of the question matched a page only through",
+            "answer contract": "the decisive word of the question only as",
+        }
+        for label, anchor in anchors.items():
+            sentence = self.between(self.TEXTS[label].read_text(encoding="utf-8"), anchor, " check")
+            for rule in heuristics:
+                with self.subTest(text=label, rule=rule):
+                    self.assertIn(f"`{rule}`", sentence)
+
+    def test_the_heuristic_hit_sentence_names_the_table_link_and_quantity_rules(self) -> None:
+        """What a scan hit with `strength: heuristic` may have matched through, including the Stufe 6 rules."""
+        named = ("irregular", "derived", "compound_link", "quantity") + tuple(
+            rule for rule, (_, kind) in wordforms.RULES.items() if kind == "scan"
+        )
+        for label in ("answer contract", "knowledge-skill template"):
+            sentence = self.between(
+                self.TEXTS[label].read_text(encoding="utf-8"), "A hit with `strength: heuristic` matched", "Its `matched` list"
+            )
+            for rule in named:
+                with self.subTest(text=label, rule=rule):
+                    self.assertIn(f"`{rule}`", sentence)
+
     def test_the_quantity_token_notation_is_explained(self) -> None:
         contract = self.TEXTS["answer contract"].read_text(encoding="utf-8")
         self.assertIn("`=<value><unit>`", contract)

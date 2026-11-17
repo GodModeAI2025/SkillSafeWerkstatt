@@ -616,6 +616,8 @@ IRREGULAR_NOUNS: Tuple[Tuple[str, str, str], ...] = (
 #: stem, superlative stem). The pairing runs one way: "höchste" and "höher"
 #: find "hoch", but "hoch" finds neither, because a question asks "Wie hoch
 #: ...?" about any amount ("hoch" names no topic, as SCAN_FUNCTION_WORDS says).
+#: For the same reason "beste" and "besten" find nothing: "Wie kündige ich am
+#: besten?" names no topic either, while "besser" finds "gut" and "beste".
 #: English "good" is such a target too (IRREGULAR_TARGETS): "better" and
 #: "best" find it, it finds neither. "hohe" and "hohen" are left out: they are
 #: also "Höhe" and "Höhen"; so is "guter": it is also "Güter". "hoher" stays a
@@ -665,9 +667,13 @@ good better best
 
 
 #: Forms left out although an entry generates them, because they are common
-#: nouns of their own: Messe ("ich messe"), Scheine ("ich scheine"), Werft
-#: ("ihr werft").
-IRREGULAR_EXCLUDED = frozenset(("messe", "scheine", "werft"))
+#: nouns or other words of their own: Messe ("ich messe"), Scheine ("ich
+#: scheine"), Werft ("ihr werft"), Schloss ("schloss"), and "geboten", which is
+#: also the participle of gebieten ("Eile ist geboten"); "angeboten",
+#: "verboten", "schlossen" and "abschloss" stay.
+IRREGULAR_EXCLUDED = frozenset((
+    "messe", "scheine", "werft", "schloss", "geboten", "gebotene", "gebotenen", "gebotener", "gebotenes", "gebotenem",
+))
 #: The two parts of the composite prefixes, for their zu-infinitive
 #: ("anzuerkennen", "beizubehalten", "einzubeziehen", "vorzubehalten").
 _COMPOSITE_PREFIXES = {"aner": ("an", "er"), "beibe": ("bei", "be"), "einbe": ("ein", "be"), "vorbe": ("vor", "be")}
@@ -756,8 +762,13 @@ IRREGULAR_FORMS: Dict[str, Tuple[str, ...]] = _irregular_table()
 IRREGULAR_NOUN_FORMS = frozenset(
     noun + ending for noun, _, _ in IRREGULAR_NOUNS for ending in _NOUN_ENDINGS
 ) - frozenset(form for form, _ in _all_verb_forms())
-#: The positive forms of IRREGULAR_DEGREES and English "good": found by their comparative and superlative, finding neither.
-IRREGULAR_TARGETS = frozenset(form for positive, _, _ in IRREGULAR_DEGREES for form in positive.split()) | {"good"}
+#: The positive forms of IRREGULAR_DEGREES and English "good": found by their comparative and superlative, finding
+#: neither; and the superlative of "gut" ("am besten" names no topic), found by "besser" and finding nothing.
+IRREGULAR_TARGETS = (
+    frozenset(form for positive, _, _ in IRREGULAR_DEGREES for form in positive.split())
+    | {"good"}
+    | {"best" + ending for ending in _SUPERLATIVE_ENDINGS}
+)
 
 
 def irregular_keys(spelling: str) -> Tuple[str, ...]:
@@ -993,17 +1004,23 @@ class Resolver:
         """Corpus words made of the parts of `term` with another linking element between two of them.
 
         The query word must split there into words of the vocabulary on both
-        sides; only the linking element changes ("", s, es, n, en, e). So
-        "Abschlagzahlung" finds "Abschlagszahlung" and "Abschlagszahlungen",
-        "Kirchenturm" finds "Kirchturm", but a word is never cut where its
-        parts are not words of the searched files.
+        sides; only the linking element changes ("", s, es, n, en, e). The
+        variant is looked up in its exact spelling, uninflected or with the
+        query word's own ending, never by its stem (a stem cut would make
+        "Hauptachse" into "Hauptsache"). So "Abschlagzahlung" finds
+        "Abschlagszahlung", "Abschlagzahlungen" finds "Abschlagszahlungen",
+        "Kirchenturm" finds "Kirchturm", but "Abschlagzahlung" never finds
+        "Abschlagszahlungen", and a word is never cut where its parts are not
+        words of the searched files.
         """
         members: Dict[str, Tuple[str, float]] = {}
         if not term.isalpha() or term in self.closed:
             return members
-        key = stem(spelling_key(term))
-        if len(key) > MAX_COMPOUND or len(key) < 2 * MIN_PART:
+        spelling = spelling_key(term)
+        key = stem(spelling)
+        if len(key) > MAX_COMPOUND:
             return members
+        endings = ("", spelling[len(key):]) if spelling != key and spelling.startswith(key) else ("",)
         memo: Dict[str, bool] = {}
         for cut in range(MIN_PART, len(key) - MIN_PART + 1):
             before = key[:cut]
@@ -1017,8 +1034,9 @@ class Resolver:
                     if other == link:
                         continue
                     variant = before + other + after
-                    for token in self.by_spelling.get(variant, ()):
-                        _add(members, token, "compound_link")
+                    for ending in endings:
+                        for token in self.by_spelling.get(variant + ending, ()):
+                            _add(members, token, "compound_link")
         return members
 
     def query_head(self, term: str) -> str:

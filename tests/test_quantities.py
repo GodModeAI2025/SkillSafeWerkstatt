@@ -67,6 +67,35 @@ class QuantityTokens(unittest.TestCase):
         self.assertEqual(quantities("75 Euro"), ["=75eur"])
         self.assertEqual(quantities("19 %"), quantities("19 Prozent"))
         self.assertEqual(quantities("2,5 Megawattstunden"), ["=2500kwh"])
+        self.assertEqual(quantities("1,5 Terawattstunden"), quantities("1500 GWh"))
+        self.assertEqual(quantities("1,5 Terawattstunden"), ["=1500000000kwh"])
+
+    def test_every_converted_symbol_has_its_written_word(self) -> None:
+        """Each unit symbol the texts list converts like its written-out word, singular and plural."""
+        units = search_core.QUANTITY_UNITS
+        for symbol, words in (
+            ("wh", ("wattstunde", "wattstunden")), ("kwh", ("kilowattstunde", "kilowattstunden")),
+            ("mwh", ("megawattstunde", "megawattstunden")), ("gwh", ("gigawattstunde", "gigawattstunden")),
+            ("twh", ("terawattstunde", "terawattstunden")), ("w", ("watt",)), ("kw", ("kilowatt",)),
+            ("mw", ("megawatt",)), ("gw", ("gigawatt",)), ("ct", ("cent",)), ("eur", ("euro",)), ("€", ("euro",)),
+            ("%", ("prozent",)),
+        ):
+            for word in words:
+                with self.subTest(symbol=symbol, word=word):
+                    self.assertEqual(units[word], units[symbol])
+
+    def test_whole_euro_and_prefixed_money_notations(self) -> None:
+        """"75,- €" and "EUR 25,00" are money amounts like "75 €" (recall review of Stufe 6)."""
+        for text, expected in (
+            ("75,- €", "=75eur"), ("75,– €", "=75eur"), ("75,-- €", "=75eur"), ("75,- EUR", "=75eur"),
+            ("€ 75", "=75eur"), ("EUR 25,00", "=25eur"), ("€ 1.500,00 je Anlage", "=1500eur"), ("EUR 9,84 netto", "=9.84eur"),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(quantities(text), [expected])
+        # A scale word after the amount, a sign before it, or "Euro" before a number (Euro 6) give none.
+        for text in ("€ 1,5 Mio. je Anlage", "EUR 2 Tausend", "minus € 5", "Euro 6 Fahrzeuge", "EUR/kWh 0,30", "75,- Tage"):
+            with self.subTest(text=text):
+                self.assertEqual(quantities(text), [])
 
     def test_number_words_meet_digits_before_the_same_word(self) -> None:
         self.assertEqual(quantities("drei Monate"), quantities("3 Monaten"))
@@ -113,11 +142,29 @@ class QuantityTokens(unittest.TestCase):
             "75 Tausend Euro", "zehn Tausend Euro", "drei Hundert Watt", "mehrere hundert Euro",
             "einige tausend Kilowattstunden", "2 Tausend kWh", "20 %-Punkte", "50 €-Cent", "½ Jahr",
             "−15 %", "+5 %", "Veränderung - 5 %", "minus 20 Grad", "zwei Komma fünf Prozent", "1 - 3 Monate",
+            "1-3 Monate", "1–3 Monate", "1 – 3 Monate", "1 — 3 Monate", "10–20 %", "1 bis 3 Monate", "2 bis 4 Wochen",
+            "drei bis vier Wochen", "sechs bis zwölf Monate", "zwischen 10 und 20 Prozent", "zwischen 2 und 3 Monaten",
             "Typ 2 Stecker", "Kapitel 4 Abrechnung", "Stufe 2 Tarif", "Modul 2 reduziert", "## 3 Ablauf",
             "@page=1",
         ):
             with self.subTest(text=text):
                 self.assertEqual(quantities(text), [])
+
+    def test_only_the_second_number_of_a_range_gives_none(self) -> None:
+        """The upper bound of a range is skipped; a lower bound with its own unit, a dash
+        between words, and "und" outside "zwischen ... und" leave a quantity."""
+        self.assertEqual(quantities("von 10 € bis 20 €"), ["=10eur"])
+        self.assertEqual(quantities("zwischen 10 € und 20 €"), ["=10eur"])
+        self.assertEqual(quantities("Die Frist – wie üblich – drei Monate"), ["=3monat"])
+        self.assertEqual(quantities("Ausbau bis 2028 und 95 Prozent Ökostrom"), ["=95prozent"])
+        self.assertEqual(quantities("Hotline bis 14 Uhr, Rückruf binnen 14 Tagen"), ["=14tag"])
+
+    def test_citations_identifiers_and_a_line_break(self) -> None:
+        """A number after a citation or an identifier names no count; one line break may separate the unit."""
+        for text in ("§ 3 Tage", "Abs. 2 Jahre", "Nr. 12 Monate", "page=3 Tage"):
+            with self.subTest(text=text):
+                self.assertEqual(quantities(text), [])
+        self.assertEqual(quantities("Frist: 14\nTage"), ["=14tag"])
 
     def test_a_calendar_week_reads_as_kilowatt(self) -> None:
         # A disclosed residual: the text is folded to lower case before a unit
@@ -179,9 +226,35 @@ class QuantitySearch(unittest.TestCase):
         self.assertNotIn("vierzehn", report["absence_check"]["absent_terms"])
 
     def test_a_query_written_like_the_page_gets_no_quantity_member(self) -> None:
-        report = self.search("Kündigung drei Absätze")
+        # The only page that holds "=12monat" writes "zwölf Monate" as the query does: no bridge is needed.
+        self.assertEqual(quantities("Preisgarantie zwölf Monate"), ["=12monat"])
+        report = self.search("Preisgarantie zwölf Monate")
+        self.assertEqual(report["results"][0]["path"], "wiki/garantie.md")
         for result in report["results"]:
             self.assertNotIn("quantity", {rule["rule"] for rule in result["match_rules"]})
+
+    def test_claims_and_snippet_read_the_quantity(self) -> None:
+        """The claim and the line that give the amount only in another unit are the ones shown."""
+
+        def claim(identifier: str, text: str) -> str:
+            return f"<!-- claim\nid: {identifier}\nkind: fact\nstatus: active\nsources: src-1@page=1\n-->\n{text}\n<!-- /claim -->"
+
+        body = "\n\n".join((
+            "Der Jahresverbrauch wird einmal im Jahr vom Messstellenbetreiber abgelesen und gemeldet.",
+            "Ab 2,5 MWh Jahresverbrauch gilt der Gewerbetarif.",
+            claim("clm-00000000000000a1", "Der Jahresverbrauch steht auf der Rechnung."),
+            claim("clm-00000000000000a2", "Die Schwelle liegt bei 2,5 MWh."),
+        ))
+        pages = {
+            "wiki/topics/tarif.md": page("Tarifschwelle", body, heading=True),
+            "wiki/topics/sonst.md": page("Sonstiges", "Nichts dazu.", heading=True),
+        }
+        with PageTree(pages) as root:
+            report = search_core.search(root, "Jahresverbrauch 2500 kWh", limit=12)
+        top = report["results"][0]
+        self.assertEqual(top["path"], "wiki/topics/tarif.md")
+        self.assertIn("clm-00000000000000a2", [item["id"] for item in top["claims"]])
+        self.assertEqual(top["snippet"], "Ab 2,5 MWh Jahresverbrauch gilt der Gewerbetarif.")
 
     def test_no_wrong_equivalence(self) -> None:
         """Every other word of the query is on the page; only a wrong equivalence would make it a hit.
@@ -200,6 +273,58 @@ class QuantitySearch(unittest.TestCase):
                 self.assertEqual(self.quantity_rules_on(report, page_path), [])
                 # The page is ranked through the words it holds.
                 self.assertIn(page_path, [result["path"] for result in report["results"]])
+
+
+class QuantityBridge(unittest.TestCase):
+    """When the ranking takes a quantity token as a member, and what the scan adds without it."""
+
+    def quantity_members(self, pages: dict, query: str) -> dict[str, list[tuple[str, str]]]:
+        with PageTree(pages) as root:
+            report = search_core.search(root, query, limit=12)
+        return {
+            result["path"]: sorted((rule["term"], rule["token"]) for rule in result["match_rules"] if rule["rule"] == "quantity")
+            for result in report["results"]
+        }
+
+    def test_only_a_word_that_reaches_no_page_with_the_amount_bridges(self) -> None:
+        """"14" bridges to "vierzehn Tage"; "Tage" already reaches that page and takes no quantity."""
+        found = self.quantity_members({
+            "wiki/topics/a.md": page("Frist A", "Die Frist beträgt 14 Tage.", heading=True),
+            "wiki/topics/b.md": page("Frist B", "Die Frist beträgt vierzehn Tage.", heading=True),
+        }, "Frist 14 Tage")
+        self.assertEqual(found, {"wiki/topics/a.md": [("14", "=14tag")], "wiki/topics/b.md": [("14", "=14tag")]})
+
+    def test_a_navigation_page_never_opens_the_bridge(self) -> None:
+        found = self.quantity_members({
+            "wiki/index.md": page("Index", "Alles zur Frist von vierzehn Tagen.", "index"),
+            "wiki/topics/a.md": page("Frist A", "Die Frist beträgt 14 Tage.", heading=True),
+            "wiki/topics/c.md": page("Frist C", "Die Frist ist anders geregelt.", heading=True),
+        }, "Frist 14 Tage")
+        self.assertIn("wiki/topics/a.md", found)
+        self.assertEqual({path: members for path, members in found.items() if members}, {})
+
+    def test_the_scan_adds_a_quantity_the_ranking_did_not_take(self) -> None:
+        """The only page with "=14tag" also holds "14" ("bis 14 Uhr"), so the ranking takes no
+        quantity member; the scan still finds "vierzehn Tage" through the query word's token."""
+        pages = {
+            "wiki/topics/widerruf.md": page(
+                "Widerruf", "Die Widerrufsfrist beträgt vierzehn Tage.\n\n## Kontakt\n\nDie Hotline ist bis 14 Uhr erreichbar.",
+                heading=True,
+            ),
+            "wiki/topics/sonst.md": page("Sonstiges", "Hier steht nichts zur Sache.", heading=True),
+        }
+        with PageTree(pages) as root:
+            report = search_core.search(
+                root, "Widerrufsfrist 14 Tage", also=["Widerruf binnen 14 Tagen", "Rücktritt Frist zwei Wochen"],
+                limit=12, exhaustive=True,
+            )
+        ranked = [rule for result in report["results"] for rule in result["match_rules"] if rule["rule"] == "quantity"]
+        self.assertEqual(ranked, [])
+        matched = [
+            entry for page_ in report["exhaustive_hits"] if page_["path"] == "wiki/topics/widerruf.md"
+            for hit in page_["hits"] for entry in hit.get("matched") or []
+        ]
+        self.assertIn({"term": "14", "token": "=14tag", "rule": "quantity", "in": "text"}, matched)
 
 
 class QuantityNegatives(unittest.TestCase):

@@ -213,6 +213,23 @@ class FrozenWording(unittest.TestCase):
             [a for a in reader_advisories if a["code"] == "no_page_was_human_reviewed"][0]["recommended_action"],
         )
 
+    def test_a_missing_invalid_or_undated_state_takes_the_frozen_wording(self) -> None:
+        """The three advisories of an unknown state name the canonical wiki in an export, never the maintenance skill."""
+        with tempfile.TemporaryDirectory(prefix="lmwiki-quality-core-") as directory:
+            root = Path(directory)
+            (root / "meta").mkdir()
+            reports = {"quality_status_missing": quality_core.assess(RELEASE, root, lambda _root: IDENTITY, frozen=True, now=NOW)}
+            (root / "meta" / "quality-status.json").write_text("[]", encoding="utf-8")
+            reports["quality_status_invalid"] = quality_core.assess(RELEASE, root, lambda _root: IDENTITY, frozen=True, now=NOW)
+            (root / "meta" / "quality-status.json").write_text(json.dumps(status()), encoding="utf-8")
+            undated = {key: value for key, value in RELEASE.items() if key != "released_at"}
+            reports["snapshot_age_unknown"] = quality_core.assess(undated, root, lambda _root: IDENTITY, frozen=True, now=NOW)
+        for code, report in reports.items():
+            with self.subTest(code=code):
+                [advisory] = [item for item in report["quality"]["advisories"] if item["code"] == code]
+                self.assertEqual((advisory["message"], advisory["recommended_action"]), quality_core.FROZEN_TEXT[code])
+                self.assertNotIn("maintenance skill", advisory["recommended_action"])
+
     def test_the_trust_disclosure_takes_the_frozen_wording_directly(self) -> None:
         unreviewed = {"trust": {"counts": {"unverified": 3}, "pages": 3}}
         block, reader = quality_core.trust_disclosure(unreviewed)
