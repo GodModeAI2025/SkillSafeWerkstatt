@@ -8,6 +8,7 @@ imported a module the exporter did not copy, and every export still reported
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -16,6 +17,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from datetime import timedelta
 from pathlib import Path
 from typing import Optional
 from unittest import mock
@@ -24,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "maintain-llm-wiki" / "scripts"))
 
 import export_wiki_skill  # noqa: E402
+import quality_core  # noqa: E402
 import search_core  # noqa: E402
 from harness import MAINTAIN, REPO, build_wiki, python_environment  # noqa: E402
 
@@ -249,6 +252,72 @@ class ExportedSkillRuns(unittest.TestCase):
                     "omitted_pages": [{**item, "path": item["path"].split(prefix, 1)[-1]} for item in value["omitted_pages"]],
                 }
                 self.assertEqual(strip(check), strip(reader_check))
+
+    def test_the_exported_quality_assessment_matches_the_query_skill(self) -> None:
+        """One shared core: same states, ages, trust tiers, expiry counts, and advisories.
+
+        Only the advisories that say how to obtain a new release read
+        differently, because a frozen export is replaced by exporting again.
+        """
+        exported = subprocess.run(
+            [sys.executable, "-B", "-S", "-s", str(self.skill / "scripts" / "assess_quality.py")],
+            capture_output=True, cwd=str(self.tmp), env=clean_environment(),
+        )
+        self.assertEqual(exported.returncode, 0, exported.stderr.decode("utf-8", errors="replace"))
+        reader = subprocess.run(
+            [sys.executable, "-B", str(REPO / "query-llm-wiki" / "scripts" / "assess_quality.py"),
+             "--target", str(self.wiki.path)],
+            capture_output=True, encoding="utf-8",
+        )
+        self.assertEqual(reader.returncode, 0, reader.stderr)
+        report, expected = json.loads(exported.stdout.decode("utf-8")), json.loads(reader.stdout)
+        self.assertEqual(report["state"], "ready")
+        quality, expected_quality = report["quality"], expected["quality"]
+        for value in (quality, expected_quality):
+            value.pop("assessed_at")
+        advisories, expected_advisories = quality.pop("advisories"), expected_quality.pop("advisories")
+        self.assertEqual(quality, expected_quality)
+        # The harness wiki records no human review: the export used to drop this.
+        self.assertIn("trust", quality)
+        self.assertIn("freshness", quality)
+        self.assertIn("no_page_was_human_reviewed", [item["code"] for item in advisories])
+        self.assertEqual([item["code"] for item in advisories], [item["code"] for item in expected_advisories])
+        for mine, theirs in zip(advisories, expected_advisories):
+            if mine["code"] not in quality_core.FROZEN_TEXT:
+                self.assertEqual(mine, theirs)
+
+    def test_the_exported_quality_helper_uses_the_frozen_wording(self) -> None:
+        """The export's wrapper must pass frozen=True; without it an old snapshot reads like a canonical release.
+
+        The helper is imported from the export folder itself, with every
+        module name it could share with the repository's scripts removed from
+        sys.modules first, so the exported copies are the ones that run.
+        """
+        scripts = self.skill / "scripts"
+        released_at = json.loads((self.skill / "references" / "SNAPSHOT.json").read_text(encoding="utf-8"))["released_at"]
+        now = quality_core.parse_time(released_at) + timedelta(days=400)
+        local = {path.stem for path in scripts.glob("*.py")}
+        saved_modules, saved_path = dict(sys.modules), list(sys.path)
+        try:
+            for name in local:
+                sys.modules.pop(name, None)
+            spec = importlib.util.spec_from_file_location("exported_assess_quality", scripts / "assess_quality.py")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            self.assertEqual(Path(sys.modules["quality_core"].__file__).resolve(), (scripts / "quality_core.py").resolve())
+            report = module.assess_quality(now=now)
+        finally:
+            for name in local:
+                sys.modules.pop(name, None)
+            sys.modules.update({name: saved_modules[name] for name in local if name in saved_modules})
+            sys.path[:] = saved_path
+        self.assertEqual(report["state"], "ready")
+        self.assertEqual(report["quality"]["snapshot"], {"state": "old", "age_days": 400})
+        old = [item for item in report["quality"]["advisories"] if item["code"] == "snapshot_old"]
+        message, action = quality_core.FROZEN_TEXT["snapshot_old"]
+        self.assertEqual(len(old), 1, report["quality"]["advisories"])
+        self.assertEqual(old[0]["message"], message.format(days=400))
+        self.assertEqual(old[0]["recommended_action"], action)
 
     def test_the_exported_coverage_says_history_is_not_shipped(self) -> None:
         exported = self.exported_search("--query", "Wiki", "--limit", "1")

@@ -5,10 +5,10 @@
   "default_limit": 12,
   "floors": {
     "answerable_queries": 107,
-    "required_first_result": 56,
-    "all_must_find_within_3": 64,
-    "all_must_find_within_12": 74,
-    "all_must_find_within_100": 84
+    "required_first_result": 58,
+    "all_must_find_within_3": 66,
+    "all_must_find_within_12": 76,
+    "all_must_find_within_100": 85
   },
   "caps": {
     "negative_results_within_12": 31,
@@ -72,7 +72,7 @@
     },
     "in-05": {
       "must_find_ranks": {
-        "wiki/topics/umzug.md": 10
+        "wiki/topics/umzug.md": 2
       }
     },
     "in-06": {
@@ -252,12 +252,12 @@
     },
     "pa-03": {
       "must_find_ranks": {
-        "wiki/concepts/widerrufsrecht.md": 9
+        "wiki/concepts/widerrufsrecht.md": 4
       }
     },
     "pa-04": {
       "must_find_ranks": {
-        "wiki/concepts/abschlagszahlung.md": 24
+        "wiki/concepts/abschlagszahlung.md": 23
       }
     },
     "pa-05": {
@@ -272,7 +272,7 @@
     },
     "pa-07": {
       "must_find_ranks": {
-        "wiki/topics/umzug.md": 21
+        "wiki/topics/umzug.md": 9
       }
     },
     "pa-08": {
@@ -342,7 +342,7 @@
     },
     "ty-05": {
       "must_find_ranks": {
-        "wiki/concepts/abschlagszahlung.md": null
+        "wiki/concepts/abschlagszahlung.md": 1
       }
     },
     "ty-06": {
@@ -613,7 +613,7 @@
     },
     "id-08": {
       "must_find_ranks": {
-        "wiki/topics/neukundenbonus.md": 2
+        "wiki/topics/neukundenbonus.md": 1
       }
     },
     "id-09": {
@@ -653,12 +653,5 @@
       "must_find_ranks": {}
     }
   },
-  "accepted_regressions": [
-    {
-      "id": "br-05",
-      "path": "wiki/concepts/intelligentes-messsystem.md",
-      "accepted_rank": 4,
-      "reason": "Accepted with the word-form layer (Stufe 2): rank 3 -> 4, still in the top 12. Rule compound_modifier: wiki/entities/lindenau-netz.md holds 'Zähler' once and 'Zählerstand'/'Zählerständen' several times, so the broad query 'Zähler' now counts those compounds and lifts it above this page, which holds 'Zähler' once and no compound of it. Measured alternatives: compound_modifier at 0.2 or dropped keeps this page third but costs su-02 ('Smart Meter Pflicht') its required first result, because this same page needs 'Pflichteinbau' to stay first there; 0.25 to 0.3 lose both. A rank-1 loss weighs more than a step from rank 3 to 4."
-    }
-  ]
+  "accepted_regressions": []
 }
