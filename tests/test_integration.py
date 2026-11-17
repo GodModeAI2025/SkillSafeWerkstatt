@@ -32,12 +32,9 @@ TOPICS = [
 
 def seed_pages(wiki: Wiki, source_id: str, source_stem: str, claim_ids: list[str]) -> None:
     """Write several curated pages through the real batch helper in one plan."""
-    staging = wiki.root / "staging"
-    targets: list[str] = []
+    pages: dict[str, str] = {}
     for (slug, title, description), claim_id in zip(TOPICS, claim_ids):
-        relative = f"wiki/concepts/{slug}.md"
-        targets.append(relative)
-        page = f"""---
+        pages[f"wiki/concepts/{slug}.md"] = f"""---
 id: "concept-{slug}"
 title: "{title}"
 type: "concept"
@@ -73,45 +70,18 @@ sources: {source_id}@page=2
 {description} wird jaehrlich durch den Netzbetreiber festgelegt.
 <!-- /claim -->
 """
-        staged = staging / relative
-        staged.parent.mkdir(parents=True, exist_ok=True)
-        staged.write_text(page, encoding="utf-8")
 
     index = wiki.read("wiki/index.md").rstrip()
     for slug, title, _ in TOPICS:
         index += f"\n- [[wiki/concepts/{slug}|{title}]]"
     wiki.write("wiki/index.md", index + "\n")
-
-    plan_file = wiki.root / "batch.json"
-    wiki.locked(
-        "page_batch.py", "plan",
-        "--staging-dir", str(staging),
-        "--paths-json", json.dumps(targets),
-        "--output", str(plan_file),
-    )
-    plan = json.loads(plan_file.read_text(encoding="utf-8"))
-    wiki.locked(
-        "page_batch.py", "apply",
-        "--staging-dir", str(staging),
-        "--plan-file", str(plan_file),
-        "--expect-plan-sha256", plan["plan_sha256"],
-    )
+    wiki.apply_pages(pages)
 
 
 def build_large_wiki(wiki: Wiki) -> None:
     from test_lifecycle import SOURCE_MARKDOWN, add_cluster_and_concept
 
-    extract = wiki.root / "quelle.md"
-    extract.write_text(SOURCE_MARKDOWN, encoding="utf-8")
-    record = json.loads(
-        wiki.locked(
-            "register_source.py",
-            "--markdown-file", str(extract),
-            "--title", "Netzentgelte 2026",
-            "--original-ref", "intern/netzentgelte-2026.pdf",
-            "--content-language", "de",
-        ).stdout
-    )["source"]
+    record = wiki.register_source(SOURCE_MARKDOWN, "Netzentgelte 2026", "intern/netzentgelte-2026.pdf")
     add_cluster_and_concept(wiki)
     claim_ids = json.loads(
         wiki.locked("claim_id.py", "--count", str(len(TOPICS))).stdout

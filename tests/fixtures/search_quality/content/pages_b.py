@@ -1,0 +1,143 @@
+# -*- coding: utf-8 -*-
+"""Concept pages, part B."""
+from .dsl import C, page
+
+page("wiki/concepts/widerrufsrecht.md", "Widerrufsrecht",
+     "Vierzehntägiges Recht von Verbrauchern, einen im Fernabsatz oder an der Haustür geschlossenen Vertrag zu widerrufen.",
+     concepts=["widerrufsrecht"], cluster="vertrag", gt="vf",
+     body=[
+"## Kern",
+"Das Widerrufsrecht schützt Verbraucher vor übereilten Abschlüssen. Es ist keine Kündigung: Der Vertrag wird nicht für die Zukunft beendet, sondern rückabgewickelt.",
+C("Verbraucher können Stromlieferverträge widerrufen, die im Fernabsatz oder außerhalb von Geschäftsräumen geschlossen wurden (§§ 312g, 355 BGB).", "S8@page=1"),
+C("Die Widerrufsfrist beträgt 14 Tage und beginnt bei Stromlieferverträgen mit dem Vertragsschluss, nicht mit der ersten Lieferung.", "S8@page=1"),
+C("Fehlt die Widerrufsbelehrung oder ist sie fehlerhaft, erlischt das Widerrufsrecht erst zwölf Monate und 14 Tage nach Vertragsschluss.", "S8@page=1"),
+C("Kein Widerrufsrecht besteht bei Verträgen, die im Kundenzentrum geschlossen werden, und bei Verträgen mit Unternehmern.", "S8@page=1"),
+"## Erklärung und Folgen",
+C("Der Widerruf ist auch telefonisch möglich; aus Beweisgründen wird die Textform empfohlen, und zur Fristwahrung genügt die rechtzeitige Absendung.", "S8@page=2"),
+C("Hat der Kunde ausdrücklich einen Lieferbeginn vor Fristablauf verlangt, schuldet er nach dem Widerruf Wertersatz für den bis dahin gelieferten Strom.", "S8@page=2"),
+C("Bereits geleistete Zahlungen sind innerhalb von 14 Tagen nach Zugang des Widerrufs zurückzuerstatten.", "S8@page=2"),
+C("Nach dem Widerruf bleibt der Kunde beim bisherigen Lieferanten, wenn dessen Vertrag noch nicht beendet wurde; andernfalls beliefert ihn der Grundversorger.", "S8@page=2"),
+"Den Abschlussweg beschreibt [[wiki/topics/vertragsschluss-im-fernabsatz]].",
+     ])
+
+page("wiki/concepts/bonitaetspruefung.md", "Bonitätsprüfung",
+     "Prüfung der Zahlungsfähigkeit vor Abschluss eines Sondervertrags: Auskunfteien, Scoreklassen, Ablehnung und Widerspruch.",
+     concepts=["bonitaetspruefung"], cluster="vertrag", gt="vf",
+     body=[
+"## Kern",
+"Vor jedem neuen Sondervertrag prüfen die Stadtwerke, ob der Antragsteller voraussichtlich zahlen kann. Das Ergebnis entscheidet, ob der Vertrag ohne Auflagen, nur mit Sicherheiten oder gar nicht zustande kommt.",
+C("Vor der Bestätigung jedes neuen Sondervertrags wird die Zahlungsfähigkeit des Antragstellers geprüft; Rechtsgrundlage ist Art. 6 Abs. 1 Buchstabe f DSGVO.", "S6@page=1"),
+C("Abgefragt werden die SCHUFA Holding AG und die Creditreform Boniversum GmbH.", "S6@page=1"),
+C("Bei Scoreklasse A bis G wird der Antrag ohne Auflagen angenommen.", "S6@page=1"),
+C("Bei Scoreklasse H bis K wird der Antrag nur mit SEPA-Lastschriftmandat oder Vorauszahlung angenommen.", "S6@page=1"),
+C("Bei Scoreklasse L und M wird der Sondervertrag abgelehnt und auf die Grundversorgung hingewiesen.", "S6@page=1"),
+"## Ablehnung",
+C("Die Ablehnungsmitteilung nennt die verwendete Auskunftei; eine rein automatisierte Entscheidung ohne Möglichkeit menschlicher Überprüfung ist unzulässig (Art. 22 DSGVO).", "S6@page=2"),
+C("Der Antragsteller kann der Ablehnung innerhalb von 14 Tagen widersprechen; das Forderungsmanagement entscheidet dann manuell innerhalb von fünf Werktagen.", "S6@page=2"),
+C("Das Prüfergebnis wird zwölf Monate gespeichert und danach gelöscht.", "S6@page=2"),
+C("Bei einem Tarifwechsel von Bestandskunden wird nur dann erneut geprüft, wenn offene Forderungen von mehr als 50,00 EUR bestehen.", "S6@page=2"),
+"Abgelehnte Antragsteller haben weiterhin Anspruch auf [[wiki/concepts/grundversorgung]].",
+     ])
+
+page("wiki/concepts/zaehlerstand.md", "Zählerstand",
+     "Erfassung, Meldung, Plausibilitätsprüfung und Schätzung von Zählerständen.",
+     cluster="abrechnung", gt="z",
+     body=[
+"## Kern",
+"Der Zählerstand ist die Grundlage jeder Verbrauchsabrechnung. Er wird entweder vor Ort abgelesen, vom Kunden gemeldet oder, wenn beides fehlt, rechnerisch geschätzt.",
+C("Die Zähler werden einmal jährlich im Auftrag des Messstellenbetreibers abgelesen.", "S5@page=2"),
+C("Kunden können den Zählerstand selbst ablesen und über das Kundenportal, per Foto in der App oder telefonisch unter 0800 5546330 melden.", "S5@page=2"),
+C("Weicht der Verbrauch um mehr als 30 Prozent vom Erwartungswert ab, wird beim Kunden nachgefragt und um ein Foto des Zählers gebeten.", "S5@page=2"),
+"## Schätzung",
+C("Liegt zum Abrechnungsstichtag kein Zählerstand vor, wird der Verbrauch auf Grundlage des Vorjahresverbrauchs rechnerisch geschätzt und auf der Rechnung als Schätzung gekennzeichnet.", "S5@page=2"),
+C("Ein geschätzter Stand kann bis zur nächsten Jahresverbrauchsabrechnung durch einen abgelesenen Stand korrigiert werden.", "S5@page=2"),
+"## Besondere Zähler",
+C("Bei Zweitarifzählern sind beide Zählwerke zu melden: Hochtarif mit der OBIS-Kennzahl 1.8.1 und Niedertarif mit der OBIS-Kennzahl 1.8.2.", "S5@page=2"),
+C("Bei Einspeisung zeigt die OBIS-Kennzahl 2.8.0 die ins Netz gelieferte Energie.", "S5@page=2"),
+C("Eine zusätzliche Ablesung auf Kundenwunsch kostet beim Netzbetreiber 19,50 EUR netto.", "S3@page=3"),
+"Zum Stand beim Wechsel oder Auszug siehe [[wiki/topics/lieferantenwechsel]] und [[wiki/topics/umzug]].",
+     ])
+
+page("wiki/concepts/messstellenbetrieb.md", "Messstellenbetrieb",
+     "Einbau, Betrieb und Wartung der Messeinrichtung sowie die jährlichen Entgelte dafür.",
+     concepts=["messstellenbetrieb"], cluster="netz-messung", gt="zp",
+     body=[
+"## Kern",
+"Der Messstellenbetrieb umfasst alles rund um den Stromzähler: Einbau, Betrieb, Wartung und die Bereitstellung der Messwerte. Er ist eine eigene Marktrolle neben Netzbetrieb und Lieferung; siehe [[wiki/comparisons/netzbetreiber-lieferant-messstellenbetreiber]].",
+C("Die Lindenau Netz GmbH ist im Netzgebiet der grundzuständige Messstellenbetreiber.", "S3@page=3"),
+C("Der Anschlussnutzer kann anstelle des grundzuständigen einen wettbewerblichen Messstellenbetreiber beauftragen (§ 5 MsbG).", "S7@page=2"),
+"## Jährliche Entgelte (brutto)",
+C("Ein konventioneller Ferraris-Zähler kostet 13,60 EUR pro Jahr.", "S3@page=3"),
+C("Eine moderne Messeinrichtung kostet 25,00 EUR pro Jahr.", "S3@page=3"),
+C("Ein intelligentes Messsystem kostet bei einem Jahresverbrauch über 6.000 bis 10.000 kWh 40,00 EUR und über 10.000 bis 20.000 kWh 50,00 EUR pro Jahr.", "S3@page=3"),
+C("Die Entgelte des grundzuständigen Messstellenbetreibers entsprechen den gesetzlichen Preisobergrenzen.", "S3@page=3"),
+"Die Gerätearten vergleicht [[wiki/comparisons/moderne-messeinrichtung-und-intelligentes-messsystem]].",
+     ])
+
+page("wiki/concepts/intelligentes-messsystem.md", "Intelligentes Messsystem",
+     "Digitaler Zähler mit Kommunikationseinheit: Pflichteinbau, Kundenrechte und Datenübermittlung.",
+     aliases=["iMSys"], concepts=["messstellenbetrieb"], cluster="netz-messung", gt="zf",
+     body=[
+"## Kern",
+C("Ein intelligentes Messsystem besteht aus einer modernen Messeinrichtung und einem Gateway, das die Messwerte verschlüsselt überträgt.", "S7@page=1", kind="definition"),
+"## Pflichteinbau",
+C("Ein intelligentes Messsystem ist Pflicht bei einem Jahresverbrauch von mehr als 6.000 kWh, bei Erzeugungsanlagen über 7 kW installierter Leistung und bei steuerbaren Verbrauchseinrichtungen nach § 14a EnWG.", "S7@page=1"),
+C("Der Messstellenbetreiber kündigt den Einbau mindestens drei Monate im Voraus an und nennt den konkreten Termin spätestens zwei Wochen vorher.", "S7@page=2"),
+C("Der Anschlussnutzer muss den Einbau dulden; ein Widerspruchsrecht gegen das Gerät besteht nicht.", "S7@page=2"),
+"## Einbau auf Wunsch",
+C("Seit 2025 kann jeder Anschlussnutzer den Einbau verlangen; der grundzuständige Messstellenbetreiber muss innerhalb von vier Monaten ab Beauftragung liefern.", "S7@page=2"),
+C("Für den vorzeitigen Einbau auf Kundenwunsch wird einmalig ein Entgelt von 100,00 EUR erhoben.", "S3@page=3"),
+"## Daten",
+C("Das Gerät übermittelt Viertelstundenwerte einmal täglich an den Messstellenbetreiber; sie sind Voraussetzung für dynamische Stromtarife und zeitvariable Netzentgelte.", "S7@page=2"),
+"Den Ausbaustand im Netzgebiet hält [[wiki/topics/rollout-intelligenter-messsysteme]] fest. Kosten stehen unter [[wiki/concepts/messstellenbetrieb]].",
+     ])
+
+page("wiki/concepts/versorgungsunterbrechung.md", "Versorgungsunterbrechung",
+     "Voraussetzungen, Fristen und Kosten, wenn die Stromlieferung wegen Zahlungsverzugs unterbrochen wird.",
+     concepts=["versorgungsunterbrechung"], cluster="abrechnung", gt="f",
+     body=[
+"## Kern",
+"Die Versorgungsunterbrechung ist das letzte Mittel gegenüber Kunden, die trotz Mahnung nicht zahlen. Sie ist an strenge Voraussetzungen gebunden und wird technisch vom Netzbetreiber ausgeführt.",
+C("Der Grundversorger darf die Versorgung erst unterbrechen lassen, wenn der Kunde mit mindestens dem Doppelten des monatlichen Abschlags, mindestens jedoch mit 100,00 EUR, in Verzug ist (§ 19 Abs. 2 StromGVV).", "S2@page=3"),
+C("Die Unterbrechung ist vier Wochen vorher anzudrohen.", "S2@page=3"),
+C("Der konkrete Beginn der Unterbrechung ist dem Kunden acht Werktage im Voraus anzukündigen.", "S2@page=3"),
+"## Abwendung",
+C("Mit der Androhung bietet der Grundversorger eine Abwendungsvereinbarung an, die eine zinsfreie Ratenzahlung über die offenen Beträge und die Weiterversorgung auf Vorauszahlungsbasis enthält.", "S2@page=3"),
+C("Die Unterbrechung unterbleibt, wenn ihre Folgen außer Verhältnis zur Schwere der Zuwiderhandlung stehen, insbesondere bei Gefahr für Leib oder Leben.", "S2@page=3"),
+"## Wiederherstellung und Kosten",
+C("Die Versorgung ist unverzüglich wiederherzustellen, sobald die Gründe entfallen sind und der Kunde die Kosten ersetzt hat.", "S2@page=3"),
+C("Die Unterbrechung der Anschlussnutzung kostet 58,00 EUR und die Wiederherstellung 72,00 EUR.", "S2@page=3 | S3@page=3"),
+C("Die zweite Mahnung enthält in der Grundversorgung die Androhung der Versorgungsunterbrechung.", "S5@page=4"),
+"Den vorgelagerten Ablauf zeigt [[wiki/topics/zahlungsverzug-und-mahnwesen]].",
+     ])
+
+page("wiki/concepts/marktlokation.md", "Marktlokations-ID",
+     "Elfstellige Kennung der Entnahmestelle im Strommarkt und ihre Abgrenzung zur Messlokation.",
+     aliases=["MaLo-ID"], cluster="netz-messung", gt="z",
+     body=[
+"## Kern",
+"Die Marktlokations-ID ist die eindeutige Adresse einer Entnahmestelle im Energiemarkt. Ohne sie kann kein Lieferant eine Belieferung anmelden.",
+C("Jede Entnahmestelle wird über die Marktlokations-Identifikationsnummer (MaLo-ID) identifiziert; sie besteht aus elf Ziffern.", "S4@page=1", kind="definition"),
+C("Die MaLo-ID steht auf jeder Stromrechnung.", "S4@page=1"),
+C("Kennt der Kunde seine MaLo-ID nicht, wird sie über die Zählernummer und die Anschrift der Entnahmestelle ermittelt.", "S4@page=1"),
+"## Abgrenzung",
+C("Die Marktlokation ist der Ort, an dem Energie verbraucht oder erzeugt wird; an ihr hängen Bilanzierung und Belieferung.", "S4@page=1"),
+C("Die Messlokation ist der Ort der Messung; ihre Kennung (MeLo-ID) hat 33 Zeichen und beginnt mit dem Länderkennzeichen DE.", "S4@page=1"),
+"## Praxis",
+"Im Kundengespräch wird die MaLo-ID häufig mit der Zählernummer verwechselt. Die Zählernummer gehört zum Gerät und ändert sich beim Zählertausch, die MaLo-ID bleibt dagegen an der Entnahmestelle. Beim [[wiki/topics/lieferantenwechsel]] und beim [[wiki/topics/umzug]] beschleunigt die richtige Kennung die Anmeldung erheblich.",
+     ])
+
+page("wiki/concepts/steuerbare-verbrauchseinrichtung.md", "Steuerbare Verbrauchseinrichtung",
+     "Wärmepumpen, Wallboxen und Speicher nach § 14a EnWG und die drei Module für reduzierte Netzentgelte.",
+     concepts=["netzentgelt"], cluster="netz-messung", gt="pz",
+     body=[
+"## Kern",
+"Steuerbare Verbrauchseinrichtungen sind größere Stromverbraucher wie Wärmepumpen, private Ladeeinrichtungen für Elektroautos oder Batteriespeicher, deren Leistung der Netzbetreiber bei Engpässen vorübergehend drosseln darf. Im Gegenzug zahlt der Betreiber ein geringeres [[wiki/concepts/netzentgelt]].",
+C("Der Betreiber einer steuerbaren Verbrauchseinrichtung wählt eines von drei Modulen für das reduzierte Netzentgelt nach § 14a EnWG.", "S3@page=2"),
+C("Modul 1 ist eine pauschale Reduzierung des Netzentgelts um 168,00 EUR brutto pro Jahr.", "S3@page=2"),
+C("Modul 2 reduziert den Arbeitspreis um 60 Prozent auf 3,94 ct/kWh und setzt einen separaten Zähler für die Einrichtung voraus.", "S3@page=2"),
+C("Modul 3 ist ein zeitvariables Netzentgelt, das nur zusammen mit Modul 1 und einem intelligenten Messsystem gewählt werden kann.", "S3@page=2"),
+C("In Modul 3 gelten 14,20 ct/kWh im Hochtarif von 17 bis 20 Uhr und 3,10 ct/kWh im Niedertarif von 0 bis 5 Uhr.", "S3@page=2"),
+C("Für steuerbare Verbrauchseinrichtungen ist ein intelligentes Messsystem verpflichtend; es kostet 50,00 EUR pro Jahr.", "S7@page=1 | S3@page=3"),
+"Einen passenden Liefertarif bietet [[wiki/entities/tarif-lindenwaerme-wp]].",
+     ])

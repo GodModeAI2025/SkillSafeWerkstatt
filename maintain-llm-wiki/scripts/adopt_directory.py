@@ -27,6 +27,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# Siblings are imported from this folder even where the interpreter leaves it
+# off sys.path: python -I, python -P, PYTHONSAFEPATH=1.
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
 import sync_artifacts
 from frontmatter_contract import FrontmatterError, parse_document
 from snapshot_wiki import create_snapshot
@@ -202,7 +208,8 @@ def register(
         "--extractor", "adopt-directory",
         "--confirm-extraction-warnings",
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    # Every helper prints UTF-8 (see its __main__ block), whatever the host code page.
+    completed = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", check=False)
     try:
         payload = json.loads(completed.stdout)
     except json.JSONDecodeError:
@@ -327,4 +334,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Windows pipes default to the ANSI code page; output is UTF-8 everywhere.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors=_stream.errors)
     raise SystemExit(main())

@@ -414,6 +414,96 @@
         "Das Entfernen geschieht nur über den bestätigten Override, nicht durch stilles Löschen einer Datei.",
         "Der Inhalt der entfernten Kopie wird berichtet, damit der Beleg nicht verloren geht."
       ]
+    },
+    {
+      "id": 36,
+      "prompt": "Unsere Kunden sagen 'Stromsperre' und 'Abschlag', im Wiki heißt es Versorgungsunterbrechung und Abschlagszahlung. Sorg dafür, dass die Suche das findet.",
+      "expected_output": "Der Skill schlägt Aliase in der Sprache der Nutzer nach den drei Regeln vor, warnt vor mehrdeutigen Alltagswörtern und trägt erst nach Bestätigung über einen Seiten-Batch ein.",
+      "files": [],
+      "expectations": [
+        "Vorschläge nennen Seite und Alias; nichts wird ohne Bestätigung geschrieben.",
+        "Wortformen (Plural, ae/ä, Kompositumteile) werden nicht als Alias vorgeschlagen.",
+        "Ein mehrdeutiges Einzelwort wie 'Abschlag' wird nicht als Seiten-Alias eingetragen; der Skill bietet eine eindeutige Alternative oder eine Phrase in CONCEPTS.md an.",
+        "Ein Alias kommt auf genau eine Seite; ein Begriff für die ganze Begriffswelt geht in deren Aliases.",
+        "aliases wird als Liste geschrieben."
+      ]
+    },
+    {
+      "id": 37,
+      "prompt": "Lint ist durch. Gibt es noch etwas zu den Aliasen?",
+      "expected_output": "Der Skill vergleicht stats.alias_review mit der Ausgangsprüfung, legt neue häufige Alias-Wörter und mehrfach vergebene Aliase mit Ort und Seitenzahl vor, meldet skalare aliases-Werte aus den Warnungen und stellt nichts davon als Lint-Fehler dar.",
+      "files": [],
+      "expectations": [
+        "Neue Einträge in common_alias_words und shared_aliases werden mit Wort, Ort und Seitenzahl vorgelegt.",
+        "Schon in der Ausgangsprüfung gelistete Einträge werden außerhalb eines Qualitätsreviews nicht erneut abgefragt.",
+        "Die Entscheidung des Anwenders wird in meta/changes.md festgehalten.",
+        "Ein skalarer aliases-Wert wird über einen bestätigten Frontmatter-Plan in eine Liste umgewandelt.",
+        "Die Statistik blockiert den Release nicht."
+      ]
+    },
+    {
+      "id": 38,
+      "prompt": "Welche unserer Quellen sind im Wiki eigentlich noch gar nicht ausgewertet?",
+      "expected_output": "Der Skill führt einen Lint im Prüfmodus aus, nennt aus stats.source_coverage die Quellen ohne Claim und die unzitierten Seiten oder Abschnitte mit Titel, erklärt, dass die Abdeckung nur so fein ist wie die Locator, und schlägt Kuration oder eine festgehaltene Entscheidung vor, ohne etwas als Fehler darzustellen.",
+      "files": [],
+      "expectations": [
+        "Der Lint läuft unter dem Lock mit --check-only; es wird nichts geschrieben.",
+        "Unzitierte Quellen und Einheiten werden mit Titel und Bezeichnung wie page=3 oder section=… genannt.",
+        "Der Skill sagt, dass eine zitierte Seite nicht beweist, dass jeder Fakt darauf übernommen wurde.",
+        "Unzitierte Quellen werden nicht als Lint-Fehler oder Release-Hindernis dargestellt.",
+        "Ohne Bestätigung wird keine Seite angelegt und keine Quelle zurückgezogen."
+      ]
+    },
+    {
+      "id": 39,
+      "prompt": "Der Lint warnt: 'locator src-…@page=7 does not resolve … the extraction marks pages 1-4'. Was mache ich damit?",
+      "expected_output": "Der Skill erklärt, dass der Claim auf eine Seite zeigt, die die registrierte Extraktion nicht enthält, sucht die Stelle in der Quelle, schlägt einen auflösbaren Locator auf denselben Beleg oder eine neue Extraktion vor und korrigiert erst nach Bestätigung über einen Seiten-Batch.",
+      "files": [],
+      "expectations": [
+        "Die Quelle wird nicht verändert, damit der Locator passt.",
+        "Der vorgeschlagene Locator hat eine kanonische Form (page= oder section=) und zeigt auf denselben Beleg.",
+        "Der Skill ersetzt den Locator nicht durch document, eine Titelüberschrift oder eine ungeprüfte Schreibweise wie 'S. 7', um die Warnung loszuwerden.",
+        "Die Korrektur läuft über page_batch.py plan/apply; der Claim behält seine ID.",
+        "Der Skill sagt, dass die Warnung den Release nicht blockiert."
+      ]
+    },
+    {
+      "id": 40,
+      "prompt": "Ein Kunde hat am Telefon gefragt: 'wie lang hab ich zeit zum kündigen wenn ich umziehe'. Das soll das Wiki immer finden.",
+      "expected_output": "Der Skill nimmt die Frage wörtlich mit author user als Auffindbarkeitsfrage auf, lässt sich den Ziel-Claim bestätigen, übergibt den Wortlaut über die Standardeingabe und prüft die Frage danach.",
+      "files": [],
+      "expectations": [
+        "Die Frage wird Zeichen für Zeichen übernommen, ohne Korrektur von Schreibung oder Satzzeichen.",
+        "Vor der Aufnahme werden Claim-Text, Claim-ID und Seite gezeigt und bestätigt.",
+        "Der Aufruf enthält --question -, --author user und --user-supplied-wording; der Wortlaut kommt als {\"query\": …} mit \\u-Escapes über die Standardeingabe.",
+        "Danach läuft findability_questions.py check, und das Ergebnis wird genannt.",
+        "Der Skill sagt, dass die Frage weder im Release noch in einem Export landet, für Leser des Wiki-Ordners aber sichtbar ist."
+      ]
+    },
+    {
+      "id": 41,
+      "prompt": "Schreib uns zehn Testfragen, mit denen wir prüfen, ob das Wiki alles findet.",
+      "expected_output": "Der Skill schreibt keine Auffindbarkeitsfragen, erklärt, warum vom Agenten formulierte Fragen nichts messen, und bietet an, Fragen von Eigentümer oder Nutzern wörtlich aufzunehmen.",
+      "files": [],
+      "expectations": [
+        "Es wird keine Frage formuliert, auch nicht als Vorschlag zur Bestätigung.",
+        "Die Begründung nennt, dass Fragen mit Blick auf die Seite sich selbst bestätigen.",
+        "Der Skill bietet an, echte Nutzerfragen, etwa aus Tickets, wörtlich und in ganzen Sätzen zu übernehmen.",
+        "findability_questions.py add wird nicht aufgerufen."
+      ]
+    },
+    {
+      "id": 42,
+      "prompt": "Der Release bricht ab: \"schema/CONCEPTS.md:84: field 'status' under heading '## Hinweise' belongs to no concept; older versions applied it to concept versorgungsunterbrechung\". Repariere das.",
+      "expected_output": "Der Skill zeigt den Abschnitt, erklärt, dass das Feld bisher still die Begriffswelt darüber verändert hat und heute keine mehr, klärt mit dem Anwender, ob es in diese Begriffswelt gehört, ob die Überschrift eine neue Begriffswelt beginnen sollte und dann eine stabile ID in Kleinbuchstaben braucht oder ob der Abschnitt nur erklärt, und ändert erst nach Bestätigung mit Snapshot.",
+      "files": [],
+      "expectations": [
+        "Der Skill nennt das Feld, seinen Wert und welche Begriffswelt es bisher verändert hat.",
+        "Nichts wird gelöscht; je nach Antwort wandert das Feld in die Begriffswelt darüber, bekommt die Überschrift eine stabile ID in Kleinbuchstaben wie '## hinweise', oder der Abschnitt rückt über die erste Begriffswelt.",
+        "Sollte die Überschrift eine eigene Begriffswelt beginnen, werden ihre Felder nicht in die Begriffswelt darüber verschoben, wo sie deren Preferred, Aliases oder Status überschreiben würden.",
+        "Vor der Änderung entsteht ein Snapshot; danach laufen Lint und Release.",
+        "Die Änderung steht in meta/changes.md."
+      ]
     }
   ]
 }

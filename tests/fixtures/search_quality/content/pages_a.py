@@ -1,0 +1,157 @@
+# -*- coding: utf-8 -*-
+"""Concept pages, part A."""
+from .dsl import C, page
+
+page("wiki/concepts/netzentgelt.md", "Netzentgelt",
+     "Entgelt für die Nutzung des Stromnetzes samt Abgaben und Umlagen im Netzgebiet Lindenau 2026.",
+     concepts=["netzentgelt"], cluster="netz-messung", gt="p",
+     body=[
+"## Einordnung",
+"Das Netzentgelt ist der Teil des Strompreises, den der Lieferant an den Netzbetreiber weiterreicht. Es wird jährlich neu festgelegt und ist für alle Lieferanten im Netzgebiet gleich hoch. Zuständig ist die [[wiki/entities/lindenau-netz|Lindenau Netz GmbH]].",
+C("Das Netzentgelt ist das Entgelt, das der Netzbetreiber für die Entnahme von Strom aus seinem Netz erhebt.", "S3@page=1", kind="definition"),
+C("Für Kunden in Niederspannung ohne Leistungsmessung beträgt das Netzentgelt 2026 netto 62,00 EUR Grundpreis pro Jahr und 9,84 ct/kWh Arbeitspreis.", "S3@page=1", label="ne2026", replaces="ne2025"),
+C("Im Jahr 2025 lag der Arbeitspreis des Netzentgelts für Kunden ohne Leistungsmessung bei 9,12 ct/kWh.", "S3@page=1", status="superseded", label="ne2025"),
+"## Kunden mit Leistungsmessung",
+C("Bei Leistungsmessung und weniger als 2.500 Benutzungsstunden gelten ein Leistungspreis von 28,40 EUR/kW und ein Arbeitspreis von 6,12 ct/kWh.", "S3@page=1"),
+C("Ab 2.500 Benutzungsstunden gelten ein Leistungspreis von 142,60 EUR/kW und ein Arbeitspreis von 1,55 ct/kWh.", "S3@page=1"),
+"## Abgaben und Umlagen",
+"Zusammen mit dem Netzentgelt werden staatlich veranlasste Preisbestandteile erhoben.",
+C("Die KWKG-Umlage beträgt 2026 0,446 ct/kWh und die Offshore-Netzumlage 0,941 ct/kWh.", "S3@page=2"),
+C("Der Aufschlag für besondere Netznutzung beträgt 2026 1,559 ct/kWh.", "S3@page=2"),
+C("Die Stromsteuer beträgt 2,05 ct/kWh.", "S3@page=2"),
+C("Die Konzessionsabgabe beträgt für Tarifkunden 1,59 ct/kWh und für Sondervertragskunden 0,11 ct/kWh.", "S3@page=2"),
+C("Die Höhe der Konzessionsabgabe richtet sich nach der Einwohnerzahl der Gemeinde; Lindenau hat rund 85.000 Einwohner.", "S3@page=2"),
+"## Veröffentlichung und Gewicht",
+C("Der Netzbetreiber veröffentlicht die Entgelte vorläufig zum 15. Oktober des Vorjahres und endgültig zum 1. Januar (§ 20 Abs. 1 EnWG).", "S3@page=1"),
+C("Die Netzentgelte machen rund 28 Prozent des Strompreises eines Haushaltskunden aus.", "S3@page=1"),
+"Vergünstigungen für steuerbare Geräte beschreibt [[wiki/concepts/steuerbare-verbrauchseinrichtung]].",
+     ])
+
+page("wiki/concepts/grundversorgung.md", "Grundversorgung",
+     "Gesetzlicher Anspruch jedes Haushaltskunden auf Strombelieferung durch den Grundversorger.",
+     concepts=["grundversorgung"], cluster="vertrag", gt="vkf",
+     body=[
+"## Kern",
+"Die Grundversorgung sichert, dass kein Haushalt ohne Stromlieferanten bleibt. Sie ist kein Tarif, den man aktiv wählen muss, sondern ein gesetzliches Auffangnetz mit eigenem Vertrag und eigenen Regeln. Im Vergleich zum Sondervertrag ist sie flexibler, aber meist teurer; siehe [[wiki/comparisons/grundversorgung-und-sondervertrag]].",
+C("Jeder Haushaltskunde hat Anspruch auf Grundversorgung mit Strom in Niederspannung (§ 36 Abs. 1 EnWG).", "S2@page=1"),
+C("Grundversorger ist das Unternehmen, das im Netzgebiet die meisten Haushaltskunden beliefert; der Netzbetreiber stellt dies alle drei Jahre zum 1. Juli fest.", "S2@page=1"),
+C("Im Netzgebiet Lindenau ist die Stadtwerke Lindenau Vertrieb GmbH Grundversorger; ihr Tarif dafür heißt LindenStrom Basis.", "S2@page=1"),
+"## Vertrag und Beendigung",
+C("Der Grundversorgungsvertrag kommt auch ohne ausdrückliche Erklärung zustande, sobald ein Kunde Strom aus dem Netz entnimmt (§ 2 Abs. 2 StromGVV).", "S2@page=1"),
+C("In der Grundversorgung gibt es keine Mindestlaufzeit; der Kunde kann mit einer Frist von zwei Wochen kündigen (§ 20 Abs. 1 StromGVV).", "S2@page=1"),
+C("Der Grundversorger darf die Belieferung nur ablehnen, wenn sie ihm wirtschaftlich nicht zumutbar ist (§ 36 Abs. 1 Satz 4 EnWG).", "S2@page=1"),
+C("Eine Ablehnung wegen schlechter Bonität findet in der Grundversorgung nicht statt, weil Kontrahierungszwang besteht.", "S6@page=1"),
+"Wer ohne jeden Vertrag Strom bezieht, fällt zunächst in die [[wiki/concepts/ersatzversorgung]].",
+     ])
+
+page("wiki/concepts/ersatzversorgung.md", "Ersatzversorgung",
+     "Zeitlich begrenzte Belieferung durch den Grundversorger, wenn kein Liefervertrag zugeordnet werden kann.",
+     cluster="vertrag", gt="vf",
+     body=[
+"## Kern",
+"Die Ersatzversorgung überbrückt Lücken, etwa wenn ein Lieferant ausfällt oder ein Wechsel scheitert. Sie ist von der [[wiki/concepts/grundversorgung]] zu unterscheiden: Dort besteht ein Vertrag, hier nur ein gesetzliches Schuldverhältnis auf Zeit.",
+C("Entnimmt ein Letztverbraucher Strom, ohne dass die Entnahme einem Liefervertrag zugeordnet werden kann, gilt der Strom als vom Grundversorger geliefert (§ 38 EnWG).", "S2@page=2", kind="definition"),
+C("Die Ersatzversorgung endet, sobald ein Liefervertrag besteht, spätestens aber drei Monate nach ihrem Beginn.", "S2@page=2"),
+C("Für Haushaltskunden werden seit der EnWG-Novelle 2022 gesonderte Ersatzversorgungspreise ausgewiesen, die zum 1. und zum 15. eines Kalendermonats angepasst werden dürfen.", "S2@page=2"),
+"## Typische Auslöser",
+C("Scheitert ein Lieferantenwechsel, wird die Marktlokation dem Grundversorger zugeordnet, der im Rahmen der Ersatzversorgung liefert.", "S4@page=2"),
+C("Meldet sich ein einziehender Kunde verspätet an, wird er für die Zwischenzeit vom Grundversorger beliefert.", "S4@page=3"),
+"Im Kundengespräch sollte klar gesagt werden, dass niemand wegen eines gescheiterten Wechsels im Dunkeln sitzt, die Ersatzversorgung aber keine Dauerlösung ist. Nach drei Monaten ohne neuen Vertrag geht sie in die Grundversorgung über.",
+     ])
+
+page("wiki/concepts/abschlagszahlung.md", "Abschlagszahlung",
+     "Monatliche Vorauszahlung auf den voraussichtlichen Jahresverbrauch; Berechnung, Fälligkeit und Anpassung.",
+     concepts=["abschlag"], cluster="abrechnung", gt="p",
+     body=[
+"## Kern",
+"Mit Abschlägen verteilt der Kunde seine Stromkosten gleichmäßig über das Jahr. Die tatsächliche Abrechnung folgt mit der [[wiki/topics/jahresverbrauchsabrechnung]].",
+C("Der Kunde leistet elf monatliche Abschlagszahlungen je Abrechnungsjahr.", "S1@page=3"),
+C("Der Abschlag ergibt sich aus der Jahresverbrauchsprognose mal Arbeitspreis zuzüglich zwölf Monatsgrundpreisen, geteilt durch elf.", "S5@page=1"),
+C("Der zwölfte Monat bleibt abschlagsfrei, weil in ihm die Jahresverbrauchsabrechnung erstellt wird.", "S5@page=1"),
+"## Prognose bei Neukunden",
+C("Ohne bekannten Vorjahresverbrauch richtet sich die Prognose nach der Haushaltsgröße.", "S5@page=1"),
+C("Für einen Ein-Personen-Haushalt werden 1.500 kWh und für zwei Personen 2.500 kWh pro Jahr angesetzt.", "S5@page=1"),
+C("Für drei Personen werden 3.500 kWh pro Jahr angesetzt.", "S5@page=1"),
+"## Anpassung",
+C("Kunden können ihren Abschlag im Kundenportal MeinLindenau jederzeit selbst um bis zu 20 Prozent erhöhen oder senken.", "S5@page=1"),
+C("Nach einer Preisänderung passt das Abrechnungssystem den Abschlag automatisch an und informiert den Kunden schriftlich.", "S5@page=1"),
+C("Für eine Senkung um mehr als 20 Prozent wird ein aktueller Zählerstand verlangt.", "S5@page=1"),
+C("Für einen Vier-Personen-Haushalt werden 4.250 kWh pro Jahr angesetzt.", "S5@page=1"),
+C("Die Abschläge sind nach Wahl des Kunden zum 1. oder zum 15. eines Monats fällig.", "S1@page=3"),
+C("Ein Guthaben aus der Abrechnung wird binnen zwei Wochen ausgezahlt oder mit dem nächsten Abschlag verrechnet.", "S1@page=3"),
+"Nicht zu verwechseln ist der Abschlag mit der Vorauszahlung als Sicherungsmittel, siehe [[wiki/comparisons/abschlagszahlung-und-vorauszahlung]].",
+     ])
+
+page("wiki/concepts/kuendigungsfrist.md", "Kündigungsfrist",
+     "Fristen und Form der ordentlichen Kündigung von Stromlieferverträgen.",
+     cluster="vertrag", gt="vkf",
+     body=[
+"## Kern",
+"Die Kündigungsfrist bestimmt, wie lange vor dem gewünschten Vertragsende die Kündigung zugehen muss. Sie hängt davon ab, ob ein Sondervertrag oder die Grundversorgung vorliegt und ob die Erstlaufzeit noch läuft.",
+C("Im Sondervertrag beträgt die Kündigungsfrist einen Monat zum Ende der Erstlaufzeit.", "S1@page=1"),
+C("Nach der Verlängerung kann der Sondervertrag jederzeit mit einer Frist von einem Monat gekündigt werden.", "S1@page=1"),
+C("In der Grundversorgung beträgt die Kündigungsfrist zwei Wochen (§ 20 Abs. 1 StromGVV).", "S2@page=1"),
+"## Form und Bestätigung",
+C("Die Kündigung bedarf der Textform.", "S1@page=1"),
+C("Der Lieferant bestätigt die Kündigung innerhalb einer Woche nach Zugang und nennt dabei das Vertragsende (§ 41b Abs. 1 EnWG).", "S1@page=1"),
+"## Praxis",
+"Wechselt der Kunde zu einem anderen Lieferanten, übernimmt in der Regel der neue Lieferant die Kündigung; siehe [[wiki/topics/lieferantenwechsel]]. Für Kündigungen aus besonderem Anlass gilt das [[wiki/concepts/sonderkuendigungsrecht]]. Welche Fristen für ältere Verträge galten, steht unter [[wiki/topics/kuendigungsfristen-alte-rechtslage]].",
+     ])
+
+page("wiki/concepts/sonderkuendigungsrecht.md", "Sonderkündigungsrecht",
+     "Außerordentliche Kündigung bei Preisanpassung, Umzug oder Tarifeinstellung.",
+     cluster="vertrag", gt="vkf",
+     body=[
+"## Kern",
+"Das Sonderkündigungsrecht erlaubt dem Kunden, sich unabhängig von Laufzeit und regulärer Frist vom Vertrag zu lösen, wenn sich wesentliche Bedingungen ändern.",
+C("Bei einer Preisanpassung kann der Kunde den Vertrag ohne Einhaltung einer Frist zum Zeitpunkt des Wirksamwerdens der Änderung kündigen (§ 41 Abs. 5 EnWG).", "S1@page=2"),
+C("In der Mitteilung über die Preisanpassung muss auf das Sonderkündigungsrecht hingewiesen werden.", "S1@page=2"),
+C("Bei Änderungen der Umsatzsteuer besteht kein Sonderkündigungsrecht.", "S1@page=2"),
+C("Kann der Lieferant nach einem Umzug die neue Entnahmestelle nicht beliefern, darf der Kunde mit einer Frist von sechs Wochen außerordentlich kündigen (§ 41b Abs. 5 EnWG).", "S1@page=4"),
+C("Auch in der Grundversorgung kann der Kunde bei einer Preisänderung ohne Frist zum Wirksamwerden kündigen (§ 5 Abs. 3 StromGVV).", "S2@page=2"),
+C("Die Bestandskunden des eingestellten Tarifs LindenStrom Klassik erhielten bei der Überführung in Fix12 ein Sonderkündigungsrecht.", "S9@page=2"),
+"Die reguläre Kündigung beschreibt [[wiki/concepts/kuendigungsfrist]], den Auslöser Preisänderung [[wiki/concepts/preisanpassung]].",
+     ])
+
+page("wiki/concepts/preisanpassung.md", "Preisanpassung",
+     "Regeln für Änderungen von Grund- und Arbeitspreis: Ankündigung, Fristen und Kundenrechte.",
+     cluster="preise", gt="pfk",
+     body=[
+"## Kern",
+"Eine Preisanpassung ändert den Grundpreis oder den Arbeitspreis eines laufenden Vertrags. Sie kann nach oben oder nach unten gehen und ist nur wirksam, wenn der Lieferant sie rechtzeitig und transparent mitteilt.",
+C("Im Sondervertrag teilt der Lieferant Haushaltskunden eine Preisanpassung spätestens einen Monat vor dem geplanten Wirksamwerden in Textform mit.", "S1@page=2"),
+C("In der Grundversorgung werden Preisänderungen öffentlich bekannt gegeben und dem Kunden mindestens sechs Wochen vor dem Wirksamwerden brieflich mitgeteilt (§ 5 Abs. 2 StromGVV).", "S2@page=2"),
+C("Änderungen der Umsatzsteuer werden ohne Ankündigung an den Kunden weitergegeben.", "S1@page=2"),
+C("Kunden im Tarif Fix12 sind während der laufenden Preisgarantie von der Anpassung zum 1. April 2026 nicht betroffen.", "S9@page=3"),
+"## Folgen für den Kunden",
+"Jede Anpassung löst das [[wiki/concepts/sonderkuendigungsrecht]] aus. Außerdem wird der Abschlag neu berechnet, siehe [[wiki/concepts/abschlagszahlung]]. Die aktuelle Runde ist unter [[wiki/topics/preisanpassung-april-2026]] dokumentiert, die vorherige unter [[wiki/topics/preisanpassung-januar-2025]]. Wie weit ein Festpreis schützt, erklärt [[wiki/concepts/preisgarantie]].",
+     ])
+
+page("wiki/concepts/vertragslaufzeit.md", "Vertragslaufzeit und Verlängerung",
+     "Erstlaufzeit, stillschweigende Verlängerung und Laufzeiten der einzelnen Tarife.",
+     cluster="vertrag", gt="vkf",
+     body=[
+"## Kern",
+"Die Vertragslaufzeit legt fest, wie lange Kunde und Lieferant mindestens aneinander gebunden sind. Nach der Erstlaufzeit läuft der Vertrag weiter, ohne dass eine neue feste Bindung entsteht.",
+C("Die Erstlaufzeit beträgt im Tarif LindenStrom Fix12 zwölf Monate und im Tarif LindenStrom Flex einen Monat.", "S1@page=1"),
+C("Wird der Vertrag nicht zum Ende der Erstlaufzeit gekündigt, verlängert er sich auf unbestimmte Zeit.", "S1@page=1"),
+C("In der Grundversorgung gibt es keine Mindestlaufzeit.", "S2@page=1"),
+C("Der eingestellte Tarif LindenStrom Klassik hatte eine Erstlaufzeit von 24 Monaten.", "S9@page=2"),
+"## Beratungshinweis",
+"Kunden fragen oft, ob sie nach einem Jahr wieder für ein volles Jahr gebunden sind. Das ist nicht der Fall: Nach der Verlängerung gilt nur noch die einmonatige [[wiki/concepts/kuendigungsfrist]]. Die frühere Verlängerung um jeweils zwölf Monate ist unter [[wiki/topics/kuendigungsfristen-alte-rechtslage]] beschrieben.",
+     ])
+
+page("wiki/concepts/preisgarantie.md", "Preisgarantie",
+     "Umfang und Grenzen der eingeschränkten Preisgarantie in den Festpreistarifen.",
+     cluster="preise", gt="p",
+     body=[
+"## Kern",
+"Eine Preisgarantie sichert dem Kunden für einen festen Zeitraum zu, dass bestimmte Preisbestandteile nicht steigen. Die Stadtwerke Lindenau geben nur eine eingeschränkte Garantie; eine vollständige Garantie auf den Endpreis gibt es in keinem Tarif.",
+C("Im Tarif LindenStrom Fix12 gilt für die ersten zwölf Monate eine eingeschränkte Preisgarantie.", "S1@page=2"),
+C("Die Preisgarantie umfasst die Kosten für Energiebeschaffung, Vertrieb und Netzentgelte.", "S1@page=2"),
+C("Von der Preisgarantie ausgenommen sind die Stromsteuer, die Umsatzsteuer sowie neu eingeführte staatliche Umlagen.", "S1@page=2"),
+C("Der Tarif LindenStrom Öko hat dieselbe Laufzeit und Preisgarantie wie Fix12.", "S9@page=1"),
+C("Im dynamischen Tarif LindenStrom Flex gibt es keine Preisgarantie.", "S9@page=1"),
+"## Abgrenzung",
+"Steigt ein ausgenommener Bestandteil, darf der Lieferant auch während der Garantie den Preis ändern; dann gelten die Regeln der [[wiki/concepts/preisanpassung]]. Nach Ablauf der zwölf Monate ist der Vertrag ein gewöhnlicher Sondervertrag ohne Preisbindung.",
+     ])

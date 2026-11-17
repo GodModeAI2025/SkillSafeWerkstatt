@@ -23,17 +23,7 @@ from test_lifecycle import SOURCE_MARKDOWN, add_cluster_and_concept, curate_page
 
 def build_curated_wiki(wiki) -> None:
     """Reproduce the lifecycle fixture: one source, one evidence-linked page."""
-    extract = wiki.root / "netzentgelte.md"
-    extract.write_text(SOURCE_MARKDOWN, encoding="utf-8")
-    registered = json.loads(
-        wiki.locked(
-            "register_source.py",
-            "--markdown-file", str(extract),
-            "--title", "Netzentgelte 2026",
-            "--original-ref", "intern/netzentgelte-2026.pdf",
-            "--content-language", "de",
-        ).stdout
-    )["source"]
+    registered = wiki.register_source(SOURCE_MARKDOWN, "Netzentgelte 2026", "intern/netzentgelte-2026.pdf")
     add_cluster_and_concept(wiki)
     index = wiki.read("wiki/index.md")
     wiki.write(

@@ -4,6 +4,10 @@
 The wiki deliberately uses a portable YAML subset: one top-level mapping whose
 values are scalars or flat scalar lists. Unsupported YAML is rejected with a
 line-specific error instead of being guessed or silently discarded.
+
+Both skills carry this file byte for byte (tests/test_packaging.py,
+SharedModuleParity), so the read-only skill stays standalone and every
+exported knowledge skill parses exactly like the maintenance skill.
 """
 
 from __future__ import annotations

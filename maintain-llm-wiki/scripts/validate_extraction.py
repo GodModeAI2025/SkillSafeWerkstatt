@@ -6,13 +6,20 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
+# Siblings are imported from this folder even where the interpreter leaves it
+# off sys.path: python -I, python -P, PYTHONSAFEPATH=1.
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
 import secret_screen
+import source_coverage
 
 
-PAGE_MARKER = re.compile(r"<!--\s*(?:page|slide)\s*:\s*[^>]+-->", re.IGNORECASE)
 SUSPICIOUS_HEADING = re.compile(r"^#{1,6}\s+#+(?:\s+#+)*\s*$")
 CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
@@ -48,7 +55,28 @@ def assess(path: Path, source_type: str = "unknown") -> dict[str, Any]:
     fences = sum(1 for line in lines if line.strip().startswith("```"))
     if fences % 2:
         errors.append("extraction contains an unclosed fenced code block")
-    markers = len(PAGE_MARKER.findall(text))
+    # Lint, coverage and the reading views read a marker only on a line of its
+    # own, so an inline marker would pass here and later resolve no locator.
+    # Fences follow the scan's rule (``` or ~~~), as coverage does.
+    markers = 0
+    inline_markers: list[int] = []
+    fenced = False
+    for index, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if source_coverage.FENCE.match(line):
+            fenced = not fenced
+            continue
+        if fenced or "<!--" not in stripped:
+            continue
+        if source_coverage.PAGE_MARKER.match(stripped):
+            markers += 1
+        elif source_coverage.ANY_MARKER.search(stripped):
+            inline_markers.append(index)
+    if inline_markers:
+        warnings.append(
+            "page or slide markers must stand on a line of their own: lines "
+            + ", ".join(str(number) for number in inline_markers[:10])
+        )
     if source_type.casefold() in {"pdf", "presentation", "slides"} and markers == 0:
         warnings.append("page or slide markers are missing from a paged source extraction")
     table_dividers = sum(1 for line in lines if re.fullmatch(r"\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*", line))
@@ -66,6 +94,7 @@ def assess(path: Path, source_type: str = "unknown") -> dict[str, Any]:
             "lines": len(lines),
             "longest_line": longest,
             "page_or_slide_markers": markers,
+            "inline_page_or_slide_markers": len(inline_markers),
             "table_like_rows": table_rows,
         },
     }
@@ -82,4 +111,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Windows pipes default to the ANSI code page; output is UTF-8 everywhere.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors=_stream.errors)
     raise SystemExit(main())

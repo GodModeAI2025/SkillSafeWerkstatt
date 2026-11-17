@@ -293,17 +293,7 @@ class Guards(unittest.TestCase):
 
 def curate_english_page(wiki: Wiki, language: str) -> None:
     """One sourced page under `wiki/concepts/`, so a directory index is generated."""
-    extract = wiki.root / "source.md"
-    extract.write_text(SOURCE_MARKDOWN, encoding="utf-8")
-    record = json.loads(
-        wiki.locked(
-            "register_source.py",
-            "--markdown-file", str(extract),
-            "--title", "Grid fees 2026",
-            "--original-ref", "internal/grid-fees-2026.pdf",
-            "--content-language", "de",
-        ).stdout
-    )["source"]
+    record = wiki.register_source(SOURCE_MARKDOWN, "Grid fees 2026", "internal/grid-fees-2026.pdf")
     wiki.write(
         "schema/CLUSTERS.md",
         wiki.read("schema/CLUSTERS.md").rstrip()
@@ -316,7 +306,6 @@ def curate_english_page(wiki: Wiki, language: str) -> None:
         "- Definition: Charge for using the electricity grid\n- Aliases: Netzentgelt | network charge\n",
     )
     claim_id = json.loads(wiki.locked("claim_id.py", "--count", "1").stdout)["claim_ids"][0]
-    relative = "wiki/concepts/grid-fee.md"
     page = f"""---
 id: "concept-grid-fee"
 title: "Grid fee"
@@ -353,21 +342,8 @@ sources: {record['source_id']}@page=1
 The grid operator sets the grid fees every year.
 <!-- /claim -->
 """
-    staging = wiki.root / "staging"
-    staged = staging / relative
-    staged.parent.mkdir(parents=True, exist_ok=True)
-    staged.write_text(page, encoding="utf-8")
     wiki.write("wiki/index.md", wiki.read("wiki/index.md").rstrip() + "\n- [[wiki/concepts/grid-fee|Grid fee]]\n")
-    plan_path = wiki.root / "batch.json"
-    wiki.locked(
-        "page_batch.py", "plan",
-        "--staging-dir", str(staging), "--paths-json", json.dumps([relative]), "--output", str(plan_path),
-    )
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    wiki.locked(
-        "page_batch.py", "apply",
-        "--staging-dir", str(staging), "--plan-file", str(plan_path), "--expect-plan-sha256", plan["plan_sha256"],
-    )
+    wiki.apply_pages({"wiki/concepts/grid-fee.md": page})
     wiki.rebuild()
 
 

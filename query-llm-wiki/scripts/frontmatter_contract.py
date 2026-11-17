@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
-"""Strict, dependency-free frontmatter contract shared by SkillSafeWerkstatt helpers."""
+"""Strict, dependency-free frontmatter contract shared by SkillSafeWerkstatt helpers.
+
+The wiki deliberately uses a portable YAML subset: one top-level mapping whose
+values are scalars or flat scalar lists. Unsupported YAML is rejected with a
+line-specific error instead of being guessed or silently discarded.
+
+Both skills carry this file byte for byte (tests/test_packaging.py,
+SharedModuleParity), so the read-only skill stays standalone and every
+exported knowledge skill parses exactly like the maintenance skill.
+"""
 
 from __future__ import annotations
-
-# This file stays behaviorally aligned with the maintenance parser. It is
-# duplicated so the read-only skill remains standalone.
 
 import hashlib
 import json
@@ -22,7 +28,7 @@ RESERVED_KEYS = {"__proto__", "constructor", "prototype"}
 
 
 class FrontmatterError(ValueError):
-    pass
+    """Raised when a document is outside the canonical frontmatter subset."""
 
 
 @dataclass(frozen=True)
@@ -44,7 +50,12 @@ def sha256_text(value: str) -> str:
 
 
 def is_safe_property_name(key: object) -> bool:
-    return isinstance(key, str) and bool(KEY_RE.fullmatch(key)) and key.strip() == key and key not in RESERVED_KEYS
+    return (
+        isinstance(key, str)
+        and bool(KEY_RE.fullmatch(key))
+        and key.strip() == key
+        and key not in RESERVED_KEYS
+    )
 
 
 def require_safe_property_name(key: object) -> str:
@@ -146,6 +157,7 @@ def parse_document(text: str, source: str = "<memory>", *, require_frontmatter: 
         if require_frontmatter:
             raise _line_error(source, 1, "missing YAML frontmatter")
         return ParsedDocument({}, text, "", (), newline, False)
+
     end = -1
     for index, line in enumerate(lines[1:], 1):
         if line.rstrip("\r\n") == "---":
@@ -153,6 +165,7 @@ def parse_document(text: str, source: str = "<memory>", *, require_frontmatter: 
             break
     if end < 0:
         raise _line_error(source, 1, "unclosed YAML frontmatter")
+
     data: dict[str, Any] = {}
     comments: list[str] = []
     current_list: Optional[str] = None
@@ -189,13 +202,18 @@ def parse_document(text: str, source: str = "<memory>", *, require_frontmatter: 
         else:
             data[key] = parse_scalar(raw_value, source, index)
             current_list = None
+
     frontmatter = "".join(lines[: end + 1])
     body = "".join(lines[end + 1 :])
     return ParsedDocument(data, body, frontmatter, tuple(comments), newline, True)
 
 
 def parse_file(path: Path, *, require_frontmatter: bool = False) -> ParsedDocument:
-    return parse_document(path.read_text(encoding="utf-8"), path.as_posix(), require_frontmatter=require_frontmatter)
+    return parse_document(
+        path.read_text(encoding="utf-8"),
+        path.as_posix(),
+        require_frontmatter=require_frontmatter,
+    )
 
 
 def value_type(value: Any) -> str:
@@ -252,4 +270,5 @@ def dump_frontmatter(data: dict[str, Any], comments: Iterable[str] = (), newline
 
 
 def compose_document(document: ParsedDocument, data: dict[str, Any]) -> str:
-    return dump_frontmatter(data, document.comments, document.newline) + document.body
+    body = document.body
+    return dump_frontmatter(data, document.comments, document.newline) + body

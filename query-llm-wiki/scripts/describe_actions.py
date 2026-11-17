@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import sys
 
 
 CATALOG = {
@@ -21,10 +22,32 @@ CATALOG = {
         {"id": "inspect-identity", "helper": "identity_status.py", "description": "Validate and return only the allowlisted confirmed SOUL and content-policy fields.", "writes": False, "destructive": False, "parameters": []},
         {"id": "assess-quality", "helper": "assess_quality.py", "description": "Assess technical state, review freshness, open questions, and snapshot age.", "writes": False, "destructive": False, "parameters": [{"name": "expect_manifest_sha256", "type": "sha256", "required": False}]},
         {"id": "inventory-frontmatter", "helper": "inventory_wiki.py", "description": "Return property counts, observed types, samples, and schema drift from a verified release.", "writes": False, "destructive": False, "parameters": [{"name": "expect_manifest_sha256", "type": "sha256", "required": False}]},
-        {"id": "search", "helper": "search_wiki.py", "description": "Search claims and sources with concept expansion and an optional validated metadata selector.", "writes": False, "destructive": False, "parameters": [{"name": "query", "type": "string", "required": True}, {"name": "filter_json", "type": "selector", "required": False}, {"name": "include_sources", "type": "boolean", "required": False}, {"name": "include_history", "type": "boolean", "required": False}]},
+        {
+            "id": "search",
+            "helper": "search_wiki.py",
+            "description": "Search claims and sources with concept expansion, word forms and disclosed compound and typo heuristics (match_rules per result), optional agent reformulations searched in the same call (pages only they return come back separately in reformulation_results; each result names the searches that found it in found_by), and an optional validated metadata selector; a coverage block counts truncated matches, withheld claims, word forms, and unmatched terms per search; with exhaustive, the same call also ranks sources and scans every passage of the wiki pages, meta/questions.md and the source Markdown within a fixed 100,000-character evidence budget, and every report carries absence_check (complete, reasons, next_steps) and search_record.",
+            "writes": False,
+            "destructive": False,
+            "requires_one_of": ["query", "request"],
+            "parameters": [
+                {"name": "query", "type": "string", "required": False, "exclusive_with": ["request"]},
+                {"name": "also", "type": "string, repeatable, at most 4, each at most 200 characters", "required": False, "exclusive_with": ["request"]},
+                {"name": "request", "type": "'-': one JSON object {query, also?, filter?} on standard input; filter replaces filter_json", "required": False, "exclusive_with": ["query", "also"]},
+                {"name": "limit", "type": "integer 1-100 (caps results and reformulation_results separately)", "required": False},
+                {"name": "filter_json", "type": "selector", "required": False},
+                {"name": "include_sources", "type": "boolean", "required": False},
+                {"name": "include_history", "type": "boolean", "required": False},
+                {"name": "exhaustive", "type": "boolean; also ranks sources and scans every passage of the wiki pages, meta/questions.md and the source Markdown (with include_history also the snapshots) for all words of all searches (at most 100,000 printed characters of hits); required before stating that the wiki holds nothing on a question", "required": False},
+                {"name": "expect_manifest_sha256", "type": "sha256", "required": False},
+            ],
+        },
     ],
 }
 
 
 if __name__ == "__main__":
+    # Windows pipes default to the ANSI code page; output is UTF-8 everywhere.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors=_stream.errors)
     print(json.dumps(CATALOG, ensure_ascii=False, indent=2))

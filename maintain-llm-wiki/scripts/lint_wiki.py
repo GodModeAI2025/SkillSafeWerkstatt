@@ -6,9 +6,16 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Optional
+
+# Siblings are imported from this folder even where the interpreter leaves it
+# off sys.path: python -I, python -P, PYTHONSAFEPATH=1.
+_SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
 
 from frontmatter_contract import FrontmatterError, compose_document, parse_file
 from identity_contract import validate_identity_files
@@ -19,7 +26,9 @@ from design_contract import CLUSTER_COLORS
 
 import freshness
 import navigation
+import search_core
 import secret_screen
+import source_coverage
 import sync_artifacts
 import trust_contract
 
@@ -84,10 +93,14 @@ CLAIM_BLOCK = re.compile(
 )
 CLAIM_ID_RE = re.compile(r"^clm-[0-9a-f]{16}$")
 CLAIM_SOURCE_RE = re.compile(r"^(src-[0-9a-f]{16})@(.+)$")
-CLUSTER_HEADING = re.compile(r"^##\s+([a-z0-9]+(?:-[a-z0-9]+)*)\s*$")
-CLUSTER_FIELD = re.compile(r"^-\s+([A-Za-z]+):\s*(.*)$")
-CONCEPT_HEADING = CLUSTER_HEADING
-CONCEPT_FIELD = CLUSTER_FIELD
+#: The documented fields of a concept and of a cluster. An orphaned field line
+#: (below a heading that ended the definition) with one of these keys is an
+#: error, because older versions applied it to the definition above.
+CONCEPT_SHAPE = ("preferred", "status", "definition", "aliases", "broader", "related")
+CLUSTER_SHAPE = ("label", "color", "status", "purpose", "directory", "includes", "excludes")
+#: The field that names a definition. Orphaned below a level-two heading, it shows
+#: that the heading was meant to start a definition but holds no valid ID.
+NAMING_FIELD = {"concept": "preferred", "cluster": "label"}
 DEFAULT_CLUSTER_COLORS = set(CLUSTER_COLORS)
 
 
@@ -214,31 +227,63 @@ def load_quality_reviews(path: Path, errors: list[str]) -> dict[str, dict[str, A
     return latest
 
 
+def suggested_id(heading: str) -> str:
+    """A stable lowercase ID made from a heading's words for a lint hint, or "" when none can be made."""
+    words = re.sub(r"\s+#+\s*$", "", heading.lstrip("#"))
+    return re.sub(r"[^a-z0-9]+", "-", search_core.normalized(words)).strip("-")
+
+
+def schema_blocks(path: Path, relative: str, noun: str, shape: tuple[str, ...], errors: list[str]) -> dict[str, dict[str, str]]:
+    """The definitions of one schema file through the shared parser, with its line errors.
+
+    Reports duplicate IDs and orphaned fields of the documented shape, sorted by
+    line. A repeated ID replaces the earlier definition, as the search reads it.
+    Any other orphan (a prose list such as `- Hinweis: ...` below `## Notes`) is
+    not reported: the old parse attached it as a field nobody reads.
+    """
+    blocks, orphans = search_core.schema_definitions(path.read_text(encoding="utf-8"))
+    found: list[tuple[int, str]] = []
+    definitions: dict[str, dict[str, str]] = {}
+    for block in blocks:
+        if block["id"] in definitions:
+            found.append((block["line"], f"{relative}:{block['line']}: duplicate {noun} ID {block['id']}"))
+        definitions[block["id"]] = {"id": block["id"], **block["fields"]}
+    # A level-two heading with the naming field below it was meant as a definition
+    # ("## Preisbestandteile"): moving its fields up would merge two definitions.
+    misnamed = {
+        (orphan["heading"], orphan["closed"]) for orphan in orphans
+        if orphan["field"] == NAMING_FIELD[noun] and orphan["heading"].startswith("## ")
+    }
+    for orphan in orphans:
+        if orphan["field"] in shape:
+            heading, closed = orphan["heading"], orphan["closed"]
+            slug = suggested_id(heading)
+            example = f"such as '## {slug}'" if slug else "(lowercase letters, digits, and hyphens)"
+            if (heading, closed) in misnamed:
+                advice = (
+                    f"{heading!r} is no {noun} heading, because a {noun} needs a stable lowercase ID {example}: "
+                    f"rename the heading if it starts a new {noun}, rather than moving its fields into {noun} {closed}"
+                )
+            else:
+                advice = (
+                    f"Move it above that heading if it belongs to {noun} {closed}, rename the heading to a stable "
+                    f"lowercase ID {example} if it was meant to start a {noun}, or move the section above the "
+                    f"first {noun} if it only explains"
+                )
+            found.append((
+                orphan["line"],
+                f"{relative}:{orphan['line']}: field '{orphan['field']}' under heading {heading!r} belongs to no "
+                f"{noun}; older versions applied it to {noun} {closed}. {advice}",
+            ))
+    errors.extend(message for _, message in sorted(found, key=lambda item: item[0]))
+    return definitions
+
+
 def load_clusters(path: Path, errors: list[str], warnings: list[str]) -> dict[str, dict[str, str]]:
     if not path.is_file():
         errors.append("schema/CLUSTERS.md is missing; navigation clusters are not configured")
         return {}
-    definitions: dict[str, dict[str, str]] = {}
-    current: Optional[dict[str, str]] = None
-    fenced = False
-    for number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        line = raw_line.strip()
-        if line.startswith("```"):
-            fenced = not fenced
-            continue
-        if fenced:
-            continue
-        heading = CLUSTER_HEADING.match(line)
-        if heading:
-            cluster_id = heading.group(1)
-            if cluster_id in definitions:
-                errors.append(f"schema/CLUSTERS.md:{number}: duplicate cluster ID {cluster_id}")
-            current = {"id": cluster_id}
-            definitions[cluster_id] = current
-            continue
-        field = CLUSTER_FIELD.match(line)
-        if field and current is not None:
-            current[field.group(1).casefold()] = field.group(2).strip()
+    definitions = schema_blocks(path, "schema/CLUSTERS.md", "cluster", CLUSTER_SHAPE, errors)
 
     for cluster_id, definition in definitions.items():
         for field in ("label", "color", "status", "purpose"):
@@ -298,31 +343,149 @@ def parse_claims(path: Path, body: str, errors: list[str]) -> list[dict[str, Any
     return claims
 
 
+#: The expansion rule as CONCEPTS.md stated it before word forms were matched.
+OLD_EXPANSION_RULE = "Search may expand a query only through confirmed preferred terms and aliases."
+#: The rule as the current template states it (owner decision E1).
+EXPANSION_RULE = (
+    "Search expands a query in meaning only through confirmed preferred terms and aliases. Forms of the same "
+    "word (inflection, umlaut spelling, hyphenation) count as matches of that word. Compound parts and "
+    "one-letter typo corrections are disclosed heuristics. Reformulations by the agent are listed in the answer."
+)
+
+
+def expansion_rule_notice(path: Path) -> Optional[str]:
+    """A notice when CONCEPTS.md still states the old expansion rule, with the text that replaces it.
+
+    Only a notice: the old sentence understates what the search matches, but
+    it breaks nothing, so it never blocks a release.
+    """
+    if not path.is_file():
+        return None
+    if OLD_EXPANSION_RULE not in " ".join(path.read_text(encoding="utf-8").split()):
+        return None
+    return (
+        f"schema/CONCEPTS.md still states the old expansion rule {OLD_EXPANSION_RULE!r}; "
+        f"replace that sentence with: {EXPANSION_RULE!r}"
+    )
+
+
+#: Shape of the alias review statistic in the lint report.
+ALIAS_REVIEW_FORMAT = "lmwiki-alias-review/1"
+
+
+def common_threshold(content_pages: int) -> int:
+    """From how many content pages on an alias word counts as common: a tenth of them, at least 3."""
+    return max(3, -(-content_pages // 10))
+
+
+def alias_review(
+    target: Path,
+    wiki_files: list[Path],
+    concept_definitions: dict[str, dict[str, str]],
+    parsed: Optional[dict[Path, tuple[dict[str, Any], str]]] = None,
+) -> dict[str, Any]:
+    """Alias words that many content pages use, and page aliases given to more than one page.
+
+    A statistic for the user to confirm, never an error or a warning: an alias
+    word that occurs in many pages lifts its page or concept for unrelated
+    questions, and an alias on several pages has no single page that should
+    rank first. Words are counted with the search's own tokenization and word
+    forms (exact, fold, stem, verb), never with compound or typo heuristics.
+
+    `parsed` holds the frontmatter and body main() already read for each page.
+    A page missing from it, or one main() could not parse (no data and no
+    body), is read here exactly as the search reads it, so a page the search
+    still ranks without frontmatter counts as well.
+    """
+    content: list[tuple[str, dict[str, Any], set[str]]] = []
+    for path in wiki_files:
+        relative = path.relative_to(target).as_posix()
+        if search_core.is_navigation(relative):
+            continue
+        data, body = (parsed or {}).get(path, ({}, ""))
+        try:
+            if data or body:
+                document = search_core.parsed_document(data, body, path.stem)
+            else:
+                document = search_core.read_document(path, relative)
+        except (FrontmatterError, ValueError, OSError):
+            continue  # Already reported as a page error.
+        own = set().union(*(words for field, words in document["fields"].items() if field != "aliases"))
+        content.append((relative, document["data"], own))
+    pages = len(content)
+    threshold = common_threshold(pages)
+
+    checked: list[tuple[str, str, str, str]] = []
+    shared: dict[str, dict[str, Any]] = {}
+    for relative, data, _own in content:
+        for alias in search_core.alias_values(data.get("aliases")):
+            for word in search_core.tokens(alias):
+                checked.append((word, alias, "page", relative))
+            key = search_core.formulation_key(alias)
+            if key:
+                entry = shared.setdefault(key, {"alias": alias, "pages": set()})
+                entry["pages"].add(relative)
+    for concept_id, definition in sorted(concept_definitions.items()):
+        if definition.get("status") != "active":
+            continue
+        for alias in split_pipe(definition.get("aliases", "")):
+            words = search_core.tokens(alias, drop_stopwords=False)
+            # A concept alias of several words matches only as the whole phrase.
+            if len(words) == 1 and words[0] not in search_core.FORM_STOPWORDS and len(words[0]) > 1:
+                checked.append((words[0], alias, "concept", f"schema/CONCEPTS.md#{concept_id}"))
+
+    members = search_core.layer_members(sorted({word for word, _, _, _ in checked}), [own for _, _, own in content])
+    common: dict[tuple[str, str], dict[str, Any]] = {}
+    for word, alias, source, where in checked:
+        if (word, where) in common:
+            continue
+        found = sum(1 for _, _, own in content if not members[word].isdisjoint(own))
+        if found < threshold:
+            continue
+        common[(word, where)] = {
+            "word": word,
+            "alias": alias,
+            "source": source,
+            "where": where,
+            "pages_with_word": found,
+            "message": (
+                f"alias word '{word}' ({alias!r} on {where}) occurs in {found} of {pages} content pages; a common "
+                "word as an alias lifts this page or concept for many unrelated questions. Confirm it with the "
+                "user, narrow it, or remove it."
+            ),
+        }
+    shared_aliases = []
+    for key in sorted(shared):
+        holders = sorted(shared[key]["pages"])
+        if len(holders) < 2:
+            continue
+        alias = shared[key]["alias"]
+        shared_aliases.append(
+            {
+                "alias": alias,
+                "pages": holders,
+                "message": (
+                    f"alias {alias!r} is on {len(holders)} pages ({', '.join(holders)}); give it to the one page "
+                    "that should rank first, or move it to a concept in schema/CONCEPTS.md."
+                ),
+            }
+        )
+    return {
+        "format": ALIAS_REVIEW_FORMAT,
+        "content_pages": pages,
+        "common_threshold_pages": threshold,
+        "common_alias_words": sorted(
+            common.values(), key=lambda entry: (-entry["pages_with_word"], entry["word"], entry["where"])
+        ),
+        "shared_aliases": shared_aliases,
+    }
+
+
 def load_concepts(path: Path, errors: list[str]) -> dict[str, dict[str, str]]:
     if not path.is_file():
         errors.append("schema/CONCEPTS.md is missing; controlled concepts are not configured")
         return {}
-    definitions: dict[str, dict[str, str]] = {}
-    current: Optional[dict[str, str]] = None
-    fenced = False
-    for number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        line = raw_line.strip()
-        if line.startswith("```"):
-            fenced = not fenced
-            continue
-        if fenced:
-            continue
-        heading = CONCEPT_HEADING.match(line)
-        if heading:
-            concept_id = heading.group(1)
-            if concept_id in definitions:
-                errors.append(f"schema/CONCEPTS.md:{number}: duplicate concept ID {concept_id}")
-            current = {"id": concept_id}
-            definitions[concept_id] = current
-            continue
-        field = CONCEPT_FIELD.match(line)
-        if field and current is not None:
-            current[field.group(1).casefold()] = field.group(2).strip()
+    definitions = schema_blocks(path, "schema/CONCEPTS.md", "concept", CONCEPT_SHAPE, errors)
 
     vocabulary: dict[str, str] = {}
     for concept_id, definition in definitions.items():
@@ -556,6 +719,9 @@ def main() -> int:
     registry = load_registry(target / "meta/sources.jsonl", errors)
     cluster_definitions = load_clusters(target / "schema/CLUSTERS.md", errors, warnings)
     concept_definitions = load_concepts(target / "schema/CONCEPTS.md", errors)
+    rule_notice = expansion_rule_notice(target / "schema/CONCEPTS.md")
+    if rule_notice:
+        warnings.append(rule_notice)
     # Classify what the storage layer and the operating system put here before
     # judging any of it as wiki content.
     storage_findings = check_storage_layer(target, errors, warnings)
@@ -582,9 +748,19 @@ def main() -> int:
                 )
     source_files = sorted(sources_root.glob("*.md")) if sources_root.is_dir() else []
     source_ids_from_files: set[str] = set()
+    # The structure of each registered source for locator resolution and coverage;
+    # it keeps no source text.
+    source_records: dict[str, dict[str, Any]] = {}
 
     for path in source_files:
-        data, _ = parse_frontmatter(path, errors)
+        try:
+            source_document = parse_file(path, require_frontmatter=True)
+        except (OSError, UnicodeError, FrontmatterError) as exc:
+            errors.append(str(exc))
+            data, source_body, first_line = {}, "", 1
+        else:
+            data, source_body = source_document.data, source_document.body
+            first_line = source_document.frontmatter.count("\n") + 1
         for key in SOURCE_KEYS:
             if key not in data:
                 errors.append(f"{path}: missing source field {key}")
@@ -609,6 +785,14 @@ def main() -> int:
             errors.append(f"{path}: content_language is not a portable BCP-47-style code")
         if not portable_reference(data.get("original_ref")):
             errors.append(f"{path}: original_ref is not portable")
+        if data and isinstance(source_id, str) and source_id in registry and source_id not in source_records:
+            source_records[source_id] = {
+                "source_id": source_id,
+                "path": path.relative_to(target).as_posix(),
+                "title": str(data.get("title") or ""),
+                "status": str(data.get("status") or ""),
+                "structure": source_coverage.source_structure(source_body, first_line),
+            }
 
     for source_id, record in registry.items():
         relative = record.get("path")
@@ -644,14 +828,17 @@ def main() -> int:
     ]
     page_ids: dict[str, Path] = {}
     page_data: dict[Path, dict[str, Any]] = {}
-    page_bodies: dict[Path, str] = {}
+    parsed_pages: dict[Path, tuple[dict[str, Any], str]] = {}
     claims_by_id: dict[str, dict[str, Any]] = {}
     all_claims: list[dict[str, Any]] = []
+    # Claim entries without an entry-level error, resolved once per (source, locator).
+    citations: list[dict[str, Any]] = []
+    resolution_cache: dict[tuple[str, str], source_coverage.Resolution] = {}
 
     for path in wiki_files:
         data, body = parse_frontmatter(path, errors)
         page_data[path] = data
-        page_bodies[path] = body
+        parsed_pages[path] = (data, body)
         for key in PAGE_KEYS:
             if key not in data:
                 errors.append(f"{path}: missing page field {key}")
@@ -680,6 +867,16 @@ def main() -> int:
                 errors.append(f"{path}: {date_key} must use YYYY-MM-DD")
         if len(str(data.get("description", ""))) > 140:
             warnings.append(f"{path}: description exceeds 140 characters")
+        aliases = data.get("aliases")
+        if "aliases" in data and not isinstance(aliases, list):
+            # Search reads a single string as one alias; the list form is the contract.
+            if isinstance(aliases, str) and aliases.strip():
+                warnings.append(
+                    f"{path}: aliases is a single string, not a list; search reads it as the one alias {aliases!r}. "
+                    "Write it as a list item through a confirmed frontmatter plan"
+                )
+            else:
+                warnings.append(f"{path}: aliases must be a list of strings; search ignores this value")
 
         sources = data.get("sources", [])
         if not isinstance(sources, list):
@@ -775,6 +972,56 @@ def main() -> int:
                     errors.append(
                         f"{path}: claim {claim_id} uses {source_id}, but page frontmatter does not cite it"
                     )
+                source_record = source_records.get(source_id)
+                if source_id in registry and source_id in page_source_ids and source_record is not None:
+                    locator = source_match.group(2).strip()
+                    key = (source_id, locator)
+                    if key not in resolution_cache:
+                        resolution_cache[key] = source_coverage.resolve(
+                            source_coverage.parse_locator(locator), source_record["structure"]
+                        )
+                    citations.append({
+                        "page": path.relative_to(target).as_posix(),
+                        "page_display": str(path),
+                        "claim_id": claim_id or str(claim.get("number")),
+                        "claim_status": str(claim.get("status") or ""),
+                        "source_id": source_id,
+                        "entry": str(entry).strip(),
+                        "resolution": resolution_cache[key],
+                    })
+
+    # A canonical locator that does not resolve is a warning, never an error.
+    # Without any marker of the cited kind, one stable warning per source and
+    # kind replaces one per claim; the statistic lists the claims.
+    missing_markers: set[tuple[str, str]] = set()
+    for citation in citations:
+        resolution = citation["resolution"]
+        if resolution.state != "unresolved":
+            continue
+        source_path = source_records[citation["source_id"]]["path"]
+        if resolution.missing_markers:
+            missing_markers.add((source_path, resolution.missing_markers))
+            continue
+        warnings.append(
+            f"{citation['page_display']}: claim {citation['claim_id']} locator {citation['entry']} "
+            f"does not resolve in {source_path}: {resolution.reason}"
+        )
+    for source_path, kind in sorted(missing_markers):
+        warnings.append(
+            f"{target / source_path}: every claim locator that cites a {kind} does not resolve, because the "
+            f"extraction has no {kind} markers; cite a heading with section=, or register an extraction with "
+            f"{kind} markers (stats.source_coverage.unresolved_without_markers lists the claims)"
+        )
+    coverage_sources = [
+        source_records.get(source_id) or {
+            "source_id": source_id,
+            "path": str(registry[source_id].get("path") or ""),
+            "title": str(registry[source_id].get("title") or ""),
+            "status": "",
+            "structure": None,
+        }
+        for source_id in sorted(registry)
+    ]
 
     for claim in all_claims:
         claim_id = str(claim.get("id") or claim.get("number"))
@@ -925,6 +1172,11 @@ def main() -> int:
                     [page_data[path] for path in wiki_files if page_data.get(path)]
                 )
             ),
+            # For confirmation by the user; never an error or a warning.
+            "alias_review": alias_review(target, wiki_files, concept_definitions, parsed_pages),
+            # Maintenance data: never an error or a warning, never a release blocker,
+            # never part of meta/quality-status.json.
+            "source_coverage": source_coverage.coverage_stats(coverage_sources, citations),
         },
     }
     if not args.check_only:
@@ -937,4 +1189,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Windows pipes default to the ANSI code page; output is UTF-8 everywhere.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors=_stream.errors)
     raise SystemExit(main())
