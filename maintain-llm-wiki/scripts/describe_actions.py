@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 
@@ -166,4 +167,7 @@ if __name__ == "__main__":
     for _stream in (sys.stdout, sys.stderr):
         if hasattr(_stream, "reconfigure"):
             _stream.reconfigure(encoding="utf-8", errors=_stream.errors)
+    # It takes no argument; one it does not take is a usage error (exit 2,
+    # nothing on standard output), as in the query skill's catalog.
+    argparse.ArgumentParser(description=__doc__).parse_args()
     print(json.dumps(CATALOG, ensure_ascii=False, indent=2))

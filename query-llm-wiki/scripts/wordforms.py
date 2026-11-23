@@ -765,7 +765,13 @@ good better best
 #: Stahl, Schritt and Schritten, Rang, Ringe, Sitze, Wäsche, Stöße, Wiege,
 #: Wogen, Schwamm, Klinge, Schreie, Schmelze, Hänge, Bogen, Berufe, drängen
 #: ("drangen"), Fliege, Gruben, the city of Gießen, GRUB (the boot loader,
-#: "grub") and Drang ("drang").
+#: "grub") and Drang ("drang"). These forms are never forms of the table, but
+#: as the finite verb before a clause-final particle the scan still takes them
+#: as a split verb, like "schloss ... ab" ("Im nächsten Schritt geben Sie ...
+#: ein" gives "schritt ... ein"), a disclosed heuristic. Also left out are
+#: "durchgangen" and "untergangen" with their endings: durchgehen and
+#: untergehen are only separable, so their participle without ge- is no word,
+#: only the folded dative plural "Durchgängen" or "Untergängen".
 #:
 #: Accepted homographs keep their key, like "Messen": each has the letters of
 #: a verb form or a noun of the tables, and leaving it out would lose that
@@ -783,6 +789,8 @@ IRREGULAR_EXCLUDED = frozenset((
     "floh", "stahl", "schritt", "schritten", "rang", "ringe", "sitze", "wasche", "stosse", "wiege",
     "wogen", "schwamm", "klinge", "schreie", "schmelze", "hange", "bogen", "berufe", "drangen", "fliege",
     "gruben", "giessen", "grub", "drang",
+    "durchgangen", "durchgangene", "durchgangenen", "durchgangener", "durchgangenes", "durchgangenem",
+    "untergangen", "untergangene", "untergangenen", "untergangener", "untergangenes", "untergangenem",
 ))
 #: The two parts of the composite prefixes, for their zu-infinitive
 #: ("anzuerkennen", "beizubehalten", "einzubeziehen", "vorzubehalten").

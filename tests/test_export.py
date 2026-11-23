@@ -410,9 +410,10 @@ class ExportedSkillRuns(unittest.TestCase):
             "<skill-root>/scripts/search_knowledge.py", "${CLAUDE_SKILL_DIR}", "--expect-manifest-sha256",
             "<skill-root>/scripts/assess_quality.py --expect-manifest-sha256 <retained-hash>",
             "reports `snapshot_changed`", "(`expiry`; `freshness` keeps the count the release recorded",
-            "Decide by the `state` a helper prints, not by its exit status",
-            "called wrongly: status 2 for an argument it does not take, 1 for a value it refuses or an error; "
-            "read standard error",
+            "Decide by the `state` a helper prints (for the search helper under `release`), not by its exit status",
+            "called wrongly or failed: status 2 when its argument parser rejects the call (an unknown or missing "
+            "argument, or a malformed value such as `--limit abc`), 1 when the helper refuses a value (such as "
+            "`--limit 0`) or fails; read standard error",
             "truncated", "claims_returned", "claims_total", "unmatched_terms",
             "terms_only_in_unsearched.sources", "--include-sources", "coverage.boundary",
             "match_rules", "form_only_terms", "typo",

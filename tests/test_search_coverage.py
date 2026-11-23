@@ -552,6 +552,8 @@ class ActionCatalogLists(unittest.TestCase):
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, description)
+        # The quality action names both counts of expired pages (review of Stufe 7).
+        self.assertIn("(at release and on the assessment day)", actions["assess-quality"]["description"])
 
 
 class RuleNamesInTheInstructions(unittest.TestCase):

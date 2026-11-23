@@ -490,11 +490,30 @@ class ExitStatusContract(unittest.TestCase):
                 self.assertEqual(result.returncode, 1)
                 self.assertEqual(result.stdout, b"")
 
+    def test_a_value_or_a_call_the_parser_refuses_exits_2_and_prints_nothing(self) -> None:
+        """A value of the wrong type and a missing required argument are usage errors too (review of Stufe 7)."""
+        for label, script, arguments in self.helpers():
+            if "search" not in label:
+                continue
+            with self.subTest(helper=label, case="--limit abc"):
+                result = run_isolated(script, *arguments, "--limit", "abc", cwd=self.tmp)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.stdout, b"")
+                self.assertIn(b"invalid int value", result.stderr)
+            with self.subTest(helper=label, case="no --query"):
+                missing = [item for index, item in enumerate(arguments)
+                           if item != "--query" and (index == 0 or arguments[index - 1] != "--query")]
+                result = run_isolated(script, *missing, cwd=self.tmp)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.stdout, b"")
+                self.assertIn(b"required", result.stderr)
+
     def test_a_helper_without_arguments_refuses_one_as_a_usage_error(self) -> None:
-        """The export's identity helper and the query catalog take no argument; before, both ignored any with exit 0."""
+        """The export's identity helper and both catalogs take no argument; before, each ignored any with exit 0."""
         self.assertEqual(self.export.returncode, 0, self.export.stderr.decode("utf-8", errors="replace"))
         for label, script in (("export/identity_status.py", self.skill / "identity_status.py"),
-                              ("query/describe_actions.py", QUERY / "describe_actions.py")):
+                              ("query/describe_actions.py", QUERY / "describe_actions.py"),
+                              ("maintain/describe_actions.py", MAINTAIN / "describe_actions.py")):
             with self.subTest(helper=label):
                 plain = run_isolated(script, cwd=self.tmp)
                 self.assertEqual(plain.returncode, 0, plain.stderr.decode("utf-8", errors="replace"))
@@ -508,23 +527,29 @@ class ExitStatusContract(unittest.TestCase):
     def test_the_instruction_texts_state_the_exit_rule(self) -> None:
         """The rule an agent reads, word for word: decide by the printed state, and what a silent exit means."""
         rule = (
-            "was called wrongly: status 2 for an argument it does not take, 1 for a value it refuses or an "
-            "error; read standard error"
+            "was called wrongly or failed: status 2 when its argument parser rejects the call (an unknown or missing "
+            "argument, or a malformed value such as `--limit abc`), 1 when the helper refuses a value (such as "
+            "`--limit 0`) or fails; read standard error"
         )
         texts = {
             "query SKILL.md": (QUERY.parent / "SKILL.md", (
-                "Decide by the `state` a helper prints, not by its exit status. A helper that prints nothing on "
-                "standard output " + rule + ". Never report that as `wiki_busy`, which also exits with status 2.",
+                "Decide by the `state` a helper prints (for the search and inventory helpers under `release`), not by "
+                "its exit status. A helper that prints nothing on standard output " + rule + ". Never report that as "
+                "`wiki_busy`, which also exits with status 2.",
+                # Step 2 (review of Stufe 7: the phrase could revert to the Stufe 6 wording unnoticed).
+                "the number of pages past their own end date on the day of the assessment (`expiry`; `freshness` "
+                "keeps the count the release recorded; rely on `past_expiry` per result)",
             )),
             "answer contract": (QUERY.parent / "references" / "answer-contract.md", (
-                "Every helper prints its report, including the `state`, as JSON on standard output; decide by "
-                "that `state`. The exit status only groups states, differently per helper.",
-                "A helper that prints nothing on standard output " + rule + ". Correct the call; never report it "
-                "as `wiki_busy`, which also exits with status 2 but prints its state.",
+                "Every helper prints its report as JSON on standard output, with its `state` at the top level or, "
+                "for the search and inventory helpers, under `release`; decide by that `state`. The exit status only "
+                "groups states, differently per helper.",
+                "A helper that prints nothing on standard output " + rule + ". Correct the call or report the error "
+                "it names; never report it as `wiki_busy`, which also exits with status 2 but prints its state.",
             )),
             "knowledge-skill template": (TEMPLATES / "SKILL.template.md", (
-                "Decide by the `state` a helper prints, not by its exit status. A helper that prints nothing on "
-                "standard output " + rule + " and correct the call.",
+                "Decide by the `state` a helper prints (for the search helper under `release`), not by its exit "
+                "status. A helper that prints nothing on standard output " + rule + " and correct the call.",
             )),
         }
         for label, (path, phrases) in texts.items():

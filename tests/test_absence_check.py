@@ -31,6 +31,7 @@ import sys
 import itertools
 import random
 import unittest
+import unicodedata
 from pathlib import Path
 from unittest import mock
 
@@ -1754,21 +1755,30 @@ class AbsenceCheck(unittest.TestCase):
                     self.assertEqual(check["complete"], expected >= search_core.MIN_EXHAUSTIVE_REFORMULATIONS)
 
     def test_the_order_of_reformulations_with_one_amount_never_changes_the_count(self) -> None:
-        """Stufe 7 review: one amount in two notations, one of them with the question's unit word, in both orders."""
-        with PageTree(self.FILES) as root:
+        """Stufe 7 review: one amount in two notations, one of them with the question's unit word, in both orders.
+
+        The Fels case needs the concepts: only through "fels-quarzit" does "Fels aus Quarz Lager" hold "Quarzit
+        Lager", and after Stufe 6 its count hung on the order (1 or 2). The same reformulations in NFD count as in
+        NFC: the tie-break sorts their text in one Unicode form (review of Stufe 7).
+        """
+        with PageTree({**self.FILES, "schema/CONCEPTS.md": CONCEPTS}) as root:
             loaded = search_core.load(root, include_sources=True, exhaustive=True)
-            for query, also in (
-                ("Wie hoch ist der Jahresverbrauch in kWh?", ["Jahresverbrauch 2500 kWh", "Jahresverbrauch 2,5 MWh", "Stromverbrauch Musterhaushalt"]),
-                ("Grundgebühr in Euro", ["Grundgebühr 12 Euro", "Grundgebühr 12 €", "monatlicher Grundpreis"]),
-                ("Arbeitspreis Cent", ["Arbeitspreis 32 Cent", "Arbeitspreis 0,32 €", "Verbrauchspreis Strom"]),
-                ("Fels Lager", ["Fels aus Quarz Lager", "Quarzit Lager", "Basalt Granit"]),
+            for query, also, expected in (
+                ("Wie hoch ist der Jahresverbrauch in kWh?", ["Jahresverbrauch 2500 kWh", "Jahresverbrauch 2,5 MWh", "Stromverbrauch Musterhaushalt"], 2),
+                ("Grundgebühr in Euro", ["Grundgebühr 12 Euro", "Grundgebühr 12 €", "monatlicher Grundpreis"], 2),
+                ("Arbeitspreis Cent", ["Arbeitspreis 32 Cent", "Arbeitspreis 0,32 €", "Verbrauchspreis Strom"], 2),
+                ("Fels Lager", ["Fels aus Quarz Lager", "Quarzit Lager", "Basalt Granit"], 1),
+                ("Quarzit Basalt", ["ältere Quarzit", "Quarzit alter", "alte Quarzit"], 1),
             ):
                 counts = {
-                    search_core.search_loaded(loaded, query, also=list(order), exhaustive=True)["absence_check"]["reformulations_counted"]
+                    search_core.search_loaded(
+                        loaded, query, also=[unicodedata.normalize(form, text) for text in order], exhaustive=True
+                    )["absence_check"]["reformulations_counted"]
                     for order in itertools.permutations(also)
+                    for form in ("NFC", "NFD")
                 }
                 with self.subTest(query=query):
-                    self.assertEqual(len(counts), 1, counts)
+                    self.assertEqual(counts, {expected})
         # Pure: whatever holds whom, the count is a function of the reformulations, not of their order.
         rng = random.Random(7)
         words, tokens = ["quarzit", "basalt", "granit", "lager", "halde"], ["=3monat", "=6monat", "=75eur"]

@@ -667,8 +667,17 @@ class IrregularForms(unittest.TestCase):
         ):
             with self.subTest(token=token):
                 self.assertEqual(wordforms.irregular_keys(token), ())
-        # The other forms of those verbs stay.
-        for token in ("zugeschossen", "beraten", "gegossen", "geschnitten", "eingegangen", "ausgefallen", "gestohlen", "errungen"):
+        # Review of Stufe 7: durchgehen and untergehen are only separable, so their participle without ge- is no
+        # German word, only the folded dative plural "Durchgängen" ("in zwei Durchgängen") or "Untergängen".
+        for token in ("durchgangen", "durchgangene", "untergangen", "untergangenen"):
+            with self.subTest(token=token):
+                self.assertEqual(wordforms.irregular_keys(token), ())
+        self.assertEqual(wordforms.irregular_keys("durchgegangen"), ("durch|geh",))
+        self.assertEqual(wordforms.irregular_keys("untergegangen"), ("unter|geh",))
+        # The other forms of those verbs stay, and "umgangen" (of umgehen, also inseparable).
+        for token in (
+            "zugeschossen", "beraten", "gegossen", "geschnitten", "eingegangen", "ausgefallen", "gestohlen", "errungen", "umgangen",
+        ):
             with self.subTest(token=token):
                 self.assertNotEqual(wordforms.irregular_keys(token), ())
 
