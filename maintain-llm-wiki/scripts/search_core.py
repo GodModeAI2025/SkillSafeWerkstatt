@@ -78,12 +78,14 @@ DIGIT_GROUPS = re.compile(r"(?<![\w.,'’])\d{1,3}(?:[. '’]\d{3})+(?!\d)")
 #: The separators DIGIT_GROUPS removes.
 DIGIT_SEPARATOR = re.compile(r"[. '’]")
 #: Units of two or more letters that a number may carry written straight after it
-#: ("2500kWh"), normalised. A single letter stays on the number: "§ 14a" and
-#: "§ 312g" name paragraphs, so "800W" is not split either.
+#: ("2500kWh", "5ha"), normalised, and the scaled euro ("500T€", "500k€"). A single
+#: letter stays on the number: "§ 14a" and "§ 312g" name paragraphs, so "800W" is
+#: not split either.
 NUMBER_UNITS = (
     "kwhth", "kwhel", "kwh", "mwh", "gwh", "twh", "wh", "kwp", "mwp", "gwp", "kvar", "kva", "mva", "kw", "mw", "gw",
-    "kv", "va", "cent", "ct", "euro", "eur", "km", "kg", "cm", "mm", "qm", "m2", "m3", "ml", "std", "min", "sek",
-    "khz", "mhz", "ghz", "hz", "kbit", "mbit", "gbit", "kb", "mb", "gb", "tb", "bar", "mio", "mrd", "tsd",
+    "kv", "va", "cent", "ct", "euro", "teur", "keur", "eur", "t€", "k€", "km2", "km", "kg", "cbm", "cm", "mm", "qm",
+    "m2", "m3", "ml", "ha", "std", "min", "sek", "khz", "mhz", "ghz", "hz", "kbit", "mbit", "gbit", "kb", "mb", "gb",
+    "tb", "bar", "mio", "mrd", "tsd",
 )
 #: A number with one of NUMBER_UNITS written straight after it.
 NUMBER_UNIT = re.compile(r"(?<![\w-])(\d+)(" + "|".join(NUMBER_UNITS) + r")(?![^\W_])")
@@ -99,7 +101,9 @@ QUANTITY_RULE = "quantity"
 QUANTITY_MARK = "="
 #: Units a quantity token converts, normalised: written unit -> (canonical unit,
 #: power of ten to it). Every factor is a power of ten, so the conversion is
-#: exact. kWp, kWh_th and kWh_el stay apart: they are no plain kW and kWh.
+#: exact, and no unit converts into another dimension (°C stays °C). kWp,
+#: kWh_th and kWh_el stay apart: they are no plain kW and kWh. Only the
+#: written forms read as a unit: "g" (5 G), "a" (Ar) and "K" (Kelvin) are none.
 QUANTITY_UNITS: dict[str, tuple[str, int]] = {
     "wh": ("kwh", -3), "kwh": ("kwh", 0), "mwh": ("kwh", 3), "gwh": ("kwh", 6), "twh": ("kwh", 9),
     "wattstunde": ("kwh", -3), "wattstunden": ("kwh", -3),
@@ -109,8 +113,52 @@ QUANTITY_UNITS: dict[str, tuple[str, int]] = {
     "terawattstunde": ("kwh", 9), "terawattstunden": ("kwh", 9),
     "w": ("kw", -3), "watt": ("kw", -3), "kw": ("kw", 0), "kilowatt": ("kw", 0),
     "mw": ("kw", 3), "megawatt": ("kw", 3), "gw": ("kw", 6), "gigawatt": ("kw", 6),
+    "milliwatt": ("kw", -6), "milliwattstunde": ("kwh", -6), "milliwattstunden": ("kwh", -6),
     "ct": ("eur", -2), "cent": ("eur", -2), "eur": ("eur", 0), "euro": ("eur", 0), "€": ("eur", 0),
+    "teur": ("eur", 3), "keur": ("eur", 3), "t€": ("eur", 3), "k€": ("eur", 3),
     "%": ("prozent", 0), "prozent": ("prozent", 0),
+    "m3": ("m3", 0), "kubikmeter": ("m3", 0), "kubikmetern": ("m3", 0), "cbm": ("m3", 0),
+    "l": ("m3", -3), "liter": ("m3", -3), "litern": ("m3", -3), "ml": ("m3", -6), "milliliter": ("m3", -6),
+    "hektoliter": ("m3", -1),
+    "kg": ("kg", 0), "kilogramm": ("kg", 0), "gramm": ("kg", -3), "t": ("kg", 3), "tonne": ("kg", 3), "tonnen": ("kg", 3),
+    "m": ("m", 0), "meter": ("m", 0), "metern": ("m", 0), "km": ("m", 3), "kilometer": ("m", 3), "kilometern": ("m", 3),
+    "cm": ("m", -2), "zentimeter": ("m", -2), "mm": ("m", -3), "millimeter": ("m", -3),
+    "m2": ("m2", 0), "qm": ("m2", 0), "quadratmeter": ("m2", 0), "quadratmetern": ("m2", 0),
+    "km2": ("m2", 6), "quadratkilometer": ("m2", 6), "ha": ("m2", 4), "hektar": ("m2", 4),
+    "°c": ("celsius", 0),
+}
+#: Written forms whose case tells them apart, read before the text is folded,
+#: with what the quantity reader sees instead: "KW" is a calendar week (or a
+#: power plant), "mW" a milliwatt; "T", "M", "M3" and "KG" are no tonne, metre,
+#: cubic metre or kilogram (tesla, Mio., a screw size, a limited partnership),
+#: and "HA", "QM", "ML", "MM" and "CM" in capitals are abbreviations
+#: (Hausanschluss, Qualitätsmanagement, machine learning), not hectares, square
+#: metres, millilitres, millimetres or centimetres. "?" ends the number, so it
+#: gives no quantity.
+CASE_UNITS = {
+    "KW": "?", "mW": "milliwatt", "mWh": "milliwattstunde", "T": "?", "M": "?", "M2": "?", "M3": "?", "M²": "?", "M³": "?",
+    "KG": "?", "HA": "?", "QM": "?", "ML": "?", "MM": "?", "CM": "?",
+}
+#: The query word a written-out form of CASE_UNITS stands for: "500 mW" is read
+#: as "500 milliwatt", and its quantity token belongs to the query word "mw".
+CASE_WRITTEN = {"milliwatt": "mw", "milliwattstunde": "mwh"}
+#: Any of CASE_UNITS as a whole word right after a number, glued to it ("12KW") or
+#: after blanks, in the text before it is folded (digits or a number word in any
+#: case and umlaut spelling). A letter or digit after it ("10T08:00") makes it none.
+CASE_UNIT = re.compile(
+    r"(\d|\b(?i:" + "|".join(
+        word.replace("funf", "f(?:ü|ue|u)nf").replace("zwolf", "zw(?:ö|oe|o)lf").replace("dreissig", "drei(?:ß|ss)ig")
+        for word in ("eins", "zwei", "drei", "vier", "funf", "sechs", "sieben", "acht", "neun", "zehn", "elf", "zwolf",
+                     "dreizehn", "vierzehn", "funfzehn", "sechzehn", "siebzehn", "achtzehn", "neunzehn", "zwanzig",
+                     "dreissig", "vierzig", "funfzig", "sechzig", "siebzig", "achtzig", "neunzig")
+    ) + r"))([ \t]*(?:\n[ \t]*)?)(" + "|".join(sorted(CASE_UNITS, key=len, reverse=True)) + r")(?![^\W_]|€)"
+)
+#: The folded unit word each form of CASE_UNITS becomes: only a text with a
+#: quantity read from such a word, which also holds the form as written, is read
+#: a second time (`text_quantities`).
+CASE_FOLDED = {
+    "kw": ("KW",), "mw": ("mW",), "mwh": ("mWh",), "t": ("T",), "m": ("M",), "m2": ("M2", "M²"), "m3": ("M3", "M³"), "kg": ("KG",),
+    "ha": ("HA",), "qm": ("QM",), "ml": ("ML",), "mm": ("MM",), "cm": ("CM",),
 }
 #: German number words, normalised, that stand for digits before a word.
 #: "ein", "eine" and "einen" are articles and stay out.
@@ -142,9 +190,22 @@ COUNT_UNITS: dict[str, str] = {
 }
 #: The values a number word names: only for them does a number before a count word give a quantity token.
 NUMBER_WORD_VALUES = frozenset(NUMBER_WORDS.values())
-#: What follows a number: a unit symbol, glued or after spaces, or one word after
-#: white space (at most one line break). A hyphenated word ("4-Personen-Haushalt") is no follower.
-QUANTITY_FOLLOWER = r"(?:[ \t]*([%€])(?![\w-])|(?:[ \t]+(?:\n[ \t]*)?|\n[ \t]*)([^\W\d_]+)(?![\w-]))"
+#: A unit word: letters, with the exponent of an area or volume ("m2", "km2", "m3"; `normalized` writes m² and m³ so).
+UNIT_WORD = r"[^\W\d_]+(?:[23](?![\w-]))?"
+#: What follows a number: a unit symbol, glued or after spaces ("%", "€", "°C";
+#: "℃" folds to "°C"), or one unit word after white space (at most one line
+#: break, see LINE_JOIN_MIN), or a scaled euro ("T€"). A hyphenated word
+#: ("4-Personen-Haushalt") or a word glued to "€" is no follower.
+QUANTITY_FOLLOWER = (
+    r"(?:[ \t]*(%|€|°[ \t]?[cC])(?![\w-])|(?:[ \t]+(?:\n[ \t]*)?|\n[ \t]*)([tk]€|" + UNIT_WORD + r")(?![\w€-]))"
+)
+#: A line break between a number and its unit word joins them only in running
+#: text: at least this many characters stand before the number on its line, and
+#: the unit word does not end its line. A label, heading or table cell ("Stand
+#: 2024" above "Euro", "Version 12" above "Monate Laufzeit") gives no quantity.
+LINE_JOIN_MIN = 20
+#: Only blanks up to the end of the line.
+LINE_END = re.compile(r"[ \t]*(?:\n|$)")
 #: The dash of a whole-euro amount ("75,- €", "75,-- EUR", "75,– €"), only before a money unit.
 EURO_DASH = r",(?:--?|–)(?=[ \t]*(?:€|eur|euro)(?![\w-]))"
 #: A number that may carry a quantity, with its follower: digits with an optional
@@ -159,10 +220,23 @@ QUANTITY_DIGITS = re.compile(
 QUANTITY_PREFIXED = re.compile(
     r"(?:€(?<![\w-]€)|eur(?<![\w-]eur))[ \t]*(\d\d{0,14})(?:,(\d{1,6})|,(?:--?|–))?(?![\w%€-]|[.,]\d)"
 )
-#: Scale words: a number before them names no count of them.
-SCALE_WORDS = frozenset({"hundert", "tausend", "tsd", "mio", "mrd", "million", "millionen", "milliarde", "milliarden"})
-#: A scale word right after a prefixed money amount ("€ 1,5 Mio."): the token would lose the factor.
-SCALE_AFTER = re.compile(r"[ \t]*(?:" + "|".join(sorted(SCALE_WORDS)) + r")(?![^\W\d_])")
+#: Scale words with the power of ten they multiply a number by. A number before
+#: one names no count of it: only a unit after it gives a quantity ("1,5 Mio. €",
+#: "2 Tsd. kWh", "zwei Millionen Euro"); "2 Mio. Kunden" gives none.
+SCALE_SHIFTS = {"hundert": 2, "tausend": 3, "tsd": 3, "mio": 6, "million": 6, "millionen": 6, "mrd": 9, "milliarde": 9, "milliarden": 9}
+#: A scale word right after a prefixed money amount ("€ 1,5 Mio.").
+SCALE_AFTER = re.compile(r"[ \t]*(" + "|".join(sorted(SCALE_SHIFTS)) + r")(?![^\W\d_])\.?")
+#: The unit after a scale word, with its full stop ("Mio. €").
+SCALED_UNIT = re.compile(r"\.?[ \t]*(?:(%|€)(?![\w-])|(" + UNIT_WORD + r")(?![\w€-]))")
+#: "eine Million", "einer Milliarde": the article names one of the scale.
+ONE_SCALE = re.compile(r"(?<![\w-])(?:eine|einer|ein)[ \t]+(million|milliarde)(?![\w-])")
+#: "Grad Celsius" after a number: a temperature like "°C".
+CELSIUS_AFTER = re.compile(r"[ \t]+celsius(?![\w-])")
+#: The canonical units read only as a plain amount: one counted per another unit ("3 m/s", "50 km/h",
+#: "2 kg/m³", "6 l/100 km") gives no quantity, while money and energy keep their first unit ("9,84 ct/kWh").
+SLASH_REFUSED = frozenset({"m3", "kg", "m", "m2", "celsius"})
+#: A slash right after a unit.
+SLASH_NEXT = re.compile(r"[ \t]*/")
 #: Each number word as a whole token with a follower, the same boundaries; run only
 #: for the words a text holds. The word comes before the lookbehind, so the engine searches for it as a literal.
 NUMBER_WORD_AT = {
@@ -183,8 +257,20 @@ RANGE_BEFORE = re.compile(
     r"(?:(?:\d|\b(?:" + "|".join(NUMBER_WORDS) + r"))[ \t]*[–—]|(?:\d|[%€]|\b(?:" + "|".join(NUMBER_WORDS)
     + r"))[ \t]+bis|\bzwischen[ \t]+\S+(?:[ \t]+\S+)?[ \t]+und)[ \t]*$"
 )
-#: A legal citation right before a number ("§ 3", "Abs. 5", "Nr. 2"): the number names a provision, not a count.
-CITATION_BEFORE = re.compile(r"(?:§|\babs\.|\babsatz|\bnr\.|\bnummer|\bart\.|\bartikel|\bziff\.|\bziffer|\bsatz)\s*$")
+#: A legal citation or a place in a document right before a number ("§ 3", "Abs. 5", "Nr. 2", "Seite 12",
+#: "Abschnitt 3", "Tabelle 2"): the number names a provision or a place, not a count. "Anlage" (also a plant)
+#: and "Teil" ("zum Teil") are left out.
+#: The word boundary stands once before the group: written before each word, it made this check six times slower.
+CITATION_BEFORE = re.compile(
+    r"(?:§|\b(?:randnummer|abbildung|abschnitt|position|artikel|kapitel|tabelle|abschn\.|randnr\.|absatz|anhang|nummer"
+    r"|spalte|ziffer|folie|punkt|rdnr\.|seite|ziff\.|zeile|abb\.|abs\.|art\.|kap\.|pkt\.|pos\.|satz|tab\.|nr\.|rn\.|rz\.|s\.))\s*$"
+)
+#: A place word of CITATION_BEFORE that is also an everyday noun, after "je", "pro" or "jede weitere": it names
+#: the unit of a price ("je Seite 0,50 EUR", "für jede weitere Seite 0,15 EUR", "je Position 5 €"), not a place.
+PER_PLACE = re.compile(
+    r"\b(?:je|pro|jede[nrs]?|weitere[nrs]?|angefangene[nrs]?)\s+(?:seite|zeile|position|punkt|folie|spalte|abbildung"
+    r"|tabelle|kapitel|anhang)\s*$"
+)
 #: A definition heading of schema/CONCEPTS.md or schema/CLUSTERS.md: level two with a stable lowercase ID.
 CONCEPT_HEADING = re.compile(r"^##\s+([a-z0-9]+(?:-[a-z0-9]+)*)\s*$")
 #: A `- Field: value` line of a definition.
@@ -619,64 +705,120 @@ def spelled_quantities(spelled: str, words: Optional[Iterable[str]] = None) -> l
     by a count word of COUNT_UNITS ("drei monate" and "3 monaten" give
     "=3monat", keyed by the unit the list names). A money amount may also
     carry a whole-euro dash ("75,- €") or its unit before it ("€ 75", "eur
-    25,00"). A number that is only part of a quantity gives none: after a
-    citation, another number, a sign, or the first number of a range
-    (CITATION_BEFORE, NUMBER_BEFORE, SIGN_BEFORE, RANGE_BEFORE), or before a
-    scale word (a scale word is no unit; after a prefixed amount, SCALE_AFTER).
-    The source tokens are the tokens the number and the unit word give
-    as written ("9", "84" and "ct" for "9,84 ct"); a symbol gives none. `words`, the text's tokens when the caller has them,
-    saves looking for number words the text does not hold.
+    25,00"). A scale word between number and unit multiplies ("1,5 mio. €"
+    gives "=1500000eur"). Of a unit counted per another only the first is
+    read ("9,84 ct/kwh" gives "=0.0984eur"); for the units of SLASH_REFUSED a
+    slash after the unit gives none ("3 m/s"). A number that is only part of a
+    quantity gives none: after a citation or a place in a document, another
+    number, a sign, or the first number of a range (CITATION_BEFORE, unless
+    "je" or "pro" makes the place word a unit, PER_PLACE; NUMBER_BEFORE,
+    SIGN_BEFORE, RANGE_BEFORE), or before a line break that
+    ends a label (LINE_JOIN_MIN). The source tokens are the tokens the number,
+    the scale and the unit word give as written ("9", "84" and "ct" for "9,84
+    ct"); a symbol gives none. `words`, the text's tokens when the
+    caller has them, saves looking for number words the text does not hold.
     """
     found: list[tuple[tuple[str, ...], str]] = []
     present = sorted(NUMBER_WORDS.keys() & (TOKEN.findall(spelled) if words is None else words))
     matches: list[tuple["re.Match[str]", Optional[str]]] = [(match, None) for match in QUANTITY_DIGITS.finditer(spelled)]
     if "€" in spelled or "eur" in spelled:
         matches.extend((match, QUANTITY_MARK) for match in QUANTITY_PREFIXED.finditer(spelled))
+    if "million" in spelled or "milliarde" in spelled:
+        matches.extend((match, "") for match in ONE_SCALE.finditer(spelled))
     if not matches and not present:
         return found
     for number_word in present:
         matches.extend((match, number_word) for match in NUMBER_WORD_AT[number_word].finditer(spelled))
     for match, word in matches:
-        if CITATION_BEFORE.search(spelled, max(0, match.start() - 12), match.start()):
+        start = match.start()
+        if CITATION_BEFORE.search(spelled, max(0, start - 12), start) and not PER_PLACE.search(spelled, max(0, start - 24), start):
             continue
-        if NUMBER_BEFORE.search(spelled, max(0, match.start() - 16), match.start()):
+        if NUMBER_BEFORE.search(spelled, max(0, start - 16), start):
             continue
-        if SIGN_BEFORE.search(spelled, max(0, match.start() - 8), match.start()):
+        if SIGN_BEFORE.search(spelled, max(0, start - 8), start):
             continue
-        if RANGE_BEFORE.search(spelled, max(0, match.start() - 40), match.start()):
+        if RANGE_BEFORE.search(spelled, max(0, start - 40), start):
             continue
+        end = match.end()
+        scale, scale_words = 0, ()
         if word == QUANTITY_MARK:
-            # A prefixed money amount: the unit is known, a scale word after it would be lost.
-            if SCALE_AFTER.match(spelled, match.end()):
-                continue
+            # A prefixed money amount: the unit is known; a scale word may follow it ("€ 1,5 Mio.").
             whole, fraction = match.groups()
             mantissa, exponent = int(whole + (fraction or "")), -len(fraction or "")
-            numbers = (whole, fraction) if fraction else (whole,)
-            unit_word = ("eur",) if spelled.startswith("eur", match.start()) else ()
-            found.append((numbers + unit_word, QUANTITY_MARK + decimal_text(mantissa, exponent) + "eur"))
-            continue
-        if word is None:
-            whole, fraction, symbol, unit_word = match.groups()
-            mantissa = int(whole + (fraction or ""))
-            exponent = -len(fraction or "")
-            numbers = (whole, fraction) if fraction else (whole,)
+            numbers: tuple[str, ...] = (whole, fraction) if fraction else (whole,)
+            unit_words: tuple[str, ...] = ("eur",) if spelled.startswith("eur", start) else ()
+            scaled = SCALE_AFTER.match(spelled, end)
+            if scaled:
+                scale, scale_words, end = SCALE_SHIFTS[scaled.group(1)], (scaled.group(1),), scaled.end()
+            canonical, shift = "eur", 0
         else:
-            symbol, unit_word = match.groups()
-            mantissa, exponent, numbers = NUMBER_WORDS[word], 0, (word,)
-        unit = symbol or unit_word
-        converted = QUANTITY_UNITS.get(unit)
-        if converted is not None:
-            canonical, shift = converted
-            exponent += shift
-        elif word is None and (mantissa not in NUMBER_WORD_VALUES or exponent):
-            # Digits no number word names gain nothing from a plain word after them.
+            if word is None:
+                whole, fraction, symbol, unit_word = match.groups()
+                mantissa, exponent = int(whole + (fraction or "")), -len(fraction or "")
+                numbers = (whole, fraction) if fraction else (whole,)
+            elif word:
+                symbol, unit_word = match.groups()
+                mantissa, exponent, numbers = NUMBER_WORDS[word], 0, (word,)
+            else:
+                # "eine Million": the scale word is the follower of an article that names one.
+                symbol, unit_word = None, match.group(1)
+                mantissa, exponent, numbers = 1, 0, ()
+            if unit_word and "\n" in spelled[start:end] and (
+                start - spelled.rfind("\n", 0, start) - 1 < LINE_JOIN_MIN or LINE_END.match(spelled, end)
+            ):
+                continue
+            unit = "°c" if symbol and symbol[0] == "°" else symbol or unit_word
+            unit_words = (unit,) if unit_word else ()
+            if unit in SCALE_SHIFTS:
+                scaled = SCALED_UNIT.match(spelled, end)
+                if scaled is None:
+                    continue
+                scale, scale_words, end = SCALE_SHIFTS[unit], (unit,), scaled.end()
+                symbol, unit_word = scaled.groups()
+                unit = symbol or unit_word
+                unit_words = (unit,) if unit_word else ()
+            converted = QUANTITY_UNITS.get(unit)
+            if converted is None and unit == "grad":
+                celsius = CELSIUS_AFTER.match(spelled, end)
+                if celsius:
+                    converted, unit_words, end = QUANTITY_UNITS["°c"], unit_words + ("celsius",), celsius.end()
+            if converted is not None:
+                canonical, shift = converted
+            elif scale or word is None and (mantissa not in NUMBER_WORD_VALUES or exponent):
+                # A scale word counts only units; digits no number word names gain nothing from a plain word after them.
+                continue
+            elif unit in COUNT_UNITS:
+                canonical, shift = COUNT_UNITS[unit], 0
+            else:
+                continue
+        if canonical in SLASH_REFUSED and SLASH_NEXT.match(spelled, end):
             continue
-        elif unit in COUNT_UNITS:
-            canonical = COUNT_UNITS[unit]
-        else:
-            continue
-        sources = numbers + ((unit,) if unit_word else ())
-        found.append((sources, QUANTITY_MARK + decimal_text(mantissa, exponent) + canonical))
+        exponent += shift + scale
+        found.append((numbers + scale_words + unit_words, QUANTITY_MARK + decimal_text(mantissa, exponent) + canonical))
+    return found
+
+
+def text_quantities(repaired: str, spelled: str, words: Optional[Iterable[str]] = None) -> list[tuple[tuple[str, ...], str]]:
+    """The quantities of a repaired text whose spelling is `spelled`, its case-sensitive units read as written (pure).
+
+    `spelled_quantities` reads a folded text, where "12 KW" (calendar week)
+    is "12 kw" and "500 mW" is "500 mw". Only when a quantity was read from a
+    unit word such a form folds into (CASE_FOLDED), the text holds that form
+    and it stands after a number (CASE_UNIT) is the text read again, from a
+    spelling in which each of them is what CASE_UNITS says. A form after
+    blanks keeps its blanks, so a "?" leaves the line as long as written; a
+    form glued to the number gets one. A written-out form ("milliwatt") also
+    names the query word it was written as (CASE_WRITTEN), so "500 mW" gives
+    its token to "mw" as "500 kW" gives it to "kw".
+    """
+    found = spelled_quantities(spelled, words)
+    forms = {form for sources, _ in found for word in sources[1:] for form in CASE_FOLDED.get(word, ())}
+    if forms and any(form in repaired for form in forms) and CASE_UNIT.search(repaired):
+        cased = CASE_UNIT.sub(lambda match: match.group(1) + (match.group(2) or " ") + CASE_UNITS[match.group(3)], repaired)
+        found = [
+            (sources + tuple(CASE_WRITTEN[word] for word in sources if word in CASE_WRITTEN), token)
+            for sources, token in spelled_quantities(number_spelling(normalized(cased)), words)
+        ]
     return found
 
 
@@ -708,13 +850,13 @@ def tokens(value: str, drop_stopwords: bool = True, quantities: Optional[list[st
     its joined token ("m2") after the split ones. With `drop_stopwords`,
     stopwords and single characters are left out. When `quantities` is a
     list, the quantity tokens of the text are appended to it
-    (`spelled_quantities`), from the same spelling.
+    (`text_quantities`), from the same spelling.
     """
     repaired = wordforms.repair_text(value)
     spelled = number_spelling(normalized(repaired))
     values = TOKEN.findall(spelled)
     if quantities is not None:
-        quantities.extend(token for _, token in spelled_quantities(spelled, values))
+        quantities.extend(token for _, token in text_quantities(repaired, spelled, values))
     if "^" in repaired:
         values.extend(superscript_tokens(repaired, values))
     if drop_stopwords:
@@ -1437,24 +1579,33 @@ def formulation_key(text: str) -> str:
     return " ".join(TOKEN.findall(normalized(text)))
 
 
+def formulation_quantities(text: str) -> tuple[str, ...]:
+    """The quantity tokens of a formulation, sorted: the case of a unit after a number can change them ("11 KW", "11 kW")."""
+    repaired = wordforms.repair_text(text)
+    return tuple(sorted({token for _, token in text_quantities(repaired, number_spelling(normalized(repaired)))}))
+
+
 def plan_formulations(query: str, also: list[str]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """The searches of one call: the query first, then every reformulation that adds a search.
 
     A reformulation without a word, or with the same words in the same order
-    as the query or an earlier kept reformulation, is dropped and reported with
-    its 1-based `position` in the given list. Kept entries are numbered
-    consecutively from 0, the query. Raises RequestError through `check_also`.
+    and the same quantity tokens as the query or an earlier kept
+    reformulation, is dropped and reported with its 1-based `position` in the
+    given list: "11 KW" (a calendar week) and "11 kW" are two searches. Kept
+    entries are numbered consecutively from 0, the query. Raises RequestError
+    through `check_also`.
     """
     check_also(also)
     kept: list[dict[str, Any]] = [{"index": 0, "text": query, "origin": "query"}]
-    seen = {formulation_key(query): 0}
+    seen = {(formulation_key(query), formulation_quantities(query)): 0}
     dropped: list[dict[str, Any]] = []
     for position, raw in enumerate(also, 1):
         text = raw.strip()
-        key = formulation_key(text)
-        if not key:
+        words = formulation_key(text)
+        if not words:
             dropped.append({"position": position, "text": text, "reason": "empty", "duplicate_of": None})
             continue
+        key = (words, formulation_quantities(text))
         if key in seen:
             dropped.append({"position": position, "text": text, "reason": "duplicate", "duplicate_of": seen[key]})
             continue
@@ -1758,7 +1909,8 @@ def query_quantities(query: str, ordered_terms: list[dict[str, str]]) -> dict[st
     """
     words = {item["term"] for item in ordered_terms if item["origin"] == "query"}
     found: dict[str, list[str]] = {}
-    for sources, token in spelled_quantities(number_spelling(normalized(wordforms.repair_text(query)))):
+    repaired = wordforms.repair_text(query)
+    for sources, token in text_quantities(repaired, number_spelling(normalized(repaired))):
         for source in sources:
             if source in words and token not in found.setdefault(source, []):
                 found[source].append(token)
@@ -2237,7 +2389,7 @@ def scan_words(repaired: str) -> frozenset:
     found = frozenset(TOKEN.findall(spelled))
     if apart:
         found = found.union(apart)
-    quantities = spelled_quantities(spelled, found)
+    quantities = text_quantities(repaired, spelled, found)
     if quantities:
         found = found.union(token for _, token in quantities)
     if "^" in repaired:
@@ -2692,6 +2844,8 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
     listed = False
     indent = 0
     table_row = ""
+    # Where in its file line the open passage starts, when a cut inside a line started it (else 0).
+    lead = 0
     carried: tuple = ()
     # The locators in effect at the first and at the last text of the open passage.
     first_locator = ""
@@ -2732,7 +2886,7 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
         refresh()
 
     def finish(cut: bool = False) -> None:
-        nonlocal lines, length, table, listed, carried
+        nonlocal lines, length, table, listed, carried, lead
         if not lines:
             # Most calls come from a blank line after a passage that already ended.
             carried = ()
@@ -2741,7 +2895,10 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
         raw = "\n".join(lines)
         # The repaired text is the display text too.
         repaired = readable(raw)
-        found = scan_words(repaired)
+        # Blanks for the part of its first line before a cut keep the column the line-break rule of a quantity
+        # measures, as the ranking reads the whole line.
+        found = scan_words(" " * lead + repaired if lead else repaired)
+        lead = 0
         addresses = link_addresses(raw)
         identifiers = written(addresses, repaired)
         if addresses:
@@ -2792,7 +2949,7 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
         first_locator = locator
 
     def append(line: str, number: int, is_table: bool = False) -> None:
-        nonlocal length, table_row, last_locator
+        nonlocal length, table_row, last_locator, lead
         if is_table:
             # A table row is one unit; the table is cut at the row that reaches the cap.
             if not lines:
@@ -2815,9 +2972,12 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
             lines.append(line)
             last_locator = locator
             return
+        offset = 0
         for piece_number, (piece, ends) in enumerate(sentence_pieces(line)):
+            offset = line.find(piece, offset)
             if not lines:
                 begin(number, False, len(piece))
+                lead = offset
                 lines.append(piece)
             else:
                 length += 1 + len(piece)
@@ -2825,6 +2985,7 @@ def scan_passages(relative: str, text: str, document: dict[str, Any]) -> list[Pa
                     lines[-1] = f"{lines[-1]} {piece}"
                 else:
                     lines.append(piece)
+            offset += len(piece)
             last_locator = locator
             # Cut at the first sentence end once the cap is reached; the rest of the line starts the next passage.
             if length >= PASSAGE_MAX_CHARS and (ends or length >= PASSAGE_HARD_MAX_CHARS):
@@ -3452,41 +3613,74 @@ def counted_reformulations(
     formulations: list[dict[str, Any]],
     contents: list[list[str]],
     concepts: Optional[list[dict[str, frozenset]]] = None,
+    quantities: Optional[list[dict[str, frozenset]]] = None,
 ) -> list[bool]:
     """Which kept formulations count as reformulations for a complete absence check (pure).
 
     The question never counts. A reformulation counts when it has a content
     word and does not hold every content word of the question or of another
-    reformulation with content words, wherever that one stands; of several
-    reformulations that hold each other's words, only the first counts. The
-    same words in another order, spelling or inflection are no new search, and
-    neither are added words, which under the hit rule can only narrow what the
-    scan finds. So the order of the reformulations never changes the count.
+    reformulation with content words, wherever that one stands. The same words
+    in another order, spelling or inflection are no new search, and neither
+    are added words, which under the hit rule can only narrow what the scan
+    finds. Of reformulations that hold each other's words, the one whose text
+    sorts first counts (casefolded text, then its content words with their
+    concept ids and quantity tokens, then its position), not the one written
+    first. So the order of the reformulations never changes the count, and an
+    exact repeat still counts once.
 
     Two words are the same when the scan matches them as forms of each other
-    (`same_scan_word`), or when both stand in a run of the same confirmed
+    (`same_scan_word`), when both stand in a run of the same confirmed
     concept in their own formulation (`concepts`: per formulation, the concept
     ids per content word), because the scan then matches every term of that
-    concept for both. A hyphenated word is held where a word with the same
+    concept for both, or when both write one amount (`quantities`: per
+    formulation, the quantity tokens per content word, from
+    `query_quantities`) and the holding formulation writes that amount in at
+    least as many content words: "Cent" of "9,84 Cent kWh" holds "ct" of
+    "9,84 ct/kWh". An amount written in fewer content words is a wider search
+    and counts, like a left-out word: "3 Monate" ("3" is a single character
+    and no content word) beside "drei Monate", "75 €" beside "75 Euro", "2,5
+    MWh" beside "2500 kWh". The tokens come from the formulation's text, never
+    from the wiki, so the count stays a function of the formulations. A page
+    that writes the amount where the reader gives it no token (the second
+    number of a range, a number right after another number) is reached only
+    by the literal words. A hyphenated word is held where a word with the same
     stem key is ("SMS-Warndienst", "SMSWarndienst", "SMS-Warn-Dienst"), or
     where all of its parts are (`hyphen_units`: "SMS Warndienst"); the parts
     of a hyphenated word hold what they hold alone.
+
+    Holding is not transitive. So in rare inputs a quantity link lets a
+    reformulation count that a repeat of the question had dominated: the
+    repeat writes the amount in as many words, the two now hold each other,
+    the repeat does not count because it holds the question, and the other
+    one counts when its text sorts first.
     """
     concepts = concepts or [{} for _ in contents]
+    quantities = quantities or [{} for _ in contents]
+
+    def keys(index: int, word: str) -> frozenset:
+        # Concept ids and quantity tokens ("=..." never names a concept) that make two words the same.
+        return concepts[index].get(word, frozenset()) | quantities[index].get(word, frozenset())
 
     def pool(index: int) -> list[tuple[str, frozenset]]:
-        words = [(word, concepts[index].get(word, frozenset())) for word in contents[index]]
+        words = [(word, keys(index, word)) for word in contents[index]]
         words.extend((unit, frozenset()) for word in contents[index] for unit in hyphen_units(word))
         return words
 
     def same(left: tuple[str, frozenset], right: tuple[str, frozenset]) -> bool:
         return not left[1].isdisjoint(right[1]) or same_scan_word(left[0], right[0])
 
+    weight = [
+        {token: sum(token in found for found in quantities[index].values()) for token in set().union(*quantities[index].values())}
+        for index in range(len(contents))
+    ]
+
     def holds(index: int, other: int) -> bool:
         """Whether formulation `index` holds every content word of formulation `other`."""
         words = pool(index)
         for word in contents[other]:
-            item = (word, concepts[other].get(word, frozenset()))
+            # An amount is held only where `index` writes it in as many content words: "3 Monate" drops "drei".
+            amount = frozenset(t for t in quantities[other].get(word, ()) if weight[index].get(t, 0) >= weight[other][t])
+            item = (word, concepts[other].get(word, frozenset()) | amount)
             if any(same(item, candidate) for candidate in words):
                 continue
             units = hyphen_units(word)
@@ -3496,6 +3690,20 @@ def counted_reformulations(
         return True
 
     filled = [index for index, words in enumerate(contents) if words]
+    # Of equal reformulations the one whose text sorts first counts, not the one written first: holding
+    # each other is not transitive, so "the first written" would let their order change the count. The text
+    # sorts in NFC, so the same reformulation decomposed ("a" and U+0308 for "ä") sorts in the same place.
+    rank = {
+        index: (
+            unicodedata.normalize("NFC", str(formulations[index].get("text", ""))).casefold(),
+            sorted(
+                (word, sorted(concepts[index].get(word, ())), sorted(quantities[index].get(word, ())))
+                for word in contents[index]
+            ),
+            index,
+        )
+        for index in filled
+    }
     counted: list[bool] = []
     for index, entry in enumerate(formulations[: len(contents)]):
         counts = index > 0 and entry.get("origin") == "also" and bool(contents[index])
@@ -3505,8 +3713,8 @@ def counted_reformulations(
             for other in filled:
                 if other in (0, index) or not holds(index, other):
                     continue
-                # A strict superset never counts; of equal ones only the first does.
-                if not holds(other, index) or other < index:
+                # A strict superset never counts; of equal ones only the first by `rank` does.
+                if not holds(other, index) or rank[other] < rank[index]:
                     counts = False
                     break
         counted.append(counts)
@@ -4029,6 +4237,7 @@ class _Formulation:
         self.text = text
         self.scan = scan
         self.terms = ranking.terms
+        self.amounts = ranking.quantities
         self.members: dict[Any, list[wordforms.Member]] = scan_members(ranking, scan, vocabulary)
         self.content = content_words(ranking.terms)
         # A separable verb the formulation splits ("Wann schaltet ... ab?")
@@ -4085,6 +4294,10 @@ class _Formulation:
     def concepts(self) -> dict[str, frozenset]:
         """Per content word, the concepts in whose matching run it stands."""
         return {word: frozenset(key for key, run in self.runs.items() if word in run) for word in self.content}
+
+    def quantities(self) -> dict[str, frozenset]:
+        """Per content word, the quantity tokens of the amounts it is written in (`query_quantities`)."""
+        return {word: frozenset(self.amounts.get(word, ())) for word in self.content}
 
     def hits(self, matcher: _Matcher, word_forms_only: bool) -> set[int]:
         """H_i: passages inside the context of every content word that hold at least one of them themselves."""
@@ -4283,7 +4496,10 @@ def exhaustive_scan(
         _Formulation(entry["text"], ranking, definitions, scan, vocabulary) for entry, ranking in zip(kept, rankings)
     ]
     counted = counted_reformulations(
-        kept, [formulation.content for formulation in formulations], [formulation.concepts() for formulation in formulations]
+        kept,
+        [formulation.content for formulation in formulations],
+        [formulation.concepts() for formulation in formulations],
+        [formulation.quantities() for formulation in formulations],
     )
     by_formulation: list[set[int]] = []
     word_form_hits: set[int] = set()

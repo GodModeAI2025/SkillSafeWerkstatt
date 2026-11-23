@@ -13,16 +13,38 @@ Two decisions, both about what the wiki is allowed to say about itself:
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import unittest
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "maintain-llm-wiki" / "scripts"))
 
 import freshness  # noqa: E402
-from harness import TempWiki, run_json  # noqa: E402
+from harness import QUERY, TempWiki, python_environment, run_json  # noqa: E402
+
+
+def assess_later(scripts: Path, days: int, target: str = "") -> dict:
+    """Run a quality helper's assess_quality() in its own interpreter, `days` after now.
+
+    The query skill's helper takes the wiki as `target`; an export's takes none.
+    """
+    arguments = f"pathlib.Path({target!r})" if target else ""
+    code = (
+        "import json, pathlib, sys; from datetime import datetime, timedelta, timezone; "
+        f"sys.path.insert(0, {str(scripts)!r}); import assess_quality; "
+        f"later = datetime.now(timezone.utc) + timedelta(days={days}); "
+        f"print(json.dumps(assess_quality.assess_quality({arguments}{', ' if arguments else ''}now=later)))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-B", "-S", "-s", "-c", code], capture_output=True, encoding="utf-8",
+        env=python_environment(PYTHONIOENCODING="utf-8"),
+    )
+    if result.returncode != 0:
+        raise AssertionError(result.stderr)
+    return json.loads(result.stdout)
 
 
 class ParseExpiry(unittest.TestCase):
@@ -136,8 +158,39 @@ class InTheWiki(unittest.TestCase):
             reader = wiki.query_json("assess_quality.py", "--target", str(wiki.path))["quality"]
             self.assertEqual(quality["freshness"]["expired"], 1)
             self.assertEqual(quality["freshness"], reader["freshness"])
+            self.assertEqual(quality["expiry"]["expired"], 1)
+            self.assertEqual(quality["expiry"], reader["expiry"])
             self.assertIn("pages_past_their_expiry", [item["code"] for item in quality["advisories"]])
             self.assertEqual(quality["state"], reader["state"])
+
+    def test_a_page_that_expires_after_the_release_is_counted_when_assessed(self) -> None:
+        """The release recorded 0 expired pages; 150 days later both helpers count the page.
+
+        Measured before this change: an export assessed 150 days after its
+        release still reported 0 while its first hit carried past_expiry.
+        """
+        end = (datetime.now(timezone.utc) + timedelta(days=10)).date().isoformat()
+        with TempWiki() as wiki:
+            self._with_expiry(wiki, end)
+            wiki.rebuild()
+            wiki.release("expiry-later-1")
+            wiki.maintain(
+                "export_wiki_skill.py",
+                "--target", str(wiki.path), "--output-dir", str(wiki.root / "out"), "--skill-name", "spaeter",
+            )
+            exported = wiki.root / "out" / "spaeter" / "scripts"
+            for label, report in (
+                ("query", assess_later(QUERY, 150, str(wiki.path))),
+                ("export", assess_later(exported, 150)),
+            ):
+                with self.subTest(helper=label):
+                    quality = report["quality"]
+                    self.assertEqual(quality["freshness"]["expired"], 0, "the release's own count stays as recorded")
+                    self.assertEqual((quality["expiry"]["with_expiry"], quality["expiry"]["expired"]), (1, 1))
+                    self.assertIn("pages_past_their_expiry", [item["code"] for item in quality["advisories"]])
+            today = assess_later(exported, 0)["quality"]
+            self.assertEqual((today["expiry"]["with_expiry"], today["expiry"]["expired"]), (1, 0))
+            self.assertNotIn("pages_past_their_expiry", [item["code"] for item in today["advisories"]])
 
     def test_the_export_carries_the_expiry(self) -> None:
         with TempWiki() as wiki:

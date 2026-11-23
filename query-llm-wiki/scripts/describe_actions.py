@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 
@@ -20,7 +21,7 @@ CATALOG = {
     "actions": [
         {"id": "verify-release", "helper": "verify_release.py", "description": "Verify release hashes and lock-free snapshot stability.", "writes": False, "destructive": False, "parameters": [{"name": "expect_manifest_sha256", "type": "sha256", "required": False}]},
         {"id": "inspect-identity", "helper": "identity_status.py", "description": "Validate and return only the allowlisted confirmed SOUL and content-policy fields.", "writes": False, "destructive": False, "parameters": []},
-        {"id": "assess-quality", "helper": "assess_quality.py", "description": "Assess technical state, review freshness, open questions, snapshot age, the trust-tier distribution, and pages past their own end date.", "writes": False, "destructive": False, "parameters": [{"name": "expect_manifest_sha256", "type": "sha256", "required": False}]},
+        {"id": "assess-quality", "helper": "assess_quality.py", "description": "Assess technical state, review freshness, open questions, snapshot age, the trust-tier distribution, and pages past their own end date (at release and on the assessment day).", "writes": False, "destructive": False, "parameters": [{"name": "expect_manifest_sha256", "type": "sha256", "required": False}]},
         {"id": "inventory-frontmatter", "helper": "inventory_wiki.py", "description": "Return property counts, observed types, samples, and schema drift from a verified release.", "writes": False, "destructive": False, "parameters": [{"name": "expect_manifest_sha256", "type": "sha256", "required": False}]},
         {
             "id": "search",
@@ -50,4 +51,7 @@ if __name__ == "__main__":
     for _stream in (sys.stdout, sys.stderr):
         if hasattr(_stream, "reconfigure"):
             _stream.reconfigure(encoding="utf-8", errors=_stream.errors)
+    # It takes no argument; one it does not take is a usage error (exit 2,
+    # nothing on standard output), as in every other read helper.
+    argparse.ArgumentParser(description=__doc__).parse_args()
     print(json.dumps(CATALOG, ensure_ascii=False, indent=2))

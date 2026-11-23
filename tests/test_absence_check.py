@@ -28,7 +28,10 @@ from __future__ import annotations
 import json
 import re
 import sys
+import itertools
+import random
 import unittest
+import unicodedata
 from pathlib import Path
 from unittest import mock
 
@@ -1654,8 +1657,9 @@ class AbsenceCheck(unittest.TestCase):
         self.assertEqual(counted(three, [["eintrittspreis", "kind", "bad"], ["eintrittspreis", "kinder", "bad"],
                                          ["eintrittspreis", "kind", "bader"]]), [False, False, False])
         # Verb forms are the same word, through the `verb` word form and the `verb_ending` rule.
+        # Of the two equal reformulations the one whose words sort first counts (Stufe 7: not the one written first).
         self.assertEqual(counted(three, [["lange", "vertrag", "kundigen"], ["vertrag", "kundigt", "frist"],
-                                         ["vertrage", "gekundigt", "frist"]]), [False, True, False])
+                                         ["vertrage", "gekundigt", "frist"]]), [False, False, True])
         self.assertEqual(counted(three, [["quarzit"], ["basalt", "senkt"], ["basalte", "senken"]]), [False, True, False])
         # Terms of one concept the question already triggers are the same word.
         concepts = [{"netzgebuhr": frozenset({"netzentgelt"})}, {"netzentgelt": frozenset({"netzentgelt"})},
@@ -1685,7 +1689,7 @@ class AbsenceCheck(unittest.TestCase):
         words = [["gastarif", "kundigungsfrist"], ["gasvertrag", "kundigung", "frist"], ["gasvertrag"]]
         self.assertEqual(search_core.counted_reformulations(three, words), [False, False, True])
         self.assertEqual(search_core.counted_reformulations(three, [words[0], words[2], words[1]]), [False, True, False])
-        # Of reformulations with the same words, only the first counts, wherever they stand.
+        # Of reformulations with the same words, only one counts, the one whose text (here: words) sorts first, wherever they stand.
         self.assertEqual(search_core.counted_reformulations(three + [{"origin": "also"}], [
             ["quarzit"], ["basalt", "halde"], ["granit"], ["halden", "basalt"],
         ]), [False, True, True, False])
@@ -1695,6 +1699,141 @@ class AbsenceCheck(unittest.TestCase):
                 with self.subTest(also=also):
                     check = search_core.search_loaded(loaded, "Quarzit Lager", also=also, exhaustive=True)["absence_check"]
                     self.assertEqual((check["reformulations_counted"], check["reasons"]), (1, ["too_few_reformulations"]))
+
+    def test_a_reformulation_that_only_writes_an_amount_in_another_notation_does_not_count(self) -> None:
+        """Stufe 7: one amount in another notation, written in as many words, is no new search."""
+        three = [{"origin": "query"}, {"origin": "also"}, {"origin": "also"}]
+        counted = search_core.counted_reformulations
+        # "9,84 Cent kWh" against "9,84 ct/kWh": "Cent" writes the amount of "ct" in as many words; a unit the
+        # scan reads outside an amount ("kWh" after "ct/" and "Kilowattstunde") is a word of its own.
+        price = frozenset({"=0.0984eur"})
+        self.assertEqual(counted(three, [["84", "ct", "kwh"], ["84", "cent", "kwh"], ["84", "ct", "kilowattstunde"]], None, [
+            {"84": price, "ct": price}, {"84": price, "cent": price}, {"84": price, "ct": price},
+        ]), [False, False, True])
+        # Fewer words for the amount are a wider search, like a left-out word: "3 Monate" ("3" is no content
+        # word) beside "drei Monate", "75 €" beside "75 Euro", "2,5 MWh" beside "2500 kWh" count.
+        months = frozenset({"=3monat"})
+        words = [["kundigungsfrist", "drei", "monate"], ["kundigungsfrist", "monate"], ["altvertrag", "kundigung"]]
+        self.assertEqual(counted(three, words, None, [{"drei": months, "monate": months}, {"monate": months}, {}]),
+                         [False, True, True])
+        bonus = frozenset({"=75eur"})
+        self.assertEqual(counted(three[:2], [["75", "euro", "bonus"], ["bonus", "75"]], None, [
+            {"75": bonus, "euro": bonus}, {"75": bonus},
+        ]), [False, True])
+        # The other way round the amount in more words holds the shorter one: it only adds a word.
+        self.assertEqual(counted(three[:2], [["bonus", "75"], ["75", "euro", "bonus"]], None, [
+            {"75": bonus}, {"75": bonus, "euro": bonus},
+        ]), [False, False])
+        # Two reformulations with one amount: the one in fewer words counts, in either order.
+        energy_words = [["quarzit"], ["lager", "2500", "kwh"], ["lager", "mwh"]]
+        energy = [{}, {"2500": frozenset({"=2500kwh"}), "kwh": frozenset({"=2500kwh"})}, {"mwh": frozenset({"=2500kwh"})}]
+        self.assertEqual(counted(three, energy_words, None, energy), [False, False, True])
+        self.assertEqual(counted(three, [energy_words[0], energy_words[2], energy_words[1]], None, [energy[0], energy[2], energy[1]]),
+                         [False, True, False])
+        # Another amount is another search.
+        self.assertEqual(counted(three, [["kundigungsfrist", "drei", "monate"], ["kundigungsfrist", "wochen"],
+                                         ["kundigungsfrist", "monate"]], None, [
+            {"drei": months, "monate": months}, {"wochen": frozenset({"=3woche"})}, {},
+        ]), [False, True, True])
+        # The tokens come from the formulation alone: a wiki without any amount counts the same.
+        with PageTree(self.FILES) as root:
+            loaded = search_core.load(root, include_sources=True, exhaustive=True)
+            cases = (
+                ("Quarzit 9,84 ct/kWh", ["Quarzit 9,84 Cent kWh", "Quarzit 9,84 ct Kilowattstunde"], 1),
+                ("Quarzit Lager 3 Monate", ["Quarzit Lager drei Monaten", "Basalt Halde"], 1),
+                ("Quarzit 2,5 MWh", ["Quarzit 2500 kWh", "Basalt Halde"], 1),
+                ("Quarzit 75 €", ["Quarzit 75 Euro", "Basalt Halde"], 1),
+                ("Quarzit Lager drei Monate", ["Quarzit Lager 3 Monate", "Basalt Halde"], 2),
+                ("Quarzit 2500 kWh", ["Quarzit 2,5 MWh", "Basalt Halde"], 2),
+                ("Quarzit 75 Euro", ["Quarzit 75 €", "Basalt Halde"], 2),
+                ("Quarzit drei Monate", ["Quarzit drei Wochen", "Basalt Halde"], 2),
+            )
+            for query, also, expected in cases:
+                with self.subTest(query=query, also=also):
+                    check = search_core.search_loaded(loaded, query, also=also, exhaustive=True)["absence_check"]
+                    self.assertEqual(check["reformulations_counted"], expected)
+                    self.assertEqual(check["complete"], expected >= search_core.MIN_EXHAUSTIVE_REFORMULATIONS)
+
+    def test_the_order_of_reformulations_with_one_amount_never_changes_the_count(self) -> None:
+        """Stufe 7 review: one amount in two notations, one of them with the question's unit word, in both orders.
+
+        The Fels case needs the concepts: only through "fels-quarzit" does "Fels aus Quarz Lager" hold "Quarzit
+        Lager", and after Stufe 6 its count hung on the order (1 or 2). The same reformulations in NFD count as in
+        NFC: the tie-break sorts their text in one Unicode form (review of Stufe 7).
+        """
+        with PageTree({**self.FILES, "schema/CONCEPTS.md": CONCEPTS}) as root:
+            loaded = search_core.load(root, include_sources=True, exhaustive=True)
+            for query, also, expected in (
+                ("Wie hoch ist der Jahresverbrauch in kWh?", ["Jahresverbrauch 2500 kWh", "Jahresverbrauch 2,5 MWh", "Stromverbrauch Musterhaushalt"], 2),
+                ("Grundgebühr in Euro", ["Grundgebühr 12 Euro", "Grundgebühr 12 €", "monatlicher Grundpreis"], 2),
+                ("Arbeitspreis Cent", ["Arbeitspreis 32 Cent", "Arbeitspreis 0,32 €", "Verbrauchspreis Strom"], 2),
+                ("Fels Lager", ["Fels aus Quarz Lager", "Quarzit Lager", "Basalt Granit"], 1),
+                ("Quarzit Basalt", ["ältere Quarzit", "Quarzit alter", "alte Quarzit"], 1),
+            ):
+                counts = {
+                    search_core.search_loaded(
+                        loaded, query, also=[unicodedata.normalize(form, text) for text in order], exhaustive=True
+                    )["absence_check"]["reformulations_counted"]
+                    for order in itertools.permutations(also)
+                    for form in ("NFC", "NFD")
+                }
+                with self.subTest(query=query):
+                    self.assertEqual(counts, {expected})
+        # Pure: whatever holds whom, the count is a function of the reformulations, not of their order.
+        rng = random.Random(7)
+        words, tokens = ["quarzit", "basalt", "granit", "lager", "halde"], ["=3monat", "=6monat", "=75eur"]
+        for _ in range(300):
+            n = rng.randint(3, 5)
+            contents = [rng.sample(words, rng.randint(1, 3)) for _ in range(n)]
+            amounts = [{w: frozenset(rng.sample(tokens, rng.randint(1, 2))) for w in c if rng.random() < 0.5} for c in contents]
+            forms = [{"origin": "query"}] + [{"origin": "also"}] * (n - 1)
+            base = sum(search_core.counted_reformulations(forms, contents, None, amounts))
+            for order in itertools.permutations(range(1, n)):
+                index = [0, *order]
+                self.assertEqual(
+                    sum(search_core.counted_reformulations(forms, [contents[i] for i in index], None, [amounts[i] for i in index])),
+                    base,
+                )
+
+    def test_a_quantity_link_can_let_a_reformulation_count_that_a_repeat_of_the_question_dominated(self) -> None:
+        """Stufe 7, intended: holding is not transitive, so in rare inputs an amount raises the count."""
+        four = [{"origin": "query"}, {"origin": "also"}, {"origin": "also"}, {"origin": "also"}]
+        words = [["w"], ["v", "e"], ["v"], ["z"]]
+        concepts = [{"w": frozenset({"k"})}, {}, {"v": frozenset({"k"})}, {}]
+        amounts = [{}, {"e": frozenset({"=t"})}, {"v": frozenset({"=t"})}, {}]
+        # Without amounts "v e" is a strict superset of "v", and "v" repeats the question through the concept k.
+        self.assertEqual(search_core.counted_reformulations(four, words, concepts), [False, False, False, True])
+        # With them "v" writes the amount of "e" in as many words: "v e" and "v" hold each other, "v" holds the
+        # question and does not count, and "v e", whose words sort first, now counts.
+        self.assertEqual(search_core.counted_reformulations(four, words, concepts, amounts), [False, True, False, True])
+
+        def reorder(values: list, index: list[int]) -> list:
+            return [values[i] for i in index]
+
+        # The count is still a function of the reformulations: every order gives the same number.
+        for order in itertools.permutations(range(1, 4)):
+            index = [0, *order]
+            with self.subTest(order=order):
+                counted = search_core.counted_reformulations(
+                    four, reorder(words, index), reorder(concepts, index), reorder(amounts, index)
+                )
+                self.assertEqual(sum(counted), 2)
+
+    def test_order_function_words_and_added_words_are_no_new_search(self) -> None:
+        """Stufe 7 probe: the cheap repeats besides another notation were already caught; they stay caught with amounts."""
+        with PageTree(self.FILES) as root:
+            loaded = search_core.load(root, include_sources=True, exhaustive=True)
+            for also in (
+                ["drei Monate Quarzit Lager", "Basalt Halde"],  # another order
+                ["das Quarzit im Lager für drei Monate", "Basalt Halde"],  # function words added
+                ["Quarzit Lager drei Monate Granit", "Basalt Halde"],  # one word added
+                ["Quarzite Lagern drei Monaten", "Basalt Halde"],  # inflection
+            ):
+                with self.subTest(also=also):
+                    check = search_core.search_loaded(loaded, "Quarzit Lager drei Monate", also=also, exhaustive=True)
+                    check = check["absence_check"]
+                    self.assertEqual([entry["counted"] for entry in check["formulations"]], [False, False, True])
+                    self.assertEqual(check["reasons"], ["too_few_reformulations"])
 
     def test_reasons_and_next_steps_come_from_the_closed_vocabulary_in_order(self) -> None:
         self.assertEqual(

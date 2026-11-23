@@ -608,6 +608,79 @@ class IrregularForms(unittest.TestCase):
         self.assertEqual(resolver("schloss", "schliessanlage").resolve("geschlossen"), [])
         self.assertEqual(resolver("geboten").resolve("bietet"), [])
 
+    def test_the_common_strong_verbs_meet_their_forms_and_nouns(self) -> None:
+        """Stufe 7: the common strong and mixed verbs outside the Stufe 6 table, with prefixes and derived nouns."""
+        cases = {
+            "uberschritten": {"uberschreiten", "uberschreitet"}, "behoben": {"beheben", "behebt"},
+            "angehoben": {"anheben", "anzuheben"}, "zugegangen": {"zugehen", "zugeht"},
+            "verstorben": {"verstirbt", "verstarb"}, "eingefroren": {"einfrieren"}, "hinterliess": {"hinterlassen"},
+            "erlischt": {"erloschen", "erlosch"}, "geflogen": {"fliegt", "flog"}, "entfiel": {"entfallt", "entfallen"},
+            "abgetreten": {"abtreten", "abtritt"}, "zugeschnitten": {"zuschneiden"}, "verschwand": {"verschwunden"},
+        }
+        for term, forms in cases.items():
+            with self.subTest(term=term):
+                self.assertEqual(rules(resolver(*forms).resolve(term)), {form: "irregular" for form in forms})
+        for term, nouns in (
+            ("zugegriffen", {"zugriff"}), ("nachgewiesen", {"nachweis", "nachweise"}), ("zuruckgegangen", {"ruckgang"}),
+            ("ausgefallen", {"ausfall"}), ("geflogen", {"flug", "fluge"}), ("zusammenhing", {"zusammenhang"}),
+        ):
+            with self.subTest(term=term):
+                self.assertEqual(rules(resolver(*nouns).resolve(term)), {noun: "derived" for noun in nouns})
+        # A prefixed verb never meets the bare verb: "verstorben" is no form of "sterben".
+        self.assertEqual(resolver("sterben", "stirbt").resolve("verstorben"), [])
+        # Valuable prefixes stay keyed; "abgewogen" is only abwägen, never a weighed "wiegen".
+        for token, key in (
+            ("zuruckgewiesen", "zuruck|weis"), ("hochgeladen", "hoch|lad"), ("erzogen", "er|zieh"), ("abgewogen", "ab|wag"),
+            ("erschaffen", "er|schaff"), ("gestohlen", "|stehl"), ("errungen", "er|ring"), ("zusammenhangen", "zusammen|hang"),
+        ):
+            with self.subTest(token=token):
+                self.assertEqual(wordforms.irregular_keys(token), (key,))
+        # A "Hinweis:" label or heading is no derived match for "hingewiesen" (Stufe 7 review).
+        self.assertEqual(resolver("hinweis", "hinweise").resolve("hingewiesen"), [])
+
+    def test_homographs_of_the_common_strong_verbs_get_no_key(self) -> None:
+        """Stufe 7 leaves out the forms that are common nouns or other words, and the verbs and prefixes that make them."""
+        for token in (
+            # Excluded forms: Stahl, Rang, Ringe, Schritt(en), Sitze, Wäsche, Stöße, Wiege, Wogen, Schwamm, Klinge,
+            # Schreie, Schmelze, Hänge, Bogen, Berufe, drängen, Fliege, Gruben, Gießen, Floh.
+            "stahl", "rang", "ringe", "schritt", "schritten", "sitze", "wasche", "stosse", "wiege", "wogen", "schwamm",
+            "klinge", "schreie", "schmelze", "hange", "bogen", "berufe", "drangen", "fliege", "gruben", "giessen", "floh",
+            # Rows and prefixes left out: schießen without a prefix (Geschossen, Schoß), raten without one (Rate,
+            # Raten, geraten), begreifen (Begriffen), anhängen (Anhängen), anklingen (Anklang), schneiden without a
+            # preterite (Abschnitt, Durchschnitt, Schnitten) and without durch-, gehen and fallen without a prefix,
+            # vergehen (vergangen), fahren, preisen (Preise), essen, befehlen (Befehle), unternehmen, ertragen
+            # (Erträge), the nouns Eingang, Zugang, Ausgang, Vorgang, Schnitt and Schuss.
+            "geschossen", "schoss", "schuss", "rate", "raten", "geraten", "begriffen", "anhangen", "anklang", "schnitt",
+            "abschnitte", "durchschnitten", "schnitten", "gehen", "ging", "gegangen", "fiel", "gefallen", "vergangen",
+            "gefahren", "verfahren", "preise", "preisen", "essen", "befehle", "unternehmen", "ertrage", "ertragen",
+            "eingang", "zugang", "ausgang", "vorgang",
+            # Prefixes whose participle is another verb or a noun: umlegen, belegen, verlegen, hinterlegen, bekannt,
+            # Bescheide, Erwachsene, Verdacht, unter Umständen.
+            "umlegen", "belegen", "verlegen", "hinterlegen", "bekannt", "bescheide", "erwachsene",
+            "verdacht", "umstanden",
+            # Stufe 7 review: the idiom "was ... angeht", the noun Hinweis, GRUB, Drang, schaffen (manage), and the rows,
+            # prefixes and nouns left out: überlegen, Berge, Abfall, betrügen ("betrugen" of betragen), tun.
+            "angeht", "angehen", "angegangen", "anging", "hinweis", "grub", "drang", "schaffen", "schafft", "geschaffen",
+            "schuf", "uberlegen", "berge", "abfall", "betrugen", "getan",
+            # No -st after s, z or x.
+            "sitzst", "lesst",
+        ):
+            with self.subTest(token=token):
+                self.assertEqual(wordforms.irregular_keys(token), ())
+        # Review of Stufe 7: durchgehen and untergehen are only separable, so their participle without ge- is no
+        # German word, only the folded dative plural "Durchgängen" ("in zwei Durchgängen") or "Untergängen".
+        for token in ("durchgangen", "durchgangene", "untergangen", "untergangenen"):
+            with self.subTest(token=token):
+                self.assertEqual(wordforms.irregular_keys(token), ())
+        self.assertEqual(wordforms.irregular_keys("durchgegangen"), ("durch|geh",))
+        self.assertEqual(wordforms.irregular_keys("untergegangen"), ("unter|geh",))
+        # The other forms of those verbs stay, and "umgangen" (of umgehen, also inseparable).
+        for token in (
+            "zugeschossen", "beraten", "gegossen", "geschnitten", "eingegangen", "ausgefallen", "gestohlen", "errungen", "umgangen",
+        ):
+            with self.subTest(token=token):
+                self.assertNotEqual(wordforms.irregular_keys(token), ())
+
     def test_the_zu_infinitive_of_a_composite_prefix_meets_its_verb(self) -> None:
         for token, key in (
             ("anzuerkennen", "aner|kenn"), ("beizubehalten", "beibe|halt"), ("einzubeziehen", "einbe|zieh"),
@@ -766,6 +839,28 @@ class IrregularForms(unittest.TestCase):
             entry["rule"] for page_ in report["exhaustive_hits"] for hit in page_["hits"] for entry in hit.get("matched") or []
         }
         self.assertTrue(rules_found.isdisjoint({"irregular", "derived"}))
+
+    def test_a_noun_of_the_tables_for_a_verb_of_the_question_is_no_new_search(self) -> None:
+        """Stufe 7: "Zugriff" is the derived noun of "zugegriffen", so writing the verb as the noun counts as no reformulation."""
+        pages = {
+            "wiki/topics/konto.md": page("Konto", "Jeder Zugriff auf das Kundenkonto wird protokolliert."),
+            "wiki/topics/halde.md": page("Halde", "Granit an der Halde."),
+        }
+        with PageTree(pages, index=None) as root:
+            report = search_core.search(
+                root, "Wurde auf das Kundenkonto zugegriffen?", also=["Kundenkonto Zugriff", "Basalt Halde"], limit=10,
+                exhaustive=True,
+            )
+        check = report["absence_check"]
+        self.assertEqual([entry["counted"] for entry in check["formulations"]], [False, False, True])
+        self.assertEqual((check["reformulations_counted"], check["complete"], check["reasons"]),
+                         (1, False, ["too_few_reformulations"]))
+        # The question alone already reaches the page with the noun.
+        self.assertEqual(
+            [(entry["path"], hit["formulations"]) for entry in report["exhaustive_hits"] for hit in entry["hits"]],
+            [("wiki/topics/konto.md", [0, 1])],
+        )
+        self.assertTrue(search_core.same_scan_word("zugegriffen", "zugriff"))
 
 
 class SearchBehaviour(unittest.TestCase):

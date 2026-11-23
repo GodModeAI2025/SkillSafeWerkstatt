@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import sys
@@ -36,6 +37,9 @@ def read_frontmatter(path: Path, source: str) -> dict[str, Any]:
 
 
 def assess_identity(target: Path) -> dict[str, Any]:
+    # The query skill's copy validates the same way. Its advisories send the
+    # reader to the maintenance skill; this frozen copy cannot be maintained or
+    # released, so they name the canonical wiki and a new export instead.
     advisories: list[dict[str, str]] = []
     result: dict[str, str] = {"soul": "missing", "content_policy": "missing"}
     soul = target / "SOUL.md"
@@ -59,14 +63,14 @@ def assess_identity(target: Path) -> dict[str, Any]:
                 "code": "soul_invalid",
                 "severity": "warning",
                 "message": f"SOUL.md is invalid: {exc}",
-                "recommended_action": "Use the maintenance skill to discuss and confirm a corrected identity proposal.",
+                "recommended_action": "Confirm a corrected identity in the canonical wiki, release it, and export a new knowledge skill.",
             })
     else:
         advisories.append({
             "code": "soul_missing",
             "severity": "notice",
             "message": "This released wiki has no confirmed SOUL.md.",
-            "recommended_action": "Use the maintenance skill to complete the identity interview and publish a new release.",
+            "recommended_action": "Complete the identity interview in the canonical wiki, release it, and export a new knowledge skill.",
         })
     if policy.is_file():
         try:
@@ -89,14 +93,14 @@ def assess_identity(target: Path) -> dict[str, Any]:
                 "code": "content_policy_invalid",
                 "severity": "warning",
                 "message": f"schema/CONTENT_POLICY.md is invalid: {exc}",
-                "recommended_action": "Use the maintenance skill to confirm a corrected content-policy proposal.",
+                "recommended_action": "Confirm a corrected content policy in the canonical wiki, release it, and export a new knowledge skill.",
             })
     else:
         advisories.append({
             "code": "content_policy_missing",
             "severity": "notice",
             "message": "This released wiki has no confirmed schema/CONTENT_POLICY.md.",
-            "recommended_action": "Use the maintenance skill to confirm history and supersession behavior.",
+            "recommended_action": "Confirm history and supersession behavior in the canonical wiki, release it, and export a new knowledge skill.",
         })
     result["state"] = (
         "configured"
@@ -121,6 +125,9 @@ def identity_contract(target: Path) -> dict[str, Any]:
 
 
 def main() -> int:
+    # It takes no argument; one it does not take is a usage error (exit 2,
+    # nothing on standard output), as in every other helper of this skill.
+    argparse.ArgumentParser(description=__doc__).parse_args()
     knowledge = Path(__file__).resolve().parent.parent / "references" / "knowledge"
     print(json.dumps(identity_contract(knowledge), ensure_ascii=False, indent=2))
     return 0

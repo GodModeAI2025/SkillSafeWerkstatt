@@ -24,17 +24,15 @@ if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
 import search_core
-from verify_knowledge import knowledge_root, verify
+from verify_knowledge import MANIFEST_HELP, knowledge_root, pinned, verify
 
 
 #: Result paths are relative to this skill's folder, where the agent opens them.
 PATH_PREFIX = "references/knowledge/"
 
 
-def snapshot_changed(expected: str = "", actual: str = "") -> int:
-    release: dict = {"state": "snapshot_changed"}
-    if expected:
-        release.update({"expected_manifest_sha256": expected, "manifest_sha256": actual})
+def refuse(release: dict) -> int:
+    """Print a release that is not ready with no results; every such state exits 4."""
     print(search_core.report_json({"release": release, "results": []}))
     return 4
 
@@ -49,7 +47,7 @@ def main() -> int:
         "Markdown for all words of all searches; "
         "returns at most 100,000 printed characters of matching passages under exhaustive_hits; "
         "required before stating that the snapshot holds nothing on a question",
-        manifest_help="Manifest hash retained from verify_knowledge.py; a different snapshot reports snapshot_changed",
+        manifest_help=MANIFEST_HELP,
     )
     args = search_core.parse_search_arguments(parser)
     # The request is read and checked before the snapshot is touched.
@@ -64,12 +62,9 @@ def main() -> int:
     except search_core.RequestError as exc:
         raise SystemExit(str(exc)) from exc
 
-    release = verify()
+    release = pinned(verify(), args.expect_manifest_sha256)
     if release.get("state") != "ready":
-        print(search_core.report_json({"release": release, "results": []}))
-        return 4
-    if args.expect_manifest_sha256 and release.get("manifest_sha256") != args.expect_manifest_sha256:
-        return snapshot_changed(args.expect_manifest_sha256, str(release.get("manifest_sha256") or ""))
+        return refuse(release)
     # The exhaustive scan ranks the sources too; the report prints the effective value.
     include_sources = args.include_sources or args.exhaustive
     try:
@@ -89,7 +84,7 @@ def main() -> int:
 
     final_release = verify()
     if final_release.get("state") != "ready" or final_release.get("manifest_sha256") != release.get("manifest_sha256"):
-        return snapshot_changed()
+        return refuse({"state": "snapshot_changed"})
     if found["parser_errors"]:
         print(search_core.report_json({"state": "invalid_frontmatter", "release": release, "parser_errors": found["parser_errors"], "results": []}))
         return 5
