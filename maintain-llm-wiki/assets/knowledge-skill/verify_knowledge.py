@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import sys
@@ -124,8 +125,30 @@ def verify() -> dict[str, Any]:
     }
 
 
+def pinned(release: dict[str, Any], expected_manifest_sha256: str) -> dict[str, Any]:
+    """The verified release, or `snapshot_changed` when it is not the one retained earlier.
+
+    Every helper of this skill that takes `--expect-manifest-sha256` applies
+    this one rule after a full verification: a damaged snapshot reports
+    `invalid_snapshot` whatever the hash, and an empty hash pins nothing.
+    """
+    if release.get("state") != "ready" or not expected_manifest_sha256:
+        return release
+    actual = str(release.get("manifest_sha256") or "")
+    if actual == expected_manifest_sha256:
+        return release
+    return {"state": "snapshot_changed", "expected_manifest_sha256": expected_manifest_sha256, "manifest_sha256": actual}
+
+
+#: The help text of `--expect-manifest-sha256` in every helper that takes it.
+MANIFEST_HELP = "Manifest hash retained from verify_knowledge.py; a different snapshot reports snapshot_changed"
+
+
 def main() -> int:
-    report = verify()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--expect-manifest-sha256", default="", help=MANIFEST_HELP)
+    args = parser.parse_args()
+    report = pinned(verify(), args.expect_manifest_sha256)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if report.get("state") == "ready" else 4
 

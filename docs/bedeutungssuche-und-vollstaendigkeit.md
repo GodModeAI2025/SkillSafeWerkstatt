@@ -1,7 +1,7 @@
 # Bedeutungssuche und Vollständigkeit im erzeugten Wissens-Skill
 
 Analyse, Umsetzungsplan und Umsetzungsstand
-Stand: 2026-11-17 (Analyse und Plan vom 2026-11-13; alle sieben Stufen, 0 bis 6, sind umgesetzt,
+Stand: 2026-11-23 (Analyse und Plan vom 2026-11-13; alle acht Stufen, 0 bis 7, sind umgesetzt,
 siehe Abschnitt „Umsetzungsstand")
 Ausgangsfrage: „Wie bekomme ich eine Bedeutungssuche in den Skill, den das Projekt erzeugt, und
 wie stelle ich sicher, dass er nichts übersieht?"
@@ -55,7 +55,7 @@ meldete trotzdem Erfolg (Befund 0).
 | 2 | Wortformen werden nicht erkannt | hoch | mittel | erledigt (Stufe 2) |
 | 3 | Synonyme, Umschreibungen und andere Sprachen erreichen die Suche nicht | hoch | niedrig bis mittel | erledigt (Stufe 3), soweit der Agent umformuliert |
 | 4 | Eine Fehlanzeige ist nicht abgesichert | hoch | mittel | erledigt (Stufe 4) |
-| 5 | Der exportierte Skill ist eine abgedriftete Kopie | mittel | mittel | erledigt (Suche Stufe 1, Qualitätsbewertung Stufe 6) |
+| 5 | Der exportierte Skill ist eine abgedriftete Kopie | mittel | mittel | erledigt (Suche Stufe 1, Qualitätsbewertung Stufe 6 und 7) |
 | 6 | Der Release prüft weder Quellenabdeckung noch Auffindbarkeit | mittel | mittel | erledigt (Stufe 5) |
 | 7 | Plattformlücken: Windows-Ausgabe, Release-Bindung der Suche | mittel | niedrig | erledigt (Stufe 1) |
 
@@ -399,7 +399,7 @@ wörtlich):
 > nothing was found with the searched words in this release version. In both cases list the
 > searched formulations and quote `search_record.line`.
 
-### Befund 5 — Der exportierte Skill war eine abgedriftete Kopie *(Suche erledigt in Stufe 1; Qualitätsbewertung in Stufe 6)*
+### Befund 5 — Der exportierte Skill war eine abgedriftete Kopie *(Suche erledigt in Stufe 1; Qualitätsbewertung in Stufe 6 und 7)*
 
 **Beobachtung.** Der Export suchte mit einer eigenen additiven Heuristik, kannte weder BM25,
 Historie noch Ablaufdaten und wies die Vertrauensstufe eines Treffers nicht aus. Seine
@@ -424,10 +424,10 @@ unter `references/`. Stufe 6 brachte den gemeinsamen Bewertungskern `quality_cor
 byte-identisch in beiden Skills und im Export. Beide `assess_quality.py` sind dünne Wrapper, die
 nur noch ihren Release prüfen. Der Export meldet jetzt wie der Lese-Skill die Verteilung der
 Vertrauensstufen und die Zahl der Seiten, deren Ablaufdatum beim Release schon überschritten war;
-je Treffer gilt `past_expiry`. Beibehalten sind die Unterschiede, die aus dem eingefrorenen Stand
-folgen: kein `--target`, kein `--expect-manifest-sha256`, der Ersatzzustand `invalid_snapshot`
-statt `invalid_wiki` und sieben Hinweise, die statt des Pflege-Skills das kanonische Wiki und
-einen neuen Export nennen.
+je Treffer gilt `past_expiry`. Seit Stufe 7 zählt er abgelaufene Seiten auch am Tag der
+Bewertung (`expiry`) und nimmt `--expect-manifest-sha256` an. Beibehalten sind die Unterschiede,
+die aus dem eingefrorenen Stand folgen: kein `--target`, `invalid_snapshot` statt `invalid_wiki`,
+`snapshot_changed` mit Exit 4 statt 3; kein Hinweis nennt den Pflege-Skill.
 
 ### Befund 6 — Der Release prüfte weder Quellenabdeckung noch Auffindbarkeit *(erledigt in Stufe 5)*
 
@@ -583,6 +583,15 @@ Fugenvarianten, unregelmäßige Formen aus einer geschlossenen Tabelle und Menge
 anderer Schreibweise, jeweils mit Prototyp, zwei Gegenprüfungen und Messung. Die freie
 Zerlegung des Suchworts für co-03 wurde gemessen und abgelehnt.
 
+### Stufe 7 — Offene Punkte II *(umgesetzt)*
+
+Die Punkte, die nach Stufe 6 offen waren: die Qualitätsbewertung des Exports am Tag der
+Bewertung, sein eingefrorener Wortlaut, `--expect-manifest-sha256` und die Exit-Codes; weitere
+Einheiten, Größenwörter, Groß- und Kleinschreibung, Stellenangaben und Zeilenumbrüche bei den
+Mengenangaben; eine strengere Zählung der Umformulierungen und eine größere Tabelle
+unregelmäßiger Formen. Zusammengesetzte Einheiten und die freie Zerlegung wurden gemessen und
+abgelehnt.
+
 ### Reihenfolge und Abhängigkeiten
 
 Stufe 1 zuerst: Ohne gemeinsamen Kern wäre jede weitere Stufe doppelt zu bauen, und ohne
@@ -661,18 +670,18 @@ vier Schritte haben es bestanden und sind eingeschaltet (Umsetzungsstand, Stufe 
 
 ---
 
-## Umsetzungsstand (2026-11-17)
+## Umsetzungsstand (2026-11-23)
 
-Alle sieben Stufen (0 bis 6) sind umgesetzt, dazu eine verhaltensneutrale Aufräumrunde und fünf
+Alle acht Stufen (0 bis 7) sind umgesetzt, dazu eine verhaltensneutrale Aufräumrunde und fünf
 gezielte Suchen nach falschen Fehlanzeigen. Die Produktregeln gelten weiter: Der Lese-Skill schreibt
 nichts, auch keinen Index und keinen Cache; alle Helfer brauchen nur Python ab 3.9 und die
 Standardbibliothek und laufen unter Windows, macOS und Linux; die geteilten Module liegen
 byte-identisch in beiden Skills; ein Export enthält nur eine geprüfte, lesende Hülle von
-Bibliotheken und sucht wie der Lese-Skill. Die volle Testsuite hat 689 Tests und besteht; die
+Bibliotheken und sucht wie der Lese-Skill. Die volle Testsuite hat 723 Tests und besteht; die
 Tests von Suche, Export und Paketierung laufen zusätzlich unter Python 3.9.
 
 Dieser Abschnitt beschreibt je Stufe, was gebaut ist, dann die Abschlussmessung nach Stufe 5,
-Stufe 6 mit ihrer eigenen Messung, die Entscheidungen und Abweichungen vom Plan, was offen bleibt
+Stufe 6 und Stufe 7 mit ihren eigenen Messungen, die Entscheidungen und Abweichungen vom Plan, was offen bleibt
 und wie man neu misst. Die
 Einzelheiten der Ausgabefelder stehen im README (Abschnitte 4.16, 4.26 und 5.4) und in den
 Anleitungstexten der Skills.
@@ -1503,9 +1512,267 @@ der Anleitungstexte, die Längengrenze der Fugenvarianten), und Korrekturen der 
 aller drei Tore (`measure`, `measure_reformulations`, `measure_absence`) ergab Byte für Byte
 dieselbe Datei wie vor der Prüfrunde; keine Grenze und keine Erwartung änderte sich.
 
-Die volle Suite hat 689 Tests und besteht; die Tests von Bewertungskern, Mengenangaben,
-Wortformen, vollständiger Prüfung, Suche, Export und Paketierung laufen zusätzlich unter
+Die volle Suite hatte danach 689 Tests und bestand; die Tests von Bewertungskern, Mengenangaben,
+Wortformen, vollständiger Prüfung, Suche, Export und Paketierung liefen zusätzlich unter
 Python 3.9.
+
+### Stufe 7 — Offene Punkte II (2026-11-23)
+
+Stufe 7 nahm sich die Punkte vor, die nach Stufe 6 unter „Was offen bleibt" standen: vier zum
+Export (E1 bis E4), sechs zu den Mengenangaben (Qa bis Qf), die strengere Zählung der
+Umformulierungen (S), eine größere Tabelle unregelmäßiger Formen (I) und noch einmal die freie
+Zerlegung des Suchworts für co-03 (C). Wie in Stufe 6 gab es je Punkt einen Prototyp, zwei
+unabhängige Gegenprüfungen und eine Messung aller Varianten auf einem gemeinsamen Bau des
+Test-Wikis. Danach setzten vier getrennte Arbeitspakete (E, Q, S, I) die übernommenen Punkte um,
+jedes mit den Änderungen, die die Gegenprüfungen verlangten, und ein fünftes führte sie zusammen.
+„Nach Stufe 6" heißt im Folgenden Commit `d8e6263`.
+
+| Punkt | Entscheidung | Wirkung auf dem Test-Wiki |
+|---|---|---|
+| E1 Export: abgelaufene Seiten am Tag der Bewertung | umgesetzt, mit Änderungen | keine auf die Suche |
+| E2 Export: eingefrorener Wortlaut | umgesetzt, mit Änderungen | keine auf die Suche |
+| E3 Export: `--expect-manifest-sha256` | umgesetzt | keine auf die Suche |
+| E4 Export: Exit-Codes | umgesetzt als Dokumentation, Vertragstest und zwei Parser | keine auf die Suche |
+| Qa Mengen: Groß- und Kleinschreibung (KW, mW, T, M, KG) | umgesetzt, mit Änderungen | keine |
+| Qb Mengen: Zeilenumbruch | umgesetzt, in der weichen Form | keine |
+| Qc Mengen: Stellenangaben | umgesetzt, mit Änderungen | keine |
+| Qd Mengen: zusammengesetzte Einheiten | abgelehnt | keine |
+| Qe Mengen: Größenwörter | umgesetzt | keine |
+| Qf Mengen: weitere Einheiten | umgesetzt, mit Änderungen | keine |
+| S strengere Vollständigkeit | umgesetzt, mit Änderungen | Satz B: 110 → 109 vollständige Prüfungen (nur id-04) |
+| I größere Tabelle unregelmäßiger Formen | umgesetzt, mit Änderungen | keine |
+| C freie Zerlegung des Suchworts | abgelehnt | keine (der Prototyp hätte co-03 auf Rang 2 gebracht) |
+
+**Export (E1 bis E4).** Gemessen vor der Änderung: Ein Export, 150 Tage nach seinem Release
+bewertet, meldete 0 abgelaufene Seiten, während sein erster Treffer `past_expiry: true` trug;
+16 Hinweise des Exports empfahlen noch den Pflege-Skill; `assess_quality.py` und
+`verify_knowledge.py` des Exports meldeten `ready` mit Exit 0 für einen falschen Manifest-Hash
+und für ein unbekanntes Argument. Jetzt meldet `assess_quality` in `quality.expiry` die Seiten
+mit Ablaufdatum und die am Tag der Bewertung abgelaufenen (`as_of`, `with_expiry`, `expired`),
+und der Hinweis `pages_past_their_expiry` nimmt den größeren der beiden Werte, Release oder Tag
+der Bewertung. Gezählt werden nur die Markdown-Dateien unter `wiki/`, die `meta/manifest.json`
+nennt; ein unlesbares Manifest zählt nichts, dann trägt die Zahl des Releases den Hinweis. Über
+den Prototyp hinaus:
+
+- *Nur veröffentlichte Seiten.* Der Prototyp zählte jede Datei unter `wiki/`. Eine nicht
+  veröffentlichte `wiki/~$owner.md` mit `stale_after: 2020-01-01`, die die Prüfung des Releases
+  unter `ignored_artifacts` führt, ergab `with_expiry` 2, `expired` 1 und einen falschen
+  Hinweis; jetzt sind es 1 und 0, ohne Hinweis.
+- *Zwei Testlücken.* Eine Seite, die beim Release und am Tag der Bewertung abgelaufen ist, zählt
+  einmal („1 page(s) declared an end date that has passed."); Markdown unter `sources/` und
+  `meta/history/`, auch im Manifest, und eine nicht veröffentlichte `wiki/~$owner.md` zählen nicht.
+  Der erste Test fängt die Mutation, die die beiden Zahlen addiert statt die größere zu nehmen.
+- *Ohne gültigen Qualitätsstatus* trägt die Ausgabe `expiry` ebenso und den Hinweis, sobald eine
+  Seite abgelaufen ist.
+- *Exit-Codes.* `identity_status.py` des Exports und `describe_actions.py` des Lese-Skills nehmen
+  keine Argumente und meldeten für `--target x` Exit 0; jetzt lehnt `argparse` jedes Argument mit
+  Exit 2 ab, ohne Ausgabe. Die Regel in den Anleitungstexten lautet: Exit 2 für ein Argument, das
+  der Helfer nicht nimmt, 1 für einen abgelehnten Wert oder einen Fehler; die Standardfehlerausgabe
+  sagt, woran. Einen eigenen Code für Aufruffehler gibt es bewusst nicht: Exit 2 hat bei den
+  Helfern neben dem Aufruffehler schon vier Bedeutungen (`wiki_busy`, `confirmation_required`,
+  Parserfehler, verweigerter Export), und nur den Aufruffehler teilen alle Helfer. `tests/test_entrypoints.py`
+  prüft die Regel in allen drei Anleitungstexten.
+- *Ein Wortlaut.* Jeder eingefrorene Hinweis sagt „export a new knowledge skill", auch die zwei
+  Texte aus Stufe 6 und die vier Identitätstexte des Exports.
+- `verify_knowledge.py` behält `--expect-manifest-sha256` mit derselben Regel und demselben
+  Hilfetext wie `assess_quality.py`.
+
+Ein frischer Export des Test-Wikis bestand seinen Selbsttest; unter Python 3.9 mit `-I` gaben
+`verify_knowledge.py` und `assess_quality.py` ohne Argument Exit 0 (`ready`, `expiry` mit 1 Seite
+mit Ablaufdatum, 0 abgelaufen), mit dem passenden Hash 0, mit einem falschen Hash 4
+(`snapshot_changed`); `assess_quality.py --target x` und `identity_status.py --target x` endeten
+mit Exit 2 und leerer Standardausgabe.
+
+**Mengenangaben (Qa bis Qf).** Neu gelesen werden Volumen (m³, cbm, l, ml), Masse (kg, t),
+Länge (m, km, cm, mm), Fläche (m², qm, km², ha) und Temperatur (°C), Geld auch als TEUR, T€ und
+k€, und ein Größenwort zwischen Zahl und Einheit (hundert, Tausend, Tsd., Mio., Million, Mrd.,
+Milliarde) multipliziert: „1.500 T€" findet „1.500.000 €", „2 Tsd. kWh" findet „2.000 kWh". Nach
+einer Zahl ist „KW" in Großbuchstaben eine Kalenderwoche und „mW" ein Milliwatt; „T", „M", „M3"
+und „KG" in Großbuchstaben sind keine Einheit. Nach einer Stellenangabe („Abs. 5", „Seite 12",
+„S. 12", „Abschnitt 3", „Tabelle 2") ergibt eine Zahl keine Menge. Ein Einheitenwort auf der
+nächsten Zeile gehört nur im Fließtext zur Zahl: mindestens 20 Zeichen vor der Zahl auf ihrer
+Zeile, und das Einheitenwort beendet seine Zeile nicht. Für die neuen Einheiten ergibt ein
+Schrägstrich direkt nach der Einheit keine Menge („3 m/s", „50 km/h", „6 l/100 km"); Geld und
+Energie behalten wie vorher ihre erste Einheit („9,84 ct/kWh" ergibt `=0.0984eur`). Über den
+Prototyp hinaus:
+
+- *„T€" neben „KW" oder „t".* Die Schreibungsregel las ein „T€" im selben Text nicht mehr als
+  Geld; jetzt bleibt es Geld.
+- *„Seiten" ist keine Stelle* („für beide Seiten 3 Monate" ergibt `=3monat`), und das Fenster
+  vor der Zahl bleibt 12 Zeichen. 12 und 16 Zeichen ergaben dieselben Testergebnisse und Proben,
+  und 16 hielt kein Test fest.
+- *„hl" fehlt* („3 hl. Könige" ergibt nichts), „Hektoliter" bleibt.
+- *Die strenge Zeilenregel* (jedes Einheitenwort am Zeilenanfang verworfen) verlor nach einer
+  Simulation des Entwurfs 2 bis 13 Prozent der Mengen in hart umbrochenem Text; übernommen ist
+  die weiche.
+- *Festgehaltene Mutanten und Reste.* Die Werte, an denen die überlebenden Mutanten der
+  Gegenprüfung scheiterten, stehen jetzt in `tests/test_quantities.py`, ebenso die bekannten
+  Reste „0,10 € pro Tag" (`=0.1eur`, nur die erste Einheit) und „11 KW Ladeleistung" (keine Menge).
+
+Gemessen: Auf dem Test-Wiki blieb die Messung aller drei Tore Byte für Byte gleich. In den
+43 Suchproben des Entwurfs (positiv oder mehrdeutig) erreichten Mengen 2 statt 18 falsche Seiten
+(der Prototyp mit zusammengesetzten Einheiten: 0) und 38 statt 28 richtige (Prototyp: 36), Rang 1
+blieb bei 42; die 2 falschen sind der bekannte Rest „0,10 € pro Tag" gegen „10 Cent". Die
+Tokenproben je Punkt: a 2 → 7 von 7 richtig (falsche 5 → 0), b 1 → 5 von 5 (4 → 0), c 2 → 12 von
+12, e 1 → 17 von 17, f 0 → 26 von 27 (es fehlt „2,10 €/m³", das als 2,10 € gelesen wird). Die
+Rückrufproben der Korrektheitsprüfung verloren 0 Treffer der Prüfung (der Prototyp 33 von 48).
+In den Gegenproben aus Stufe 6 sanken die falschen Mengenpaarungen von 7 auf 3 und von 13 auf 9;
+weg sind „12 KW", „500 mW" und „Seite 12", geblieben das englische Tausenderkomma, der Betrag pro
+Tag und ein richtiger Wert auf einer Seite zu einem anderen Thema.
+
+**Abgelehnt: zusammengesetzte Einheiten (Qd).** Der Prototyp las „0,10 € pro Tag" als Betrag
+pro Tag. Beide Gegenprüfungen widerlegten ihn: In 33 von 48 natürlichen Fragen der Form „Thema,
+Betrag, Euro" verlor die Prüfung die Seite, eine echte Frage endete vollständig mit 0 Treffern;
+das Ergebnis hing von der Stellung ab („11,90 EUR Grundpreis pro Monat" ergab weiter nur den
+Betrag); falsche Zusammensetzungen entstanden („3,00 EUR je Quadratmeter Modulfläche pro Jahr"
+aus dem Test-Wiki als Euro pro Quadratmeter, „am Tag der", „im Monat Januar"); und gängige
+Schreibweisen fielen ganz aus („je gelieferter Kilowattstunde", „pro Kalenderjahr", „€/Mon.",
+„11 kW/22 kW"). Was ein neuer Entwurf braucht, steht unter „Was offen bleibt".
+
+**Strengere Vollständigkeit (S).** Eine Umformulierung, die nur die Menge der Frage in anderer
+Schreibweise mit gleich vielen Inhaltswörtern schreibt, zählt nicht mehr: Beim Vergleich der
+Wörter gelten neben den Begriffs-IDs auch die Mengenzeichen (`query_quantities`), und eine Menge
+gilt nur dort als enthalten, wo die enthaltende Formulierung sie in mindestens so vielen
+Inhaltswörtern schreibt. „9,84 Cent kWh" zählt neben „9,84 ct/kWh" deshalb nicht; „3 Monate"
+neben „drei Monate", „75 €" neben „75 Euro" und „2,5 MWh" neben „2500 kWh" schreiben die Menge
+in weniger Wörtern, suchen also breiter und zählen wie eine Umformulierung mit einem weggelassenen
+Wort. Von Umformulierungen, die einander enthalten, zählt die, deren Text zuerst sortiert, nicht
+die zuerst geschriebene. Warum so:
+
+- Der Prototyp allein machte `complete` von der Reihenfolge abhängig: „Jahresverbrauch in kWh"
+  mit „2500 kWh" und „2,5 MWh" zählte 1 oder 2. In einer Zufallsprobe hingen 419 von 4.000 Fällen
+  an der Reihenfolge, mit der Bedingung der gleich vielen Wörter noch 228, mit der Sortierung 0.
+  Auch ein Fall, der schon nach Stufe 6 an der Reihenfolge hing („Fels Lager" mit „Fels aus Quarz
+  Lager", „Quarzit Lager" und „Basalt Granit": 1 oder 2), zählt jetzt in beiden Reihenfolgen 1.
+- Der Prototyp verwarf „Kündigungsfrist 3 Monate" und „Bonus 75 €", zählte aber „Kündigungsfrist
+  Monate" und „Bonus 75", die dieselben Passagen treffen. Jetzt zählen beide Paare.
+- Ein Rest bleibt: „enthält" ist nicht transitiv. In seltenen Eingaben lässt eine Mengenangabe
+  deshalb eine Umformulierung zählen, die eine Wiederholung der Frage sonst verdrängt hätte; ein
+  Test hält den reinen Fall als gewolltes Verhalten fest.
+
+Auf dem Test-Wiki ändert sich nur id-04 in Satz B („9,84 ct/kWh"), weil „9,84 Cent kWh" die
+Menge in gleich vielen Wörtern schreibt; Satz A bleibt bei 110, Satz B fällt auf 109. Gezählt
+sind 367 und 383 Umformulierungen; bei ty-04 in Satz B tauschen zwei Umformulierungen, welche
+zählt, die Zahl bleibt. Eine Probe, die die Umformulierungen jeder Frage in allen Reihenfolgen
+sucht, fand 0 von 228 Fragen, deren Ergebnis an der Reihenfolge hängt. Die Frage bleibt
+beantwortbar (alle Pflichtseiten sichtbar bei 107 Fragen). Gemessen und verworfen, jeweils
+gegenüber 110 und 109:
+
+- *V2*, auch eine Umformulierung, die die Frage enthält, zählt nicht: 108 und 108. Ein
+  weggelassenes Wort sucht breiter; die Umformulierung ist eine neue Suche.
+- *V3*, nebeneinanderstehende Inhaltswörter gelten zusammengeschrieben („0800 554 63 30" als
+  „08005546330"): 109 und 108 (id-11 in Satz A, ex-05 in Satz B). Die Prüfung liest getrennte
+  Zifferngruppen als eigene Wörter; die zusammengeschriebene Form erreicht also andere Passagen.
+- *V4*, ein Wort gilt als dasselbe wie seine Tippfehlerkorrektur: 108 und 106 (ty-02, ty-03,
+  ty-06). Eine Tippfehlerkorrektur ist eine Heuristik, die danebenliegen kann; die richtig
+  geschriebene Umformulierung prüft sie.
+- *V5*, eine Umformulierung, die ein Wort der Frage nur in ein Kompositum steckt, zählt nicht
+  (nach der Schreibung): 102 und 101, vor allem die breiten Fragen; keine Frage zu einem fehlenden
+  Thema ändert sich. Sie ist nicht übernommen und steht unter „Was offen bleibt".
+
+Neu aufgezeichnet ist nur das dritte Tor: Untergrenze in Satz B 110 → 109 vollständige Prüfungen,
+sonst nichts; `reformulations.json` ist unverändert.
+
+**Unregelmäßige Formen (I).** Die Tabelle kennt jetzt 113 starke und gemischte Verben in 607
+Präfixverben (nach Stufe 6: 58 in 321), 96 Substantive (67), zusammen 9041 Formen (4917) unter
+633 Schlüsseln (347); 34 Formen sind ausgenommen (10), 54 Formen getrennter Verben bilden 267
+Paare (32 und 152), und keine Form hat mehr als einen Schlüssel. Neu sind gehen und fallen mit
+Präfix und schneiden ohne Präteritum. Über den Prototyp hinaus fehlen das Substantiv „Hinweis"
+(„Hinweis:" ist auf vielen Seiten eine Beschriftung), „an-" bei gehen („was die Kosten angeht"
+nennt kein Thema) und schaffen ohne Präfix („das schafft keiner"; „erschaffen" bleibt), und
+„grub" (der Bootloader GRUB) und „drang" (Drang) sind ausgenommen. Die übrigen Bedeutungen von
+Wendungen bleiben heuristische Treffer mit 0,45 und `matched`: „eingehen auf", „zurückgehen auf",
+„umgehen". Die Zeilen von gehen und fallen sind in sich geschlossen; der Eigentümer kann sie
+streichen.
+
+Gemessen: Auf dem Test-Wiki änderte sich keine Frage. In einer Zählung über die 100.000
+häufigsten deutschen Wörter stieg die Zahl der Tabellenwörter von 2.006 auf 3.346, die mit einem
+Partner von 1.964 auf 3.277, die Paare von 10.885 auf 16.041. In den Negativproben der
+Gegenprüfungen stiegen die Treffer von 58 auf 59 und, in Texten im Stil einer Dokumentation, von
+24 auf 30 (Prototyp: 51). In der positiven Probe des Entwurfs stieg Rang 1 von 13 auf 39, gefunden
+von 42 auf 43, die Reichweite der Prüfung von 15 auf 42, und Fragen mit einem fehlenden Wort
+sanken von 23 auf 1. Eine Nebenwirkung auf die Zählung: „Wurde auf das Kundenkonto zugegriffen?"
+mit „Kundenkonto Zugriff" und „Basalt Halde" zählte nach Stufe 6 zwei Umformulierungen und war
+vollständig, jetzt zählt sie eine und ist es nicht, weil „Zugriff" ein Substantiv der Tabelle zu
+„zugreifen" ist; ein Test hält das fest. Der Import des Suchkerns dauert im Median 72,3 statt
+64,1 Millisekunden, vor allem wegen der größeren Tabelle.
+
+**Abgelehnt: freie Zerlegung des Suchworts (C).** Der Gewinn ließ sich wiederholen: co-03 von
+außerhalb der ersten 100 auf Rang 2, unter den ersten 3 / 12 / 100 67 / 77 / 86 statt 66 / 76 /
+85, Obergrenzen gleich, 0 von 600 Änderungen auf Rang 1. Beide Gegenprüfungen widerlegten aber
+Aussagen des Prototyps: Alle 8 Ausschnitte, die schon den tragenden Satz zeigten, wurden durch
+solche ohne ihn ersetzt; keiner von 38 neu gezeigten Claims trägt die Zerlegung (auf dem
+Test-Wiki 0 von 18). Ranking und Prüfung schneiden verschiedene Einheiten (Titel oder
+Beschreibung mit Gedankenstrich, verbundene Aliase, Tabellenzeilen); auf dem Test-Wiki paaren 32
+zerlegte Wörter nur in der Prüfung, und steht der Kopf nur auf einer Navigationsseite, nennt
+`absent_terms` ein Wort, das ein zurückgegebenes Ergebnis traf. „Einmal je Seite" versagt, wenn
+die Frage zwei Formen des Wortes enthält (eine Seite mit 0,15 überholt eine mit 0,13). Auf einem
+dichten synthetischen Wiki dauerte die vollständige Prüfung 7,27 statt 0,64 Sekunden (elfmal so
+lang). `coverage.unmatched_terms` und die Dateizahlen widersprachen den Ergebnissen, und 11 von 24
+Mutanten überlebten; der Navigationstest konnte nicht fehlschlagen. Die Korrekturen hätten
+`rank()`, die Scan-Einheiten, den Scan-Index, die Zählung der Abdeckung und `bm25.py` berührt,
+denselben Kern, den die anderen Punkte ändern. co-03 bleibt offen.
+
+**Messung** (derselbe Bau des Test-Wikis, im Prozess):
+
+| Kennzahl | nach Stufe 6 | nach Stufe 7 |
+|---|---|---|
+| Pflichtseite auf Rang 1 | 58 | 58 |
+| gefunden unter den ersten 3 / 12 / 100 | 66 / 76 / 85 | 66 / 76 / 85 |
+| Treffer der 7 Negativfragen unter den ersten 12; Navigationsseiten unter den ersten 3 | 31; 13 | 31; 13 |
+| mit Umformulierungen, Frage oder Block, Satz A; Blockeinträge der Negativfragen | 86 / 99 / 99; 41 | 86 / 99 / 99; 41 |
+| dasselbe, Satz B | 86 / 98 / 99; 45 | 86 / 98 / 99; 45 |
+| vollständige Prüfungen, Satz A / B | 110 / 110 | 110 / 109 |
+| antwortende Claims erreichbar, je Satz | 8 von 8 | 8 von 8 |
+| Fragen mit allen Pflichtseiten sichtbar | 107 | 107 |
+| Zeichenbedarf, oberer der beiden mittleren Werte (`needed_chars_median`) und Maximum, Satz A; Satz B | 5.914 und 66.280; 5.689 und 67.670 | 5.914 und 66.280; 5.689 und 67.670 |
+
+Gegenüber dem Stand nach Stufe 6 unterscheidet sich in den drei Messungen genau ein Eintrag: id-04
+in der vollständigen Prüfung mit Satz B (`complete` true → false, 2 → 1 gezählte Umformulierungen,
+`add_reformulations` in Satz B bei 5 statt 4 Fragen). Keine Navigationsdatei war Trefferseite,
+keine Negativfrage bekam einen Treffer über Wortformen, und Ergebnisse, Block und Zählwerk waren
+in allen 228 Läufen dieselben wie mit `--include-sources`.
+
+Laufzeit (gemessen am zusammengeführten Prototyp; das schnellste von 7 Läufen, drei verschränkte
+Runden, Last etwa 0,6): Eine Suche auf dem Test-Wiki dauert 0,0394 bis 0,0402 statt 0,0399 bis
+0,0401 Sekunden, mit `--exhaustive` 0,091 bis 0,094 statt 0,089 bis 0,092; auf der
+500-Seiten-Kopie 0,348 bis 0,367 statt 0,343 bis 0,354 und mit `--exhaustive` 0,947 bis 0,978
+statt 0,941 bis 0,994. Der Import des Suchkerns dauert im Median 72,3 statt 64,1 Millisekunden,
+eine Suche auf einem geladenen Release 19,6 bis 20,1 statt 18,8 bis 19,4.
+
+**Tore.** Nur `absence_expectations.json` ist neu aufgezeichnet (Untergrenze in Satz B 110 →
+109); keine Obergrenze stieg, keine andere Untergrenze sank. Probeläufe mit `--output`: Das erste
+Tor ergab dieselbe Datei wie die eingecheckte, das dritte dieselbe wie die neu aufgezeichnete, das
+zweite dieselbe wie ein Probelauf nach Stufe 6. Beide Probeläufe des zweiten Tors unterscheiden
+sich von der eingecheckten Datei in 29 veralteten Zeilen mit Angaben zu einzelnen Fragen; das
+war schon nach Stufe 6 so und ist nicht neu aufgezeichnet.
+
+**Byte-Identität.** Der Vergleichslauf aller 1.343 Fälle (alle 114 Fragen in zehn Modi, 30 Fragen
+auf der 500-Seiten-Kopie, Export, Lint, ungültige Anfragen und der Messcode der Tore) gegen den
+Stand nach Stufe 6: Kein Exit-Code änderte sich, die geteilten Module sind byte-identisch, und die
+Test-Wikis blieben unverändert. Es unterscheiden sich 4 Fälle und eine Prüfsumme: die neue
+`SKILL.md` des Exports (neuer Wortlaut zu den Schritten 1 bis 3, zu den Mengenangaben und zur
+Zählung der Umformulierungen), id-04
+in der vollständigen Prüfung mit Satz B (`complete` true → false), ty-04 mit Satz B (zwei
+Umformulierungen tauschen, welche zählt; die Zahl bleibt, das ist die Sortierung statt der
+Reihenfolge), die Messung des dritten Tors und die Prüfsumme von `absence_expectations.json`.
+Alle übrigen Fälle, auch die 500-Seiten-Kopie, der Lint und jede Suche im Export, sind Byte für
+Byte gleich.
+
+**Zusammenführung und Tests.** Die vier Arbeitspakete ließen sich in der Reihenfolge E, Q, S, I
+ohne Konflikt auf den Stand nach Stufe 6 anwenden, und die geteilten Module sind in beiden Skills
+byte-identisch. Vor jeder weiteren Textänderung ergab die Messung aller drei Tore Byte für Byte
+dieselbe Datei wie der zusammengeführte Prototyp. Neu sind 34 Tests: 24 zum Export (19 aus dem
+Prototyp, 5 für die Änderungen darüber hinaus), 3 zu den Mengenangaben, 4 zur strengeren
+Vollständigkeit und 3 zur Tabelle. Die Mutationsproben der Arbeitspakete: Die Mutation, die die
+beiden Zahlen abgelaufener Seiten addiert, fängt nur der neue Test; die Mutanten, die die
+Zeilenregel oder die Größenwörter schwächen und die erste Gegenprüfung überlebten, schlagen jetzt
+an; die Sortierung durch die Reihenfolge zu ersetzen bricht 3 Tests, die Bedingung der gleich
+vielen Wörter wegzulassen 1; die Tabelle von Stufe 6 im Lese-Skill bricht den neuen Test zur
+Nebenwirkung auf die Zählung. Die volle Suite hat 723 Tests und besteht (504 Sekunden); 353 Tests
+von Bewertungskern, Mengenangaben, Wortformen, vollständiger Prüfung, Suche, Abdeckung, Export,
+Paketierung, Einstiegspunkten und Frische laufen zusätzlich unter Python 3.9 (einer übersprungen,
+wie vorher).
 
 ### Entscheidungen und Abweichungen vom Plan
 
@@ -1545,11 +1812,12 @@ Abweichungen vom Plan, jeweils mit Grund:
   findet diese Formen nicht, und wo Nutzer sie tippen, müssen Seiten-Aliase sie tragen. Die
   Alias-Regel im Wiki-Vertrag zählt sie deshalb auf.
 - *`complete` verlangt zwei eigenständige Umformulierungen.* Eine Umformulierung, die nur Wörter
-  hinzufügt oder dieselben Wörter in einer Form enthält, die der Scan ohnehin trifft, zählt nicht.
+  hinzufügt oder dieselben Wörter in einer Form enthält, die der Scan ohnehin trifft, zählt nicht,
+  seit Stufe 7 auch keine, die nur die Menge der Frage in gleich vielen Wörtern anders schreibt.
 - *Tippfehler ab 8 statt 7 Buchstaben; ein unbekanntes Suchwort wird nur an seinem Kopf
   zerlegt.* Beides senkt Fehlkorrekturen und Fehltreffer; co-03 („Wärmepumpenstromtarif") bleibt
-  dadurch unauffindbar. Eine freie Zerlegung wurde in Stufe 6 als Prototyp gemessen und
-  abgelehnt (Abschnitt „Stufe 6").
+  dadurch unauffindbar. Eine freie Zerlegung wurde in Stufe 6 und Stufe 7 als Prototyp gemessen
+  und abgelehnt (Abschnitte „Stufe 6" und „Stufe 7").
 - *Der Export trägt seine Leseregeln in der `SKILL.md`*, nicht in einem eigenen Antwortvertrag.
   Seine `assess_quality.py` teilt seit Stufe 6 den Bewertungskern `quality_core.py` mit dem
   Lese-Skill.
@@ -1563,16 +1831,27 @@ Abweichungen vom Plan, jeweils mit Grund:
 - *Andere Sprachen ohne Übersetzung.* 1 von 8. Die Suche übersetzt nicht.
 - *Breite Fragen* finden mit der Frage allein 1 von 5; *Fakten nur in Quellen* ohne
   `--include-sources` 0 von 8, mit dem Schalter 8 von 8 auf Rang 1.
-- *Unregelmäßige Formen außerhalb der Tabelle.* Die geschlossene Tabelle aus Stufe 6 kennt 58 starke
-  und gemischte Verben, 67 Substantive, 2 Steigerungsreihen und 24 englische Zeilen. Eine Form
-  außerhalb davon („geflogen" zu „fliegen") findet weder das Ranking noch die Prüfung; der Grenzsatz
+- *Unregelmäßige Formen außerhalb der Tabelle.* Die geschlossene Tabelle kennt seit Stufe 7 113
+  starke und gemischte Verben in 607 Präfixverben, 96 Substantive, 2 Steigerungsreihen und 24
+  englische Zeilen, zusammen 9041 Formen. Eine Form außerhalb davon („gefahren" zu „fahren"; fahren
+  fehlt wegen „Gefahren" und „Verfahren") findet weder das Ranking noch die Prüfung; der Grenzsatz
   und die Anleitungstexte nennen das. Eine Tabellenform kann ein anderes Wort sein („geladen" findet
-  auch das Geschäft „Laden", „nachgekommen" die „Nachkommen", „gemessen" die „Messen"). Die
-  Steigerung paaren Ranking und Prüfung nur in eine Richtung: „gut" trifft „beste" nie, „hoch"
-  trifft „höchste" in der Prüfung nur über `ending`. Die Zählung der Umformulierungen nimmt dagegen
-  beide Richtungen als dasselbe Wort, sodass „Kundenbewertung beste" neben „Kundenbewertung gut"
-  nicht als eigenständige Umformulierung zählt; das macht eine Prüfung nur seltener vollständig, nie
-  falsch vollständig.
+  auch das Geschäft „Laden", „nachgekommen" die „Nachkommen", „gemessen" die „Messen"). Seit Stufe 7
+  bewusst hingenommen, weil ihr Weglassen auch die Tabellenform verlöre: die Substantive Fliegen,
+  Schläfen, Hängen, Berufen, Klingen, Ringen, Wiegen und Sitzen, Sass („saß"), Singen (die Stadt),
+  besessen, eingestanden (von „einstehen" und von „eingestehen"), belief (auch englisch), Riss und
+  gerissen (schlau), ausgefallen im Sinn von „ungewöhnlich" für Ausfall, Zugriff, in IT-Texten ein
+  allgemeines Wort, für zugreifen, und die Wendungen „eingehen auf", „zurückgehen auf" und
+  „umgehen". Die Zeilen von gehen und fallen sind in sich geschlossen; der Eigentümer kann sie
+  streichen, wenn ihm diese Wendungen zu viel kosten. Der größere Import kostet im Median etwa 8
+  Millisekunden. Die Steigerung paaren Ranking und Prüfung nur in eine Richtung: „gut" trifft
+  „beste" nie, „hoch" trifft „höchste" in der Prüfung nur über `ending`. Die Zählung der
+  Umformulierungen nimmt dagegen beide Richtungen als dasselbe Wort, sodass „Kundenbewertung beste"
+  neben „Kundenbewertung gut" nicht als eigenständige Umformulierung zählt; das macht eine Prüfung
+  nur seltener vollständig, nie falsch vollständig. Ebenso nimmt sie seit Stufe 7 ein Substantiv der
+  Tabelle für ein Verb der Frage als dasselbe Wort: „Wurde auf das Kundenkonto zugegriffen?" mit
+  „Kundenkonto Zugriff" und „Basalt Halde" zählt eine statt zwei Umformulierungen und ist nicht mehr
+  vollständig.
 - *Der lange Schwanz der deutschen Morphologie und der Konverterformate.* Jede der fünf Prüfrunden
   fand neue falsche Fehlanzeigen: Tabellenformen, Listen, Zitate, getrennte Verben, Markup im Wort.
   Weitere sind zu erwarten. Dazu kommen bekannte Fehlpaarungen der Regeln: „Konzert" zu „Konzern",
@@ -1584,47 +1863,72 @@ Abweichungen vom Plan, jeweils mit Grund:
   Text.
 - *Zahlen in einer Schreibweise, die die Suche nicht umrechnet.* Seit Stufe 6 findet `quantity`
   Energie, Leistung, Geld und Prozent in anderer Einheit und Zahlwörter bis zwanzig und die Zehner
-  vor einer Einheit oder einem Zählwort der Liste. Offen sind: Von einer Spanne („1 - 3 Monate",
-  „1–3 Monate", „2 bis 4 Wochen", „zwischen 10 und 20 Prozent") wird die zweite Zahl übersprungen,
-  nicht umgerechnet; eine erste Zahl mit eigener Einheit („10 €" in „10 € bis 20 €") und die zweite
-  Zahl einer Aufzählung („10 oder 20 Euro") zählen dagegen als Menge. Direkt nach einer anderen
-  Zahl, auch einer Jahreszahl („ab 1. Januar 2026 zwölf Monate"), und nach „plus" („plus 19 %", auch
-  im Sinn von „zuzüglich") ergibt eine Zahl keine Menge. Größenwörter (Tausend, Mio., Mrd.) ergeben
-  keine Menge; andere Einheiten (Liter, m², km) fehlen.
-- *Fehlerklassen der Mengenangaben.* Der Text wird vor dem Lesen der Einheit kleingeschrieben:
-  „in der 12 KW" (Kalenderwoche) gilt als 12 Kilowatt, „500 mW" als 500 Megawatt. Ein englisches
-  Tausenderkomma liest die Suche als Dezimalkomma („1,000 EUR" ist 1 Euro); das zu trennen
-  braucht die Sprache des Wikis. Von einer zusammengesetzten Einheit zählt nur die erste:
-  „0,10 € pro Tag" trifft „10 Cent", und „ct/kWh" wird nur als Cent umgerechnet. Ein
-  Einheitenwort am Anfang der nächsten Zeile verbindet sich mit der Zahl davor („Stand 2024" und
-  darunter „Euro" ergibt 2024 Euro), ebenso ein Zählwort nach einer Seitenzahl („auf Seite 12
-  Monate"). Alle diese Fälle sind Heuristik-Treffer mit `matched`, keine Wortformen.
-- *Umformulierungen, die nur eine Zahl anders schreiben,* zählen für `complete` noch als
-  eigenständig, obwohl die Prüfung dieselbe Menge ohnehin findet. Das zu ändern würde nach
-  einer Schätzung des Entwurfs (nicht gemessen) Satz B von 110 auf 109 vollständige Prüfungen
-  senken, also eine Untergrenze; es blieb deshalb außerhalb von Stufe 6.
+  vor einer Einheit oder einem Zählwort der Liste, seit Stufe 7 auch Volumen, Masse, Länge, Fläche
+  und Temperatur, T€, TEUR und k€ und ein Größenwort zwischen Zahl und Einheit. Offen sind: Von
+  einer Spanne („1 - 3 Monate", „1–3 Monate", „2 bis 4 Wochen", „zwischen 10 und 20 Prozent") wird
+  die zweite Zahl übersprungen, nicht umgerechnet; eine erste Zahl mit eigener Einheit („10 €" in
+  „10 € bis 20 €") und die zweite Zahl einer Aufzählung („10 oder 20 Euro") zählen dagegen als
+  Menge. Direkt nach einer anderen Zahl, auch einer Jahreszahl („ab 1. Januar 2026 zwölf Monate"),
+  und nach „plus" („plus 19 %", auch im Sinn von „zuzüglich") ergibt eine Zahl keine Menge. Ein
+  Größenwort ohne Zahl oder vor einem Wort, das keine Einheit ist („mehrere hundert Euro", „2 Mio.
+  Kunden"), ergibt keine Menge; andere Einheiten (°F, K, Nm³, MWp, hl) fehlen, und ein einzelner
+  Buchstabe direkt an der Zahl („800W", „1l") wird nie gelesen.
+- *Fehlerklassen der Mengenangaben.* Ein englisches Tausenderkomma liest die Suche als
+  Dezimalkomma („1,000 EUR" ist 1 Euro); das zu trennen braucht die Sprache des Wikis. Von einer
+  zusammengesetzten Einheit zählt nur die erste: „0,10 € pro Tag" trifft „10 Cent", „ct/kWh" wird
+  nur als Cent und „2,10 €/m³" nur als Euro umgerechnet. „11 KW" in Großbuchstaben für eine
+  Leistung gilt als Kalenderwoche und trifft „11 kW" nie, „12 kw" für eine Kalenderwoche dagegen
+  als Kilowatt. Ein einzelnes „l", „m" oder „t" nach einer Zahl gilt als Einheit, auch wo der
+  Buchstabe etwas anderes meint („Bauteil 1 l", „Gruppe 3 m", „5 t Sekunden"). Die Regel für den
+  Zeilenumbruch geht nur nach der Länge: Fließtext, der nach einer kurzen Zeile umbricht, verliert
+  die Verbindung, eine Beschriftung ab 20 Zeichen behält sie. Alle diese Fälle sind
+  Heuristik-Treffer mit `matched`, keine Wortformen. Seit Stufe 7 behoben sind „in der 12 KW"
+  als Kilowatt, „500 mW" als Megawatt, „Stand 2024" über „Euro" und „auf Seite 12 Monate". Die
+  Tests halten das Fenster vor der Zahl, in dem eine Stellenangabe wirkt (12 Zeichen), nur nach
+  unten fest; ein Fenster von 16 Zeichen bestünde sie auch.
+- *Zusammengesetzte Einheiten.* In Stufe 7 abgelehnt (Abschnitt „Stufe 7"). Ein neuer Entwurf
+  braucht: asymmetrische Zeichen (eine Seite behält `=X` neben dem zusammengesetzten Zeichen, eine
+  Frage mit einer Bezugseinheit trägt nur das zusammengesetzte); einen Schrägstrich vor einer Zahl
+  als Alternative („11 kW/22 kW"); Adjektive zwischen Bindewort und Einheit („je gelieferter
+  Kilowattstunde"); Komposita mit Kalender- und Abrechnungs- („pro Kalenderjahr") und die
+  Abkürzungen Mon., Mt., J., Stk., St. und Pers.; „am", „im" und „in der" nicht vor einem Artikel,
+  einer Präposition, einem Monatsnamen oder einem Wochentag („am Tag der", „im Monat Januar");
+  „·" und „(" als Trenner und eine zweite Bezugseinheit, gesucht bis zum Ende des Satzteils; kein
+  Bindewort über einen Zeilenumbruch, den die Zeilenregel nicht verbindet; „KW" nach einem
+  Bindewort nach der Schreibung gelesen; einen Schrägstrich mit Leerzeichen zwischen zwei Preisen;
+  Adverbien vor „kündbar". Abnahmeprobe: Eine Fehlanzeige für „Grundpreis 14,50 Euro" muss eine
+  Seite mit „14,50 EUR pro Monat" weiter finden.
+- *Umformulierungen, die ein Wort der Frage nur in ein Kompositum stecken,* zählen noch als
+  eigenständig („Kündigungsfrist" und „Sonderkündigungsrecht" neben „Kündigung"), obwohl die
+  Prüfung diese Komposita für die Frage schon über `compound_head` und `compound_modifier`
+  findet. Gemessen (Prototyp aus Stufe 7, reine Schreibungsregel): 102 und 101 statt 110 und 109
+  vollständige Prüfungen, vor allem die breiten Fragen; keine Frage zu einem fehlenden Thema
+  ändert sich.
 - *Einzelfälle des Rankings.* co-03 („Wärmepumpenstromtarif") steht nicht unter den ersten 100,
   ty-07 („Grundversorung") auf Rang 23; ty-05 steht seit Stufe 6 auf Rang 1. Für co-03 bleibt
-  ein neuer Prototyp der freien Zerlegung offen: alle Teile in einem Satz, gemerkte Zerlegungen,
-  je Seite einmal gezählt und eine eigene Probe mit fehlenden Themen. Dass co-03 die
-  Satzbedingung übersteht, ist geschätzt, nicht gemessen.
-- *Abgelaufene Seiten zum Zeitpunkt der Bewertung.* `assess_quality` meldet in `freshness` die
-  Zahl der Seiten, deren Ablaufdatum beim Release schon überschritten war. Eine Seite, die erst
-  danach abläuft, zählt sie nicht; das zeigt nur `past_expiry` am Suchtreffer. Gemessen: Ein
-  Export, 150 Tage nach dem Release bewertet, meldet weiter 0 abgelaufene Seiten, während sein
-  erster Treffer `past_expiry: true` trägt. Offen ist, die Zahl bei der Bewertung neu zu
-  berechnen.
-- *Eingefrorener Wortlaut für Review-, Richtlinien- und Identitätshinweise.* Im Export empfehlen
-  die Hinweise zu fälligen oder überfälligen Reviews, zur fehlenden oder ungültigen
-  Qualitätsrichtlinie und zur Identität weiter den Pflege-Skill, den ein eingefrorener Skill
-  nicht mitbringt. Umformuliert sind bisher nur die sieben Hinweise, die sagen, wie ein neuer
-  Stand entsteht.
-- *`--expect-manifest-sha256` für die Qualitätsbewertung des Exports.* Die Suche des Exports
-  prüft den gemerkten Manifest-Hash, `assess_quality.py` des Exports nimmt ihn nicht an und
-  prüft nur den mitgelieferten Abzug.
-- *Exit-Code bei falschem Aufruf.* Ein Aufruffehler beendet `assess_quality.py` des Lese-Skills
-  mit Code 2, demselben Code wie `wiki_busy`. Unterscheiden lassen sich beide nur an der
-  Ausgabe.
+  ein neuer Prototyp der freien Zerlegung offen; der aus Stufe 7 brachte co-03 auf Rang 2, wurde
+  aber abgelehnt (Abschnitt „Stufe 7"). Ein neuer Prototyp muss Ranking und Prüfung ihre
+  Einheiten mit einer Funktion bilden lassen; in Ausschnitten und Claims nur tragende Einheiten
+  hervorheben (die Zerlegung nur auf Substantiven); zerlegte Seiten in `term_files`,
+  `files_with_term`, `unmatched_terms`, `in_searched_files` und `files_with_a_query_term` zählen;
+  den Teil der Zerlegung nach der Gruppe benennen; die Substantiv-Einheiten je Passage im
+  Scan-Index zwischenspeichern, mit Budget; Codeblöcke und Komma- oder Linklisten nicht zerlegen;
+  und die Mutanten M1, M7, M8, M8b, M9, M14 bis M20 und M22 fangen, die den Prototyp überlebten.
+  Abnahme: Tore mindestens 58 / 67 / 77 / 86 bei gleichen Obergrenzen, kein Ausschnitt ohne
+  tragenden Satz, keine Abweichung im Paritätstest, die vollständige Prüfung auf einem
+  gegnerischen Wiki höchstens doppelt so langsam wie vorher.
+- *Sperre und Identität.* `identity_status.py` des Lese-Skills beachtet `.llmwiki.lock` nicht:
+  Mit einem Ordner `.llmwiki.lock` im Ziel meldet er Exit 0 und `configured`, während
+  `verify_release.py` auf demselben Ziel `wiki_busy` mit Exit 2 meldet (in Stufe 7 auf einer
+  Kopie des Test-Wikis nachgestellt).
+- *Nicht veröffentlichte Dateien in der Suche.* `search_wiki.py` liefert Punktdateien und
+  `~$`-Dateien unter `wiki/` als Treffer, solange der Release `ready` ist: Mit `wiki/.versteckt.md`
+  und `wiki/~$owner2.md`, beide nicht im Manifest, fand die Suche nach einem Wort, das nur dort
+  steht, genau diese beiden Pfade. Seit Stufe 7 beschränkt nur die Qualitätsbewertung (`expiry`)
+  ihre Zählung auf die Seiten des Manifests.
+- *Unbekannte Argumente im Pflege-Skill.* `describe_actions.py` des Pflege-Skills übergeht ein
+  unbekanntes Argument weiter mit Exit 0; Stufe 7 gab nur der Kopie des Lese-Skills und
+  `identity_status.py` des Exports einen Parser.
 - *Echte Nutzerfragen.* Gewichte und Regeln sind auf einem synthetischen Wiki gewählt. Ob die
   Wörter echter Nutzer die Fakten erreichen, misst erst ein Wiki mit Auffindbarkeitsfragen.
 - *Windows* ist simuliert (cp1252-Umleitung, PowerShell-Umkodierung), nicht auf einem
@@ -1633,8 +1937,8 @@ Abweichungen vom Plan, jeweils mit Grund:
 
 ### Wie man neu misst
 
-- Volle Suite: `PYTHONDONTWRITEBYTECODE=1 python3 tests/run_tests.py -q` (689 Tests, etwa
-  acht Minuten). Nur die drei Tore: `python3 tests/run_tests.py search_quality`. Beide bauen das
+- Volle Suite: `PYTHONDONTWRITEBYTECODE=1 python3 tests/run_tests.py -q` (723 Tests, etwa
+  neun Minuten). Nur die drei Tore: `python3 tests/run_tests.py search_quality`. Beide bauen das
   Test-Wiki in ein temporäres Verzeichnis außerhalb des Repositorys.
 - Die drei Tore in `tests/test_search_quality.py`:
   - `expectations.json` (Präzisionstor): Rang 1 je Frage, die Bänder unter den ersten 3 und 12
@@ -1648,8 +1952,9 @@ Abweichungen vom Plan, jeweils mit Grund:
   - `absence_expectations.json` (`AbsenceGate`): Negativfragen vollständig und ohne
     Wortform-Treffer (hart), jeder heuristische Treffer einer Negativfrage mit Begründung
     aufgezeichnet, jede Pflichtseite sichtbar (hart), jeder antwortende Claim erreichbar (hart),
-    Untergrenzen 110 vollständige Prüfungen und 8 Claims je Satz, keine Navigationsdatei als
-    Trefferseite (hart), gleiche Ausgabe wie mit `--include-sources` (hart).
+    Untergrenzen 110 (Satz A) und 109 (Satz B) vollständige Prüfungen und 8 Claims je Satz,
+    keine Navigationsdatei als Trefferseite (hart), gleiche Ausgabe wie mit `--include-sources`
+    (hart).
 - Neu aufzeichnen: `python3 tests/fixtures/search_quality/record_expectations.py` für das erste
   Tor, mit `--reformulations` für das zweite und mit `--absence` für das dritte; `--output`
   schreibt in eine andere Datei. Ein Neuaufzeichnen verschiebt die Messlatte für alle späteren

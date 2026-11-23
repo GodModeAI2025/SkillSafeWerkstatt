@@ -94,8 +94,10 @@ RULES: Dict[str, Tuple[float, str]] = {
     "query_part": (0.35, "heuristic"),
     "typo": (0.3, "heuristic"),
     # The same quantity in another notation (see search_core.QUANTITY_RULE).
-    # Heuristic, because recognising a number and its unit in a text can go
-    # wrong (a label, a calendar week, an English thousands comma), so a hit is
+    # Heuristic, because recognising a number and its unit in a text can still
+    # go wrong (a label, "Bauteil 1 l" read as a litre; a calendar week written
+    # "12 kw", where only "12 KW" is refused; an English thousands comma; an
+    # amount per another unit, "0,10 € pro Tag" read as "0,10 €"), so a hit is
     # checked in the text. The weight is that of a fold: once recognised, the
     # value and the dimension are the same, only the notation differs.
     "quantity": (0.9, "heuristic"),
@@ -503,75 +505,150 @@ _NOUN_ENDINGS = ("", "e", "en", "n", "s", "es")
 #:   Auftrag), schlagen only with vor- (Abschlag, Zuschlag, Anschlag),
 #:   scheiden without unter- and ver- (Unterschied, verschieden), messen
 #:   without an- (angemessen), lassen without an- (Anlässe), laufen without
-#:   ver- (Verläufe), wenden only with an- (Wende, verwandte), gelten without
-#:   ent- (Entgelt, Entgelte), kommen without ab- and ein- (Abkommen,
-#:   Einkommen), weisen and gleichen not without a prefix (Weise, gleich);
+#:   ver- (Verläufe), wenden only with an-, auf- and ein- (Wende, verwandte),
+#:   gelten without ent- (Entgelt, Entgelte), kommen without ab- and ein-
+#:   (Abkommen, Einkommen), weisen and gleichen not without a prefix (Weise,
+#:   gleich);
 #: - the light verbs geben, gelten, liegen, stehen, kommen, halten, lassen and
 #:   sehen only with a prefix: "gibt", "gilt", "liegt", "steht", "kommt",
 #:   "hält", "lässt" and "sieht" stand in almost any sentence of any page;
-#: - verbs: fallen (Fall, Fälle), schneiden (Abschnitt, Durchschnitt), fahren
-#:   ("führen" is "fuhren" once the umlaut is gone, Fahrt), bitten ("bitte"),
-#:   heißen ("heiße" and "heißen" are also the adjective: "heiße Speicher"),
-#:   and the light verbs gehen, tun, sein, haben, werden, wissen.
+#: - gehen and fallen only with a prefix ("geht" stands in almost any
+#:   sentence; Fall, Fälle), gehen not with ver- (vergangen) and not with an-
+#:   (the idiom "was die Kosten angeht" names no topic); raten and
+#:   schießen only with a prefix (Rate, Raten, the verb geraten; Geschossen,
+#:   Schoß); schneiden without a preterite and without durch- (Abschnitt,
+#:   Durchschnitt, Schnitten, Durchschnitten);
+#: - prefixes whose participle or infinitive is another word: greifen without
+#:   be- (Begriffen), hängen and klingen without an- (Anhängen, Anklang),
+#:   liegen without be-, ver-, um-, über-, hinter- (belegen, verlegen, umlegen,
+#:   überlegen, hinterlegen), kennen without be- (bekannt), scheiden without
+#:   be- (Bescheide), stehen without um- (unter Umständen), tragen and wachsen
+#:   without er- (Erträge, Erwachsene), denken without ver- (Verdacht), nehmen
+#:   without unter- (Unternehmen), wiegen without ab- (abgewogen is abwägen),
+#:   schaffen only with er- (bare schaffen mostly means "to manage": "das
+#:   schafft keiner"; the other prefixed verbs are weak: angeschafft,
+#:   beschafft);
+#: - verbs: fahren ("führen" is "fuhren" once the umlaut is gone, Fahrt,
+#:   Gefahren, Verfahren), bitten ("bitte"), heißen ("heiße" and "heißen" are
+#:   also the adjective: "heiße Speicher"), preisen (Preise, Preisen), essen
+#:   (Essen), befehlen (Befehle), betrügen ("betrugen" of betragen), lügen
+#:   (Lüge), bergen without ver- (Berge), and the light verbs tun, sein, haben,
+#:   werden, wissen. Rare verbs (backen, blasen, braten, pfeifen, schleifen,
+#:   winden ...) are left out as well.
 IRREGULAR_VERBS: Tuple[Tuple[str, str, str, str, str], ...] = (
-    ("zieh", "", "zog zogen", "gezogen", "0 ab an auf aus be ein einbe ent heran hinzu nach um ver vor zu zuruck"),
+    ("zieh", "", "zog zogen", "gezogen", "0 ab an auf aus be ein einbe ent heran hinzu nach um ver vor zu zuruck durch er uber unter"),
     ("schliess", "", "schloss schlossen", "geschlossen", "0 ab an auf aus be ein ent er ver zu zusammen"),
-    ("geb", "gibt", "gab", "gegeben", "ab an auf aus be bei ein er frei heraus nach uber um ver vor weiter wieder zu zuruck"),
-    ("nehm", "nimmt", "nahm", "genommen", "0 ab an auf aus ein ent mit teil uber vor weg zu zuruck"),
+    ("geb", "gibt", "gab", "gegeben", "ab an auf aus be bei ein er frei heraus nach uber um ver vor weiter wieder zu zuruck mit statt"),
+    ("nehm", "nimmt", "nahm", "genommen", "0 ab an auf aus ein ent mit teil uber vor weg zu zuruck fest hin ver wahr"),
     ("gelt", "gilt", "galt galten", "gegolten", "ab ver"),
     ("lieg", "", "lag", "gelegen", "an bei unter vor"),
-    ("steh", "", "", "gestanden", "auf aus be bei ent fest ver zu"),
-    ("find", "", "fand fanden", "gefunden", "0 auf be emp heraus statt vor"),
-    ("bring", "", "brachte brachten", "gebracht", "0 an auf bei ein er mit unter ver vor zuruck"),
+    ("steh", "", "", "gestanden", "auf aus be bei ent fest ver zu an ein uber unter wider entgegen gegenuber"),
+    ("find", "", "fand fanden", "gefunden", "0 auf be emp heraus statt vor ab ein er wieder"),
+    ("bring", "", "brachte brachten", "gebracht", "0 an auf bei ein er mit unter ver vor zuruck hervor uber um zusammen"),
     ("scheid", "", "schied schieden", "geschieden", "0 aus ent"),
-    ("komm", "", "kam kamen", "gekommen", "an auf aus be bei hinzu mit nach vor zu zuruck zusammen"),
-    ("lauf", "", "lief liefen", "gelaufen", "0 ab an aus durch ein um weiter zu"),
-    ("halt", "halt haltst", "hielt hielten", "gehalten", "ab an auf aus be beibe bei ein ent er fest uber unter ver vor vorbe zuruck"),
-    ("lass", "", "liess liessen", "gelassen", "ab auf aus durch ent er frei nach uber unter ver weg zu zuruck"),
-    ("trag", "", "trug trugen", "getragen", "0 bei ein nach uber vor"),
-    ("tret", "tritt", "trat traten", "getreten", "0 an auf aus bei ein ent uber ver zu zuruck"),
-    ("sprech", "spricht", "sprach", "gesprochen", "0 ab an aus be ent mit nach wider zu"),
-    ("brech", "bricht", "brach", "gebrochen", "0 ab auf aus ein unter zusammen"),
+    ("komm", "", "kam kamen", "gekommen", "an auf aus be bei hinzu mit nach vor zu zuruck zusammen durch ent heraus entgegen"),
+    ("lauf", "", "lief liefen", "gelaufen", "0 ab an aus durch ein um weiter zu auf be hinaus unter"),
+    ("halt", "halt haltst", "hielt hielten", "gehalten", "ab an auf aus be beibe bei ein ent er fest uber unter ver vor vorbe zuruck durch"),
+    ("lass", "", "liess liessen", "gelassen", "ab auf aus durch ent er frei nach uber unter ver weg zu zuruck be ein hinter los nieder"),
+    ("trag", "", "trug trugen", "getragen", "0 bei ein nach uber vor aus"),
+    ("tret", "tritt", "trat traten", "getreten", "0 an auf aus bei ein ent uber ver zu zuruck ab be"),
+    ("sprech", "spricht", "sprach", "gesprochen", "0 ab an aus be ent mit nach wider zu frei ver"),
+    ("brech", "bricht", "brach", "gebrochen", "0 ab auf aus ein unter zusammen an durch ver zer"),
     ("biet", "", "bot", "geboten", "0 an ver"),
-    ("schreib", "", "schrieb schrieben", "geschrieben", "0 ab an auf aus be ein gut nach um unter vor zu"),
-    ("steig", "", "stieg stiegen", "gestiegen", "0 an auf aus ein um"),
+    ("schreib", "", "schrieb schrieben", "geschrieben", "0 ab an auf aus be ein gut nach um unter vor zu fest uber ver"),
+    ("steig", "", "stieg stiegen", "gestiegen", "0 an auf aus ein um ab be uber"),
     ("sink", "", "sank sanken", "gesunken", "0 ab"),
     ("schieb", "", "schob schoben", "geschoben", "0 auf ver"),
-    ("weis", "", "wies", "gewiesen", "ab an aus be hin nach uber zu"),
+    ("weis", "", "wies", "gewiesen", "ab an aus be hin nach uber zu auf ein er ver vor zuruck"),
     ("mess", "misst", "", "gemessen", "0 ab aus be er nach ver"),
-    ("ruf", "", "rief riefen", "gerufen", "0 ab an auf aus ein zuruck wider"),
+    ("ruf", "", "rief riefen", "gerufen", "0 ab an auf aus ein zuruck wider be hervor"),
     ("schlag", "", "schlug schlugen", "geschlagen", "0 vor"),
     ("verlier", "", "verlor verloren", "verloren", "0"),
     ("beginn", "", "begann begannen", "begonnen", "0"),
     ("gewinn", "", "gewann gewannen", "gewonnen", "0"),
     ("empfehl", "empfiehlt", "empfahl", "empfohlen", "0"),
-    ("bind", "", "", "gebunden", "0 an ein ver"),
-    ("les", "liest", "las lasen", "gelesen", "0 ab aus ein nach vor"),
-    ("seh", "sieht", "sah sahen", "gesehen", "ab an aus ein nach uber vor"),
-    ("helf", "hilft", "", "geholfen", "0"),
-    ("werf", "wirft", "warf", "geworfen", "0 ab ein ent vor"),
-    ("treib", "", "trieb trieben", "getrieben", "0 an be ver"),
+    ("bind", "", "", "gebunden", "0 an ein ver unter"),
+    ("les", "liest", "las lasen", "gelesen", "0 ab aus ein nach vor durch"),
+    ("seh", "sieht", "sah sahen", "gesehen", "ab an aus ein nach uber vor zu"),
+    ("helf", "hilft", "", "geholfen", "0 weiter"),
+    ("werf", "wirft", "warf", "geworfen", "0 ab ein ent vor unter ver"),
+    ("treib", "", "trieb trieben", "getrieben", "0 an be ver uber voran"),
     ("schein", "", "schien", "geschienen", "0 er"),
-    ("bleib", "", "blieb blieben", "geblieben", "0 uber ver"),
+    ("bleib", "", "blieb blieben", "geblieben", "0 uber ver aus zuruck"),
     ("kenn", "", "kannte kannten", "gekannt", "0 an aner er"),
     ("nenn", "", "nannte nannten", "genannt", "0 be er"),
-    ("send", "", "sandte sandten", "gesandt", "0 ab ver zu"),
-    ("wend", "", "wandte wandten", "gewandt", "an"),
+    ("send", "", "sandte sandten", "gesandt", "0 ab ver zu ent"),
+    ("wend", "", "wandte wandten", "gewandt", "an auf ein"),
     ("denk", "", "dachte dachten", "gedacht", "0 be nach"),
-    ("fang", "", "fing fingen", "gefangen", "0 an"),
-    ("gleich", "", "glich glichen", "geglichen", "aus ver"),
-    ("greif", "", "", "gegriffen", "0 ein zu"),
-    ("wachs", "", "wuchs", "gewachsen", "0 an zu"),
-    ("meid", "", "mied mieden", "gemieden", "ver"),
+    ("fang", "", "fing fingen", "gefangen", "0 an emp auf ab ein"),
+    ("gleich", "", "glich glichen", "geglichen", "aus ver an be"),
+    ("greif", "", "", "gegriffen", "0 ein zu an auf er zuruck"),
+    ("wachs", "", "wuchs", "gewachsen", "0 an zu auf"),
+    ("meid", "", "mied mieden", "gemieden", "0 ver"),
     ("weich", "", "wich wichen", "gewichen", "ab aus"),
-    ("streich", "", "", "gestrichen", "0 durch"),
+    ("streich", "", "", "gestrichen", "0 durch unter ver"),
     ("werb", "wirbt", "warb", "geworben", "0 be er"),
-    ("treff", "trifft", "traf trafen", "getroffen", "0 be ein zu"),
+    ("treff", "trifft", "traf trafen", "getroffen", "0 be ein zu an uber"),
     ("fliess", "", "floss flossen", "geflossen", "0 ab ein zu"),
-    ("heb", "", "hob hoben", "gehoben", "0 auf er"),
-    ("lad", "ladt ladst", "lud luden", "geladen", "0 auf ein ent"),
+    ("heb", "", "hob hoben", "gehoben", "0 auf er ab an be hervor"),
+    ("lad", "ladt ladst", "lud luden", "geladen", "0 auf ein ent hoch herunter"),
     ("geling", "", "gelang", "gelungen", "0"),
     ("vergess", "vergisst", "vergass", "vergessen", "0"),
+    ("flieg", "", "flog flogen", "geflogen", "0 ab an auf aus ein uber ver zuruck"),
+    ("flieh", "", "floh flohen", "geflohen", "0 ent"),
+    ("frier", "", "fror froren", "gefroren", "0 ein er zu"),
+    ("giess", "", "goss gossen", "gegossen", "0 be ver"),
+    ("leid", "", "litt litten", "gelitten", "0 er"),
+    ("leih", "", "lieh liehen", "geliehen", "0 aus ent ver"),
+    ("rat", "rat ratst", "riet rieten", "geraten", "ab an be er ver"),
+    ("reiss", "", "riss rissen", "gerissen", "0 ab auf aus ein ent hin mit um zer"),
+    ("schaff", "", "schuf schufen", "geschaffen", "er"),
+    ("schiess", "", "schoss schossen", "geschossen", "zu vor"),
+    ("schlaf", "schlaft", "schlief schliefen", "geschlafen", "0 aus ein ver"),
+    ("schmelz", "schmilzt", "schmolz schmolzen", "geschmolzen", "0 ein ver"),
+    ("schneid", "", "", "geschnitten", "0 ab an auf aus be ein uber zer zu"),
+    ("schrei", "", "schrie schrien", "geschrien", "0 an"),
+    ("schweig", "", "schwieg schwiegen", "geschwiegen", "0 ver"),
+    ("schwimm", "", "schwamm schwammen", "geschwommen", "0"),
+    ("sing", "", "sang sangen", "gesungen", "0"),
+    ("sitz", "", "sass sassen", "gesessen", "0 be"),
+    ("stech", "sticht", "stach stachen", "gestochen", "0 be"),
+    ("stehl", "stiehlt", "stahl stahlen", "gestohlen", "0"),
+    ("sterb", "stirbt", "starb starben", "gestorben", "0 ab aus ver"),
+    ("stoss", "", "stiess stiessen", "gestossen", "0 ab an auf aus ver vor zu zusammen"),
+    ("streit", "", "stritt stritten", "gestritten", "0 ab be"),
+    ("trink", "", "trank tranken", "getrunken", "0 aus be er"),
+    ("wasch", "", "wusch wuschen", "gewaschen", "0 ab aus"),
+    ("wieg", "", "wog wogen", "gewogen", "0 auf uber"),
+    ("zwing", "", "zwang zwangen", "gezwungen", "0 auf be er"),
+    ("brenn", "", "brannte brannten", "gebrannt", "0 ab an aus durch ver"),
+    ("renn", "", "rannte rannten", "gerannt", "0"),
+    ("schreit", "", "schritt schritten", "geschritten", "0 be ein fort uber unter voran"),
+    ("schwind", "", "schwand schwanden", "geschwunden", "0 ver"),
+    ("dring", "", "drang drangen", "gedrungen", "0 ein durch vor"),
+    ("ring", "", "rang rangen", "gerungen", "0 er"),
+    ("kling", "", "klang klangen", "geklungen", "0 ab aus"),
+    ("grab", "grabt grabst", "grub gruben", "gegraben", "0 aus be ein unter ver"),
+    ("hang", "", "hing hingen", "gehangen", "0 ab zusammen"),
+    ("losch", "lischt", "losch", "geloschen", "er"),
+    ("wag", "", "wog wogen", "gewogen", "ab er"),
+    ("gescheh", "geschieht", "geschah geschahen", "geschehen", "0"),
+    ("missling", "", "misslang", "misslungen", "0"),
+    ("derb", "dirbt", "darb darben", "gedorben", "ver"),
+    ("berg", "birgt", "barg bargen", "geborgen", "ver"),
+    ("gleit", "", "glitt glitten", "geglitten", "0"),
+    ("schleich", "", "schlich schlichen", "geschlichen", "0 ein"),
+    ("kriech", "", "kroch krochen", "gekrochen", "0"),
+    ("riech", "", "roch rochen", "gerochen", "0"),
+    ("reib", "", "rieb rieben", "gerieben", "0"),
+    ("reit", "", "ritt ritten", "geritten", "0"),
+    ("beiss", "", "biss bissen", "gebissen", "0"),
+    ("bieg", "", "bog bogen", "gebogen", "0 ab ver"),
+    ("gedeih", "", "gedieh gediehen", "gediehen", "0"),
+    ("schwor", "", "schwor schworen", "geschworen", "0"),
+    ("schwing", "", "schwang schwangen", "geschwungen", "0"),
+    ("geh", "", "ging gingen", "gegangen", "ab auf aus be durch ein einher ent er fort hervor hinaus los nach uber um unter vor voran voraus vorbei weg weiter zu zuruck"),
+    ("fall", "fallt", "fiel fielen", "gefallen", "an auf aus durch ein ent ver weg zuruck"),
 )
 
 #: Nouns that belong to a verb of IRREGULAR_VERBS by a changed vowel or a short
@@ -581,8 +658,14 @@ IRREGULAR_VERBS: Tuple[Tuple[str, str, str, str, str], ...] = (
 #: verziehen, nor Abgabe, Aufgabe, Anspruch, Abschlag, Vertrag, Übersicht,
 #: Vorsicht, Ablauf or Verlauf (a procedure, a history) forms of abgeben,
 #: aufgeben, ansprechen, abschlagen, vertragen, übersehen, vorsehen, ablaufen
-#: or verlaufen. A preterite that is a noun as well needs no line
-#: here ("Betrieb", "Anstieg", "Eintritt", "Erhalt" are listed forms already).
+#: or verlaufen; nor Anflug, Ausflug, Einfluss, Überfluss, Überschuss,
+#: Ausschuss, Begriff, Abschnitt, Durchschnitt, Vorgang, Ausgang, Zugang,
+#: Eingang, Zufall, Einfall, Anfall, Abfall or Ausweis. Schnitt ("im Schnitt")
+#: and Schuss (no bare schießen) have no line either, nor Hinweis: a
+#: "Hinweis:" label or heading stands on many pages and is no form of
+#: hinweisen. A preterite that is a noun as well needs no line here
+#: ("Betrieb", "Anstieg", "Eintritt", "Erhalt", "Fortschritt", "Abriss",
+#: "Zwang" are listed forms already).
 IRREGULAR_NOUNS: Tuple[Tuple[str, str, str], ...] = (
     ("umzug", "um", "zieh"), ("auszug", "aus", "zieh"), ("einzug", "ein", "zieh"), ("abzug", "ab", "zieh"),
     ("bezug", "be", "zieh"), ("entzug", "ent", "zieh"), ("zuzug", "zu", "zieh"),
@@ -610,6 +693,14 @@ IRREGULAR_NOUNS: Tuple[Tuple[str, str, str], ...] = (
     ("beginn", "", "beginn"), ("gewinn", "", "gewinn"), ("verlust", "", "verlier"), ("hilfe", "", "helf"),
     ("entwurf", "ent", "werf"), ("vorwurf", "vor", "werf"), ("einsicht", "ein", "seh"),
     ("entscheid", "ent", "scheid"),
+    ("flug", "", "flieg"), ("abflug", "ab", "flieg"), ("ruckflug", "zuruck", "flieg"), ("zuschuss", "zu", "schiess"),
+    ("vorschuss", "vor", "schiess"), ("verstoss", "ver", "stoss"), ("ausstoss", "aus", "stoss"), ("anstoss", "an", "stoss"),
+    ("zusammenstoss", "zusammen", "stoss"), ("vorstoss", "vor", "stoss"), ("zusammenhang", "zusammen", "hang"), ("umgang", "um", "geh"),
+    ("ruckgang", "zuruck", "geh"), ("ubergang", "uber", "geh"), ("ausfall", "aus", "fall"), ("wegfall", "weg", "fall"),
+    ("verfall", "ver", "fall"), ("nachweis", "nach", "weis"), ("beweis", "be", "weis"),
+    ("verweis", "ver", "weis"), ("angriff", "an", "greif"), ("eingriff", "ein", "greif"), ("zugriff", "zu", "greif"),
+    ("ruckgriff", "zuruck", "greif"), ("zusammenbruch", "zusammen", "brech"), ("durchbruch", "durch", "brech"), ("aufschub", "auf", "schieb"),
+    ("abfluss", "ab", "fliess"), ("zufluss", "zu", "fliess"),
 )
 
 #: German comparison that is more than an ending: (positive forms, comparative
@@ -670,9 +761,28 @@ good better best
 #: nouns or other words of their own: Messe ("ich messe"), Scheine ("ich
 #: scheine"), Werft ("ihr werft"), Schloss ("schloss"), and "geboten", which is
 #: also the participle of gebieten ("Eile ist geboten"); "angeboten",
-#: "verboten", "schlossen" and "abschloss" stay.
+#: "verboten", "schlossen" and "abschloss" stay. Since Stufe 7 also Floh,
+#: Stahl, Schritt and Schritten, Rang, Ringe, Sitze, Wäsche, Stöße, Wiege,
+#: Wogen, Schwamm, Klinge, Schreie, Schmelze, Hänge, Bogen, Berufe, drängen
+#: ("drangen"), Fliege, Gruben, the city of Gießen, GRUB (the boot loader,
+#: "grub") and Drang ("drang").
+#:
+#: Accepted homographs keep their key, like "Messen": each has the letters of
+#: a verb form or a noun of the tables, and leaving it out would lose that
+#: form as well. A hit through one is a disclosed heuristic at the weight of
+#: its rule and lists the form under `matched` (see "Was offen bleibt"). They
+#: are the nouns Fliegen, Schläfen, Hängen, Berufen, Klingen, Ringen, Wiegen
+#: and Sitzen; Sass (saß once ß is ss); Singen (the town); besessen
+#: (obsessed); eingestanden (of einstehen and of eingestehen); belief (of
+#: belaufen, and English "belief"); Riss and gerissen (a crack; cunning);
+#: ausgefallen in the sense "unusual" for Ausfall; Zugriff, a generic word in
+#: IT texts, for zugreifen; and the idioms "eingehen auf" and "zurückgehen
+#: auf" for eingehen and zurückgehen.
 IRREGULAR_EXCLUDED = frozenset((
     "messe", "scheine", "werft", "schloss", "geboten", "gebotene", "gebotenen", "gebotener", "gebotenes", "gebotenem",
+    "floh", "stahl", "schritt", "schritten", "rang", "ringe", "sitze", "wasche", "stosse", "wiege",
+    "wogen", "schwamm", "klinge", "schreie", "schmelze", "hange", "bogen", "berufe", "drangen", "fliege",
+    "gruben", "giessen", "grub", "drang",
 ))
 #: The two parts of the composite prefixes, for their zu-infinitive
 #: ("anzuerkennen", "beizubehalten", "einzubeziehen", "vorzubehalten").
@@ -685,7 +795,7 @@ def _present_endings(present: str, separable: bool) -> List[str]:
         ending for ending in _PRESENT_ENDINGS
         if not (separable and ending == "e")
         and not (ending in ("t", "st") and present.endswith(("t", "d")))
-        and not (ending == "st" and present.endswith("ss"))
+        and not (ending == "st" and present.endswith(("s", "z", "x")))
     ]
 
 
@@ -694,9 +804,9 @@ def _verb_forms(present: str, changed: str, preterite: str, participle: str, pre
 
     A separable verb gets no first person in -e: written joined it is rare
     ("dass ich ablaufe") and mostly a plural noun (Abläufe, Beiträge, Anrufe).
-    No -t or -st follows a stem in t or d, and no -st one in ss: German writes
-    "findet", "bietest", "schließt" ("haltt", "findst", "schliessst" are no
-    words); a changed vowel that folds onto the stem ("hält", "hältst",
+    No -t or -st follows a stem in t or d, and no -st one in s, z or x: German
+    writes "findet", "bietest", "schließt", "sitzt" ("haltt", "findst",
+    "schliessst", "sitzst" are no words); a changed vowel that folds onto the stem ("hält", "hältst",
     "lädt") is listed with the changed forms. No form is shorter than MIN_PART
     letters ("lag", "kam", "bot" are also abbreviations and names).
     """
@@ -728,6 +838,10 @@ def _all_verb_forms() -> Iterable[Tuple[str, str]]:
                 yield form, prefix + "|" + present
 
 
+#: (form, key) for every form of every prefixed verb of IRREGULAR_VERBS, built once for the two tables below.
+_VERB_FORMS: Tuple[Tuple[str, str], ...] = tuple(_all_verb_forms())
+
+
 def _irregular_table() -> Dict[str, Tuple[str, ...]]:
     """Every form of the irregular tables with the keys of the words it is a form of."""
     keys: Dict[str, set] = {}
@@ -735,7 +849,7 @@ def _irregular_table() -> Dict[str, Tuple[str, ...]]:
     def add(form: str, key: str) -> None:
         keys.setdefault(form, set()).add(key)
 
-    for form, key in _all_verb_forms():
+    for form, key in _VERB_FORMS:
         add(form, key)
     for noun, prefix, present in IRREGULAR_NOUNS:
         for ending in _NOUN_ENDINGS:
@@ -761,7 +875,7 @@ IRREGULAR_FORMS: Dict[str, Tuple[str, ...]] = _irregular_table()
 #: a noun and a verb form with a common key pair under the `derived` rule.
 IRREGULAR_NOUN_FORMS = frozenset(
     noun + ending for noun, _, _ in IRREGULAR_NOUNS for ending in _NOUN_ENDINGS
-) - frozenset(form for form, _ in _all_verb_forms())
+) - frozenset(form for form, _ in _VERB_FORMS)
 #: The positive forms of IRREGULAR_DEGREES and English "good": found by their comparative and superlative, finding
 #: neither; and the superlative of "gut" ("am besten" names no topic), found by "besser" and finding nothing.
 IRREGULAR_TARGETS = (

@@ -8,6 +8,7 @@ imported a module the exporter did not copy, and every export still reported
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import os
@@ -150,8 +151,11 @@ class ExportedSkillRuns(unittest.TestCase):
                 self.assertEqual(info.external_attr, 0o100644 << 16)
 
     def exported_search(self, *arguments: str, stdin: bytes = b"") -> subprocess.CompletedProcess:
+        return self.exported("search_knowledge.py", *arguments, stdin=stdin)
+
+    def exported(self, script: str, *arguments: str, stdin: bytes = b"") -> subprocess.CompletedProcess:
         return subprocess.run(
-            [sys.executable, "-B", "-S", "-s", str(self.skill / "scripts" / "search_knowledge.py"), *arguments],
+            [sys.executable, "-B", "-S", "-s", str(self.skill / "scripts" / script), *arguments],
             capture_output=True,
             input=stdin,
             cwd=str(self.tmp),
@@ -280,11 +284,14 @@ class ExportedSkillRuns(unittest.TestCase):
         # The harness wiki records no human review: the export used to drop this.
         self.assertIn("trust", quality)
         self.assertIn("freshness", quality)
+        self.assertIn("expiry", quality)
         self.assertIn("no_page_was_human_reviewed", [item["code"] for item in advisories])
         self.assertEqual([item["code"] for item in advisories], [item["code"] for item in expected_advisories])
         for mine, theirs in zip(advisories, expected_advisories):
-            if mine["code"] not in quality_core.FROZEN_TEXT:
-                self.assertEqual(mine, theirs)
+            with self.subTest(code=mine["code"]):
+                self.assertNotIn("maintenance skill", mine["recommended_action"])
+                if mine["code"] not in quality_core.FROZEN_TEXT and "maintenance skill" not in theirs["recommended_action"]:
+                    self.assertEqual(mine, theirs)
 
     def test_the_exported_quality_helper_uses_the_frozen_wording(self) -> None:
         """The export's wrapper must pass frozen=True; without it an old snapshot reads like a canonical release.
@@ -318,6 +325,52 @@ class ExportedSkillRuns(unittest.TestCase):
         self.assertEqual(len(old), 1, report["quality"]["advisories"])
         self.assertEqual(old[0]["message"], message.format(days=400))
         self.assertEqual(old[0]["recommended_action"], action)
+
+    def test_the_exported_quality_helper_refuses_a_different_snapshot_like_the_search(self) -> None:
+        """--expect-manifest-sha256 means the same in every exported helper: the same release keys and exit 4.
+
+        Before, the export's quality helper ignored every argument, so a
+        retained hash of another snapshot still reported ready with exit 0.
+        """
+        manifest_sha256 = json.loads(self.exported("verify_knowledge.py").stdout.decode("utf-8"))["manifest_sha256"]
+        wrong = "f" * 64
+        expected = {"state": "snapshot_changed", "expected_manifest_sha256": wrong, "manifest_sha256": manifest_sha256}
+        search = self.exported_search("--query", "Wiki", "--expect-manifest-sha256", wrong)
+        self.assertEqual(search.returncode, 4)
+        self.assertEqual(json.loads(search.stdout.decode("utf-8"))["release"], expected)
+        assess = self.exported("assess_quality.py", "--expect-manifest-sha256", wrong)
+        self.assertEqual(assess.returncode, 4, assess.stderr.decode("utf-8", errors="replace"))
+        self.assertEqual(json.loads(assess.stdout.decode("utf-8")), {"state": "snapshot_changed", "release": expected, "quality": None})
+        verified = self.exported("verify_knowledge.py", "--expect-manifest-sha256", wrong)
+        self.assertEqual(verified.returncode, 4)
+        self.assertEqual(json.loads(verified.stdout.decode("utf-8")), expected)
+        for script in ("assess_quality.py", "verify_knowledge.py"):
+            with self.subTest(script=script):
+                matching = self.exported(script, "--expect-manifest-sha256", manifest_sha256)
+                self.assertEqual(matching.returncode, 0, matching.stderr.decode("utf-8", errors="replace"))
+                self.assertEqual(json.loads(matching.stdout.decode("utf-8"))["state"], "ready")
+                # An argument the helper does not take is a usage error, not silently ignored.
+                unknown = self.exported(script, "--target", str(self.wiki.path))
+                self.assertEqual(unknown.returncode, 2)
+                self.assertEqual(unknown.stdout, b"")
+                self.assertIn(b"--expect-manifest-sha256", self.exported(script, "--help").stdout)
+
+    def test_a_damaged_snapshot_is_invalid_whatever_the_retained_hash(self) -> None:
+        """The pin is checked after a full verification in all three helpers, as the search always did."""
+        copy = self.tmp / "damaged"
+        shutil.copytree(self.skill, copy)
+        page = copy / "references" / "knowledge" / "wiki" / "overview.md"
+        page.write_text(page.read_text(encoding="utf-8") + "\nNachtrag.\n", encoding="utf-8")
+        for script, arguments in (("verify_knowledge.py", ()), ("assess_quality.py", ()), ("search_knowledge.py", ("--query", "Wiki"))):
+            with self.subTest(script=script):
+                result = subprocess.run(
+                    [sys.executable, "-B", "-S", "-s", str(copy / "scripts" / script), *arguments,
+                     "--expect-manifest-sha256", "f" * 64],
+                    capture_output=True, cwd=str(self.tmp), env=clean_environment(),
+                )
+                self.assertEqual(result.returncode, 4)
+                report = json.loads(result.stdout.decode("utf-8"))
+                self.assertEqual(report.get("release", report)["state"], "invalid_snapshot")
 
     def test_the_exported_coverage_says_history_is_not_shipped(self) -> None:
         exported = self.exported_search("--query", "Wiki", "--limit", "1")
@@ -355,6 +408,11 @@ class ExportedSkillRuns(unittest.TestCase):
         self.assertNotIn("__SKILL_", text)
         for phrase in (
             "<skill-root>/scripts/search_knowledge.py", "${CLAUDE_SKILL_DIR}", "--expect-manifest-sha256",
+            "<skill-root>/scripts/assess_quality.py --expect-manifest-sha256 <retained-hash>",
+            "reports `snapshot_changed`", "(`expiry`; `freshness` keeps the count the release recorded",
+            "Decide by the `state` a helper prints, not by its exit status",
+            "called wrongly: status 2 for an argument it does not take, 1 for a value it refuses or an error; "
+            "read standard error",
             "truncated", "claims_returned", "claims_total", "unmatched_terms",
             "terms_only_in_unsearched.sources", "--include-sources", "coverage.boundary",
             "match_rules", "form_only_terms", "typo",
@@ -435,7 +493,7 @@ class ExportRefusesABrokenSkill(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self._dir, ignore_errors=True)
 
-    def add_template_line(self, line: str, anchor: str = "from verify_knowledge import knowledge_root, verify\n") -> None:
+    def add_template_line(self, line: str, anchor: str = "from verify_knowledge import MANIFEST_HELP, knowledge_root, pinned, verify\n") -> None:
         text = self.template.read_text(encoding="utf-8")
         self.assertIn(anchor, text)
         self.template.write_text(text.replace(anchor, anchor + line + "\n", 1), encoding="utf-8")
@@ -562,7 +620,7 @@ class ExportRefusesABrokenSkill(unittest.TestCase):
         """SKILL.md tells agents to pass --filter-json; that path must run too."""
         self.add_template_line(
             '    if selector.get("kind") != "all":\n        raise RuntimeError("filter path is broken")',
-            anchor="    release = verify()\n",
+            anchor="    release = pinned(verify(), args.expect_manifest_sha256)\n",
         )
         result = export(self.exporter, self.wiki.path, self.tmp / "out")
         self.assert_refused(result, "self-check")
@@ -571,7 +629,7 @@ class ExportRefusesABrokenSkill(unittest.TestCase):
         """SKILL.md requires --exhaustive before an absence statement; that path must run too."""
         self.add_template_line(
             '    if args.exhaustive:\n        raise RuntimeError("exhaustive path is broken")',
-            anchor="    release = verify()\n",
+            anchor="    release = pinned(verify(), args.expect_manifest_sha256)\n",
         )
         result = export(self.exporter, self.wiki.path, self.tmp / "out")
         self.assert_refused(result, "self-check")
@@ -644,6 +702,52 @@ class SelfCheckEnvironment(unittest.TestCase):
         self.assertEqual(environment["PYTHONDONTWRITEBYTECODE"], "1")
         # On Python 3.11+ the script folder stays off sys.path, as under python -I.
         self.assertEqual(environment["PYTHONSAFEPATH"], "1")
+
+
+class ExportedWording(unittest.TestCase):
+    """An export brings no maintenance skill, so nothing it prints may send the reader to one."""
+
+    def test_no_export_template_tells_the_reader_to_use_the_maintenance_skill(self) -> None:
+        for path in sorted((MAINTAIN.parent / "assets" / "knowledge-skill").glob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            strings = [node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str)]
+            with self.subTest(template=path.name):
+                self.assertEqual([text for text in strings if "maintenance skill" in text], [])
+
+    def test_the_exported_identity_advisories_name_the_canonical_wiki(self) -> None:
+        """The export's validator words all four identity advisories for a frozen release; the query skill's does not."""
+        exported = load_module("exported_identity_status", MAINTAIN.parent / "assets" / "knowledge-skill" / "identity_status.py")
+        reader = load_module("reader_identity_status", REPO / "query-llm-wiki" / "scripts" / "identity_status.py")
+        with tempfile.TemporaryDirectory(prefix="lmwiki-identity-") as directory:
+            root = Path(directory)
+            missing = exported.assess_identity(root), reader.assess_identity(root)
+            (root / "schema").mkdir()
+            (root / "SOUL.md").write_text("---\nsoul_version: 1\n---\n", encoding="utf-8")
+            (root / "schema" / "CONTENT_POLICY.md").write_text("---\npolicy_version: 1\n---\n", encoding="utf-8")
+            invalid = exported.assess_identity(root), reader.assess_identity(root)
+        for frozen, canonical in (missing, invalid):
+            for mine, theirs in zip(frozen["advisories"], canonical["advisories"]):
+                with self.subTest(code=mine["code"]):
+                    self.assertEqual({k: v for k, v in mine.items() if k != "recommended_action"},
+                                     {k: v for k, v in theirs.items() if k != "recommended_action"})
+                    self.assertIn("maintenance skill", theirs["recommended_action"])
+                    self.assertNotIn("maintenance skill", mine["recommended_action"])
+                    self.assertIn("canonical wiki", mine["recommended_action"])
+                    self.assertIn("export a new knowledge skill", mine["recommended_action"])
+        codes = [item["code"] for pair in (missing, invalid) for item in pair[0]["advisories"]]
+        self.assertEqual(sorted(codes), ["content_policy_invalid", "content_policy_missing", "soul_invalid", "soul_missing"])
+
+
+def load_module(name: str, path: Path):
+    """Load one helper file under its own module name, without touching the shared module cache."""
+    saved_path = list(sys.path)
+    try:
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    finally:
+        sys.path[:] = saved_path
+    return module
 
 
 if __name__ == "__main__":

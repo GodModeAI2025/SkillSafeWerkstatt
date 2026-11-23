@@ -21,8 +21,9 @@ from harness import PageTree, page  # noqa: E402
 
 
 def quantities(text: str) -> list[str]:
-    spelled = search_core.number_spelling(search_core.normalized(search_core.wordforms.repair_text(text)))
-    return [token for _, token in search_core.spelled_quantities(spelled)]
+    repaired = search_core.wordforms.repair_text(text)
+    spelled = search_core.number_spelling(search_core.normalized(repaired))
+    return [token for _, token in search_core.text_quantities(repaired, spelled)]
 
 
 PAGES = {
@@ -38,8 +39,11 @@ PAGES = {
     "wiki/paragraf.md": page("Paragrafen", "Nach § 3 EnWG gelten drei Absätze."),
 }
 
-#: Pages whose numbers are no quantity of the probes below: scale words, a
-#: label, a sign, a calendar week. From the precision review of Stufe 6.
+#: Pages whose numbers are no quantity of the probes below: a scale word
+#: without a number, a label, a sign, a calendar week. From the precision
+#: review of Stufe 6. Since Stufe 7 a scale word after a number multiplies:
+#: budget.md ("100 Tausend Euro pro Jahr") reads as "=100000eur", an amount
+#: no probe below asks for.
 TRAPS = {
     "wiki/wallbox.md": page("Wallbox", "Die Wallbox wird mit einem Typ 2 Stecker geliefert und lädt mit bis zu 11 kW."),
     "wiki/baukosten.md": page(
@@ -78,7 +82,10 @@ class QuantityTokens(unittest.TestCase):
             ("mwh", ("megawattstunde", "megawattstunden")), ("gwh", ("gigawattstunde", "gigawattstunden")),
             ("twh", ("terawattstunde", "terawattstunden")), ("w", ("watt",)), ("kw", ("kilowatt",)),
             ("mw", ("megawatt",)), ("gw", ("gigawatt",)), ("ct", ("cent",)), ("eur", ("euro",)), ("€", ("euro",)),
-            ("%", ("prozent",)),
+            ("%", ("prozent",)), ("m3", ("kubikmeter", "kubikmetern")), ("l", ("liter", "litern")),
+            ("ml", ("milliliter",)), ("kg", ("kilogramm",)), ("t", ("tonne", "tonnen")),
+            ("m", ("meter", "metern")), ("km", ("kilometer", "kilometern")), ("cm", ("zentimeter",)), ("mm", ("millimeter",)),
+            ("m2", ("quadratmeter", "quadratmetern")), ("km2", ("quadratkilometer",)), ("ha", ("hektar",)),
         ):
             for word in words:
                 with self.subTest(symbol=symbol, word=word):
@@ -89,11 +96,12 @@ class QuantityTokens(unittest.TestCase):
         for text, expected in (
             ("75,- €", "=75eur"), ("75,– €", "=75eur"), ("75,-- €", "=75eur"), ("75,- EUR", "=75eur"),
             ("€ 75", "=75eur"), ("EUR 25,00", "=25eur"), ("€ 1.500,00 je Anlage", "=1500eur"), ("EUR 9,84 netto", "=9.84eur"),
+            ("€ 1,5 Mio. einmalig", "=1500000eur"), ("EUR 2 Tausend", "=2000eur"),
         ):
             with self.subTest(text=text):
                 self.assertEqual(quantities(text), [expected])
-        # A scale word after the amount, a sign before it, or "Euro" before a number (Euro 6) give none.
-        for text in ("€ 1,5 Mio. je Anlage", "EUR 2 Tausend", "minus € 5", "Euro 6 Fahrzeuge", "EUR/kWh 0,30", "75,- Tage"):
+        # A sign before the amount or "Euro" before a number (Euro 6) give none.
+        for text in ("minus € 5", "Euro 6 Fahrzeuge", "EUR/kWh 0,30", "75,- Tage"):
             with self.subTest(text=text):
                 self.assertEqual(quantities(text), [])
 
@@ -132,15 +140,13 @@ class QuantityTokens(unittest.TestCase):
     def test_scales_signs_ranges_and_labels_give_none(self) -> None:
         """A number that is only part of the quantity, or no count at all, gives no token.
 
-        A scale word after it ("75 Tausend Euro") or a number word before a
-        scale word ("mehrere hundert Euro"), a glued unit compound ("20
-        %-Punkte"), a fraction, a sign or a range would lose a factor, the sign
-        or the range; a number before a word outside the closed count-word list
-        is a label.
+        A scale word without a number ("mehrere hundert Euro"), a glued unit
+        compound ("20 %-Punkte"), a fraction, a sign or a range would lose a
+        factor, the sign or the range; a number before a word outside the
+        closed count-word list is a label.
         """
         for text in (
-            "75 Tausend Euro", "zehn Tausend Euro", "drei Hundert Watt", "mehrere hundert Euro",
-            "einige tausend Kilowattstunden", "2 Tausend kWh", "20 %-Punkte", "50 €-Cent", "½ Jahr",
+            "mehrere hundert Euro", "einige tausend Kilowattstunden", "20 %-Punkte", "50 €-Cent", "½ Jahr",
             "−15 %", "+5 %", "Veränderung - 5 %", "minus 20 Grad", "zwei Komma fünf Prozent", "1 - 3 Monate",
             "1-3 Monate", "1–3 Monate", "1 – 3 Monate", "1 — 3 Monate", "10–20 %", "1 bis 3 Monate", "2 bis 4 Wochen",
             "drei bis vier Wochen", "sechs bis zwölf Monate", "zwischen 10 und 20 Prozent", "zwischen 2 und 3 Monaten",
@@ -159,18 +165,102 @@ class QuantityTokens(unittest.TestCase):
         self.assertEqual(quantities("Ausbau bis 2028 und 95 Prozent Ökostrom"), ["=95prozent"])
         self.assertEqual(quantities("Hotline bis 14 Uhr, Rückruf binnen 14 Tagen"), ["=14tag"])
 
-    def test_citations_identifiers_and_a_line_break(self) -> None:
-        """A number after a citation or an identifier names no count; one line break may separate the unit."""
-        for text in ("§ 3 Tage", "Abs. 2 Jahre", "Nr. 12 Monate", "page=3 Tage"):
+    def test_citations_places_identifiers_and_a_line_break(self) -> None:
+        """A number after a citation, a place in a document or an identifier names no count; a line break
+        joins a unit word only in running text (Stage 7)."""
+        for text in (
+            "§ 3 Tage", "Abs. 2 Jahre", "Nr. 12 Monate", "page=3 Tage", "auf Seite 12 Monate", "vgl. S. 12 Monate",
+            "siehe Abschnitt 3 Tage", "Kapitel 4 Wochen", "Tabelle 2 Stunden", "Anhang 3 Monate", "Rn. 12 Monate", "Abb. 3 Tage",
+            # The longest place word still fits the window of 12 characters before the number.
+            "Randnummer 12 Monate",
+        ):
             with self.subTest(text=text):
                 self.assertEqual(quantities(text), [])
-        self.assertEqual(quantities("Frist: 14\nTage"), ["=14tag"])
+        # "Anlage" (also a plant) and "Teil" ("zum Teil") are no place.
+        self.assertEqual(quantities("die PV-Anlage 20 Jahre betreiben"), ["=20jahr"])
+        self.assertEqual(quantities("zum Teil 14 Tage"), ["=14tag"])
+        # "Seiten" is no place ("für beide Seiten 3 Monate", review of Stufe 7).
+        self.assertEqual(quantities("Die Kündigungsfrist beträgt für beide Seiten 3 Monate"), ["=3monat"])
+        # A label line ("Frist: 14", "Stand 2024") or a unit word alone on its line joins nothing.
+        for text in (
+            "Frist: 14\nTage", "Stand 2024\nEuro und Cent im Überblick", "Version 12\nMonate Laufzeit", "Hotline 12\nMonate",
+            # Review of Stufe 7: the unit word alone on its line, and 18 characters before the number (LINE_JOIN_MIN 20).
+            "Für alle Verträge im Tarif Basis beträgt die Frist 14\nTage\nab Vertragsschluss.",
+            "Der Bonus beträgt 75\nEuro und wird verrechnet.",
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(quantities(text), [])
+        self.assertEqual(quantities("Für alle Verträge im Tarif Basis beträgt die Frist 14\nTage ab Vertragsschluss."), ["=14tag"])
+        # 33 characters before the number are running text.
+        self.assertEqual(quantities("Im Tarif Basis beträgt die Frist 14\nTage ab Vertragsschluss."), ["=14tag"])
 
-    def test_a_calendar_week_reads_as_kilowatt(self) -> None:
-        # A disclosed residual: the text is folded to lower case before a unit
-        # is read, so "KW" (calendar week) is read as "kW". A hit through it is
-        # a heuristic with `matched` and is checked in the text.
-        self.assertEqual(quantities("in der 12 KW"), ["=12kw"])
+    def test_case_tells_units_apart(self) -> None:
+        """"KW" is a calendar week, "mW" a milliwatt; "kW", "MW" and "KWh" keep their reading (Stage 7)."""
+        for text in ("in der 12 KW", "Liefertermin: 38 KW 2026", "zwölf KW", "12KW"):
+            with self.subTest(text=text):
+                self.assertEqual(quantities(text), [])
+        self.assertEqual(quantities("500 mW"), quantities("0,5 W"))
+        self.assertEqual(quantities("500 mW"), ["=0.0005kw"])
+        self.assertEqual(quantities("500 MW"), ["=500000kw"])
+        self.assertEqual(quantities("12 kW"), ["=12kw"])
+        self.assertEqual(quantities("2.500 KWh"), ["=2500kwh"])
+        self.assertEqual(quantities("11 kw"), ["=11kw"])
+        # A calendar week in the same text keeps "KWh" a kilowatt hour (review of Stufe 7).
+        self.assertEqual(quantities("Montage in der 12 KW, Verbrauch 2.500 KWh"), ["=2500kwh"])
+
+    def test_scale_words_multiply(self) -> None:
+        """A scale word between number and unit is part of the amount (Stage 7)."""
+        for texts, expected in (
+            (("1,5 Mio. €", "€ 1,5 Mio.", "1.500.000 €", "1,5 Millionen Euro", "1500 Tsd. €", "1.500 T€", "1500 TEUR"), "=1500000eur"),
+            (("2 Tsd. kWh", "2 Tausend Kilowattstunden", "2.000 kWh"), "=2000kwh"),
+            (("zwei Millionen Euro", "2 Mio. EUR"), "=2000000eur"),
+            (("eine Million Euro",), "=1000000eur"),
+            (("75 Tausend Euro",), "=75000eur"), (("zehn Tausend Euro",), "=10000eur"), (("drei Hundert Watt",), "=0.3kw"),
+        ):
+            for text in texts:
+                with self.subTest(text=text):
+                    self.assertEqual(quantities(text), [expected])
+        # A scale word before a count word names no count either (review of Stufe 7).
+        for text in (
+            "zwei Millionen Kunden", "2 Mio. Kunden", "rund 1,5 Mio. Haushalte", "Millionen Euro", "1.5 million EUR",
+            "zwei Tausend Tage", "2 Mio. Monate", "2 Tausend Personen",
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(quantities(text), [])
+
+    def test_volume_mass_length_area_and_temperature(self) -> None:
+        """A closed list of further units, each within its dimension (Stage 7)."""
+        for texts, expected in (
+            (("100 m³", "100 m3", "100 Kubikmeter", "100.000 Liter", "100.000 l"), "=100m3"),
+            (("3,5 t", "3.500 kg", "3,5 Tonnen"), "=3500kg"),
+            (("2 km", "2.000 m", "2000 Meter"), "=2000m"),
+            (("20 m²", "20 qm", "20 Quadratmeter"), "=20m2"),
+            (("1 ha", "10.000 m²"), "=10000m2"),
+            (("20 °C", "20 Grad Celsius", "20 ℃", "20°C"), "=20celsius"),
+            (("2,10 €/m³", "2,10 € je Kubikmeter"), "=2.1eur"),
+        ):
+            for text in texts:
+                with self.subTest(text=text):
+                    self.assertEqual(quantities(text), [expected])
+        # A screw size, a tesla, a limited partnership, a speed, a glued letter, an angle, a sign, a
+        # scaled euro, a citation and "5 G" are none of them.
+        for text, expected in (
+            ("2 M3 Schrauben", []), ("2 M3-Schrauben", []), ("BMW M3", []), ("3 T Feldstärke", []), ("2 KG Gesellschafter", []),
+            ("3 m/s", []), ("50 km/h", []), ("6 l/100 km", []), ("3 hl Bier", []), ("1l Wasser", []), ("Neigung 20 Grad", []), ("minus 5 °C", []), ("-5 °C", []), ("LTE und 5 G", []),
+            ("Abs. 1 l DSGVO", []), ("500 T€", ["=500000eur"]),
+            # Review of Stufe 7: a calendar week or a tonne in the same text keeps a "T€" amount.
+            ("Liefertermin 12 KW; Budget 500 T€", ["=500000eur"]), ("Der LKW wiegt 3,5 t. Budget: 500 T€.", ["=3500kg", "=500000eur"]),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(quantities(text), expected)
+
+    def test_disclosed_residuals(self) -> None:
+        """Readings the texts disclose as residuals of Stufe 7: a hit through them is checked in the text."""
+        # Of a unit counted per another only the first is read: "0,10 € pro Tag" meets "10 Cent".
+        self.assertEqual(quantities("0,10 € pro Tag"), ["=0.1eur"])
+        self.assertEqual(quantities("0,10 € pro Tag"), quantities("10 Cent"))
+        # "KW" is read by its case as a calendar week, so an upper-case power gives no quantity.
+        self.assertEqual(quantities("11 KW Ladeleistung"), [])
 
 
 class QuantitySearch(unittest.TestCase):
@@ -370,13 +460,11 @@ class QuantityNegatives(unittest.TestCase):
                         rules = {item["rule"] for item in hit.get("matched", ())}
                         self.assertNotIn("quantity", rules, entry["path"])
 
-    def test_the_calendar_week_hit_is_disclosed_as_a_heuristic(self) -> None:
-        # The residual of QuantityTokens.test_a_calendar_week_reads_as_kilowatt
-        # in a search: the hit is listed, but never as the same word.
+    def test_a_calendar_week_is_no_power(self) -> None:
+        # "12 KW" names a calendar week: "12000 Watt" reaches the page through no quantity (Stage 7).
         report = self.search("Wärmepumpe 12000 Watt")
-        [hit] = [hit for entry in report["exhaustive_hits"] if entry["path"] == "wiki/montage.md" for hit in entry["hits"]]
-        self.assertEqual(hit["strength"], "heuristic")
-        self.assertIn({"term": "watt", "token": "=12kw", "rule": "quantity", "in": "text"}, hit["matched"])
+        hits = [hit for entry in report["exhaustive_hits"] if entry["path"] == "wiki/montage.md" for hit in entry["hits"]]
+        self.assertEqual([item for hit in hits for item in hit.get("matched") or () if item["rule"] == "quantity"], [])
         self.assertEqual(report["absence_check"]["counts"]["hits_word_form"], 0)
 
 
